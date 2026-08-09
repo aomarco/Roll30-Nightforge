@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --test \"src/**/*.test.js\"",
+    "verify:phase1": "node scripts/verify-phase1.mjs",
+    "verify": "npm test && npm run verify:phase1 && npm run build"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",

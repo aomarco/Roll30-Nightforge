@@ -1,0 +1,493 @@
+NIGHTFORGE — PHASE 1 COMPLETION RECORD
+======================================
+
+Completed: 9 August 2026 (Australia/Sydney)
+Project: C:\Users\Marcelo\Documents\Roll30 UI Rebuild
+Phase: Application and repository foundation
+Baseline tag: nightforge-ui-baseline
+Baseline commit: c1cbeca
+
+
+1. PHASE 1 RESULT
+-----------------
+
+Phase 1 is complete.
+
+Nightforge now has an independently written application-state and persistence
+foundation beneath the existing prototype. No original Roll30 implementation
+code, frontend code, CSS, components, layouts, or storage data was copied into
+this project.
+
+The Phase 1 code is intentionally not connected to the visible Nightforge
+screens yet. Connecting Library, Heroes, Scene, and Table to real data belongs
+to later phases. This separation is deliberate: Phase 1 establishes and proves
+the backend boundary without changing the current UI.
+
+
+2. BASELINE AND VERSION-CONTROL PROTECTION
+------------------------------------------
+
+- Initialized a new Git repository inside the Nightforge folder.
+- Added a project-appropriate .gitignore.
+- Committed the untouched Nightforge prototype.
+- Tagged the untouched visual baseline as nightforge-ui-baseline.
+- Recorded SHA-256 hashes for the 12 protected Nightforge UI source files.
+- Added an automated verifier that fails if any protected source file changes.
+- Confirmed that no existing Nightforge screen, stylesheet, main entry point, or
+  glyph component changed during Phase 1.
+- Did not modify the original C:\Users\Marcelo\Documents\Roll30 repository.
+
+Protected files:
+
+- src/main.jsx
+- src/screens/LibraryScreen.jsx
+- src/screens/HeroesScreen.jsx
+- src/screens/SceneScreen.jsx
+- src/screens/TableScreen.jsx
+- src/styles/core.css
+- src/styles/shell.css
+- src/styles/library.css
+- src/styles/heroes.css
+- src/styles/scene.css
+- src/styles/table.css
+- src/ui/Glyphs.jsx
+
+
+3. APPLICATION FOUNDATION IMPLEMENTED
+-------------------------------------
+
+Created a new application layer with:
+
+- A stable success result shape:
+  { ok: true, value, ...metadata }
+- A stable failure result shape:
+  { ok: false, code, message, recovery, retryable, cause? }
+- An initial application state that always starts at Library.
+- A reducer for hydration, navigation, active Scene context, Scene/Hero lists,
+  and explicit persistence status.
+- Persistence states: idle, saving, saved, and error.
+- Application commands for initialization, navigation, Scene selection, Scene
+  CRUD, and Hero CRUD.
+- Route validation that prevents Scene Settings or Table from opening without
+  a selected Scene.
+- Durable active-Scene selection with session context as a secondary convenience.
+- Stale session cleanup when an active Scene is deleted.
+- Preservation of active Scene context without allowing a reload to bypass
+  Library.
+
+Files:
+
+- src/application/result.js
+- src/application/state.js
+- src/application/commands.js
+
+
+4. CLEAN-ROOM RECORD CONTRACTS IMPLEMENTED
+------------------------------------------
+
+Implemented independently written, normalizing record factories for Scenes and
+Heroes.
+
+Scene foundation includes:
+
+- Stable ID.
+- Name with Untitled scene fallback.
+- Separate play/battle Scene kind.
+- Grid size clamped to the Nightforge range of 24–80 pixels.
+- Independent artwork key.
+- Blank-canvas state.
+- Persisted artwork transform.
+- Walls and wall visibility.
+- Chests.
+- Tokens.
+- Encounter state separated from Scene kind.
+- Creation, update, and last-opened timestamps.
+- Schema version.
+- Play Scenes cannot retain an encounter.
+
+Hero foundation includes:
+
+- Stable ID.
+- Name with Unnamed hero fallback.
+- Level clamped to 1–20.
+- Fighter/Human defaults.
+- Six base ability scores clamped to 8–15.
+- Alignment, background, and languages.
+- Save and skill proficiencies.
+- Quantity inventory normalization.
+- Duplicate inventory-stack merging.
+- Main-hand and off-hand loadout references.
+- Armor and shield references.
+- Enchantment bonuses clamped to +0 through +3.
+- Worn-item IDs.
+- Creation and update timestamps.
+- Schema version.
+
+File:
+
+- src/domain/records.js
+
+
+5. FRESH NIGHTFORGE STORAGE IMPLEMENTED
+---------------------------------------
+
+Nightforge uses only these new identifiers:
+
+- roll30-nightforge-v1:state
+- roll30-nightforge-v1:state-backup
+- roll30-nightforge-v1:session
+- roll30-nightforge-assets
+- scene-artwork
+
+The verifier confirms that runtime modules do not use these original Roll30
+identifiers:
+
+- roll30-maps
+- roll30-active-map
+- roll30-characters
+- roll30-assets
+
+No original Roll30 save is read, imported, altered, or deleted.
+
+File:
+
+- src/storage/constants.js
+
+
+6. VALIDATED STATE ENVELOPE IMPLEMENTED
+---------------------------------------
+
+The application envelope contains:
+
+- Schema version.
+- Monotonic revision.
+- Save timestamp.
+- Scenes.
+- Heroes.
+- Last active Scene ID.
+- Pending artwork-deletion keys.
+- Deterministic checksum.
+
+Implemented behavior:
+
+- Empty-state creation.
+- Record normalization.
+- Canonical serialization for deterministic checksum calculation.
+- Checksum verification.
+- Invalid JSON detection.
+- Invalid envelope-shape detection.
+- Incompatible-version detection.
+- Invalid-record detection.
+- Invalid active Scene references normalize to null.
+- Duplicate pending artwork keys normalize safely.
+
+File:
+
+- src/storage/envelope.js
+
+
+7. PRIMARY/BACKUP STATE REPOSITORY IMPLEMENTED
+----------------------------------------------
+
+Implemented behavior:
+
+- Reads primary and backup state independently.
+- Chooses the newest valid revision.
+- Starts empty without writing when no save exists.
+- Recovers from a corrupt primary using the valid backup.
+- Preserves the previous valid primary before a new save.
+- Increments revision on every successful save.
+- Reads the just-written state back and validates it before reporting success.
+- Attempts to restore the prior primary if verification fails.
+- Converts read, write, and verification failures into actionable result objects.
+- Keeps failed edits available to the future application layer rather than
+  falsely reporting them as saved.
+
+File:
+
+- src/storage/stateRepository.js
+
+
+8. SCENE AND HERO REPOSITORIES IMPLEMENTED
+------------------------------------------
+
+Both repositories support:
+
+- list
+- get by stable ID
+- create
+- update exactly one record
+- remove exactly one record
+- explicit not-found results
+- revision-bearing save results
+
+The Scene repository additionally supports:
+
+- Durable active Scene selection.
+- Clearing the durable active Scene reference when that Scene is removed.
+
+File:
+
+- src/storage/entityRepositories.js
+
+
+9. SESSION REPOSITORY IMPLEMENTED
+---------------------------------
+
+Implemented behavior:
+
+- Loads active Scene context.
+- Saves active Scene context.
+- Clears active Scene context.
+- Uses only the isolated Nightforge session key.
+- Returns explicit invalid/read/write failures.
+- Never controls the startup route; Library remains the startup screen.
+
+File:
+
+- src/storage/sessionRepository.js
+
+
+10. ARTWORK REPOSITORY FOUNDATION IMPLEMENTED
+---------------------------------------------
+
+Implemented:
+
+- IndexedDB database opening and version-1 store creation.
+- Artwork get, put, remove, and key enumeration.
+- Transaction handlers attached before request completion, preventing a timing
+  race in fast IndexedDB transactions.
+- Explicit errors for unavailable, blocked, failed, or aborted IndexedDB work.
+- A repository wrapper that converts adapter failures into actionable results.
+- Dependency injection so storage can be tested without a browser.
+
+The staged artwork replacement/deletion coordinator is intentionally scheduled
+for the Scene-workbench phase. Phase 1 supplies and tests the reliable storage
+boundary it will use.
+
+Files:
+
+- src/storage/artworkRepository.js
+- src/storage/memoryAdapters.js
+
+
+11. TESTING AND VERIFICATION ADDED
+---------------------------------
+
+Added package commands:
+
+- npm test
+- npm run verify:phase1
+- npm run verify
+
+Automated test coverage currently includes 23 passing tests:
+
+- Stable command result contracts.
+- Scene defaults and Scene-kind/encounter separation.
+- Hero defaults.
+- Hero normalization, inventory merging, and value clamping.
+- Envelope sealing and tamper detection.
+- Empty-storage behavior.
+- State save verification and revision increments.
+- Backup recovery after primary corruption.
+- Write failure with prior-state preservation.
+- Full Scene repository CRUD.
+- Targeted Hero updates.
+- Active Scene cleanup on deletion.
+- Durable active Scene selection.
+- Isolated session storage.
+- Artwork repository round trip.
+- Actual IndexedDB request/transaction lifecycle through a deterministic fake.
+- Artwork failure translation.
+- Library-first application hydration.
+- Application initialization.
+- Durable Scene selection when session storage fails.
+- Stale-session cleanup after Scene removal.
+- Route guards.
+- Visible persistence-failure dispatch.
+
+The Phase 1 verifier checks:
+
+- Exact hashes for all 12 protected Nightforge UI files.
+- Presence of every required Phase 1 runtime module.
+- Absence of original-project paths and imports.
+- Absence of original Roll30 storage-key usage.
+- Presence of fresh Nightforge storage identifiers.
+- Presence of test and verification commands.
+
+Files:
+
+- src/phase1.test.js
+- scripts/nightforge-baseline-hashes.json
+- scripts/verify-phase1.mjs
+- package.json
+
+
+12. VERIFICATION RESULTS
+------------------------
+
+Automated tests:
+
+- Tests: 23
+- Passed: 23
+- Failed: 0
+- Skipped: 0
+
+Static Phase 1 verification:
+
+- Protected UI files checked: 12
+- Protected UI hash mismatches: 0
+- Original-project runtime imports found: 0
+- Original Roll30 runtime storage keys found: 0
+- Missing Phase 1 modules: 0
+
+Production build:
+
+- Result: Pass
+- CSS asset: index-B2GrDRvv.css
+- JavaScript asset: index-Cmltj9nq.js
+
+Those asset filenames match the untouched Nightforge build produced before
+Phase 1 because the new foundation is not yet connected to the UI bundle.
+
+Git checks:
+
+- git diff --check: Pass
+- Existing protected UI files changed: 0
+
+Visual verification performed by the implementation agent:
+
+- None.
+- No browser tool was used.
+- No screenshot tool was used.
+- No automated visual comparison was performed.
+- UI preservation was verified non-visually through exact source hashes,
+  protected-file diffs, and unchanged production asset identities.
+
+
+13. IMPORTANT PHASE BOUNDARY
+----------------------------
+
+Phase 1 creates and proves the foundation. It does not yet replace prototype
+data or no-op controls in the visible Nightforge screens.
+
+You should therefore expect:
+
+- Nightforge to look exactly as it did before Phase 1.
+- Existing dummy characters, Scenes, and tokens to remain visible.
+- Existing prototype buttons to remain placeholders.
+- No new browser storage keys to appear merely by opening the current UI.
+
+Those are not Phase 1 failures. Connecting the UI to the new foundation begins
+with the later Library/routing and Scene/Hero phases.
+
+
+14. TESTING LIST FOR THE OWNER
+------------------------------
+
+Run these commands from:
+
+C:\Users\Marcelo\Documents\Roll30 UI Rebuild
+
+[ ] 1. Run the complete Phase 1 test suite:
+
+        npm test
+
+    Expected:
+    - 23 tests.
+    - 23 pass.
+    - 0 fail.
+
+[ ] 2. Run the Phase 1 structural and clean-room verifier:
+
+        npm run verify:phase1
+
+    Expected messages:
+    - Nightforge visual baseline preserved across 12 protected files.
+    - Phase 1 runtime boundary verified.
+    - Fresh Nightforge storage identifiers are present.
+
+[ ] 3. Run the production build:
+
+        npm run build
+
+    Expected:
+    - Vite build succeeds.
+    - No missing import or compilation error.
+
+[ ] 4. Run the combined non-visual verification command:
+
+        npm run verify
+
+    Expected:
+    - Tests pass.
+    - Phase 1 verifier passes.
+    - Production build passes.
+
+[ ] 5. Confirm the protected baseline tag exists:
+
+        git tag --list
+
+    Expected:
+    - nightforge-ui-baseline
+
+[ ] 6. Confirm the baseline commit exists:
+
+        git show --stat --oneline nightforge-ui-baseline
+
+    Expected first line:
+    - c1cbeca Establish untouched Nightforge visual baseline
+
+[ ] 7. Confirm no existing Nightforge UI file is different from the baseline:
+
+        git diff --name-only nightforge-ui-baseline -- src/main.jsx src/screens src/styles src/ui
+
+    Expected:
+    - No output.
+
+[ ] 8. Optional manual visual sanity check performed by you:
+
+    - Start Nightforge with npm run dev.
+    - Open the provided local URL.
+    - Visit Library, Heroes, Scene, Table Setup, and Table Battle.
+    - Confirm the prototype looks and behaves exactly as it did before Phase 1.
+    - Confirm no new panel, button, spacing change, color change, or layout shift
+      appears.
+
+    This is intentionally your manual check. The implementation agent did not
+    use browser or screenshot tools.
+
+[ ] 9. Optional browser-storage safety check performed by you:
+
+    - Open browser developer tools while the unchanged prototype is running.
+    - Inspect Local Storage.
+    - Confirm simply opening the current UI has not created original Roll30 keys.
+    - It is also normal for the new Nightforge keys not to exist yet because the
+      Phase 1 application layer is not connected to the visible prototype.
+
+[ ] 10. Confirm original Roll30 remains separate:
+
+    - Open C:\Users\Marcelo\Documents\Roll30.
+    - Confirm Phase 1 files were created only in Roll30 UI Rebuild.
+    - Do not delete or alter any original browser saves.
+
+
+15. PHASE 1 COMPLETION STATEMENT
+--------------------------------
+
+Every implementation requirement in Phase 1 has direct evidence:
+
+- Repository foundation: implemented and tested.
+- Application reducer and commands: implemented and tested.
+- Scene/Hero repositories: implemented and tested.
+- Session repository: implemented and tested.
+- Artwork repository: implemented and tested without a browser.
+- Fresh isolated storage: implemented and statically verified.
+- Primary/backup recovery: implemented and tested.
+- Explicit save/error status: implemented and tested.
+- Original Roll30 separation: statically verified.
+- Nightforge UI preservation: proven by exact protected-file hashes and unchanged
+  build asset identities, without browser or screenshot tooling.
+
+Phase 1 is complete and ready for the next implementation phase.
+
