@@ -1,0 +1,557 @@
+/* ==========================================================================
+   NIGHTFORGE — Roll30 design system
+   A cold-slate, verdigris-and-brass system for long sessions at the table.
+   core.css defines tokens, the reset, and every shared primitive.
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+/* ------------------------------------------------------------------ tokens */
+:root {
+  /* Slate substrate — cool, green-shifted, never blue-purple */
+  --void:       #05080a;
+  --deep:       #080d0f;
+  --base:       #0a1114;
+  --surface:    #0e171a;
+  --surface-2:  #122024;
+  --raised:     #17282d;
+  --raised-2:   #1f363c;
+  --inset:      #060b0c;
+
+  /* Hairlines */
+  --line:       #17272c;
+  --line-2:     #21393f;
+  --line-3:     #2e5158;
+
+  /* Ink */
+  --ink:        #e9f3f1;
+  --ink-2:      #a6c0bd;
+  --ink-3:      #6d8a89;
+  --ink-4:      #476063;
+
+  /* Verdigris — the primary voice */
+  --jade:       #2fd3b4;
+  --jade-hi:    #6cf2da;
+  --jade-lo:    #159c85;
+  --jade-deep:  #0c5f52;
+  --jade-glow:  rgba(47, 211, 180, 0.34);
+  --jade-tint:  rgba(47, 211, 180, 0.10);
+  --jade-edge:  rgba(47, 211, 180, 0.28);
+
+  /* Antique brass — ceremony, initiative, rank */
+  --brass:      #e0b055;
+  --brass-hi:   #f8d488;
+  --brass-tint: rgba(224, 176, 85, 0.12);
+  --brass-glow: rgba(224, 176, 85, 0.30);
+
+  /* Factions */
+  --ally:       #5fa8f5;
+  --ally-tint:  rgba(95, 168, 245, 0.14);
+  --foe:        #f2617a;
+  --foe-tint:   rgba(242, 97, 122, 0.14);
+
+  /* Status */
+  --danger:     #f2617a;
+  --danger-hi:  #ff8ba0;
+  --danger-tint:rgba(242, 97, 122, 0.13);
+  --hp-full:    #3fcf9a;
+  --hp-mid:     #e0b055;
+  --hp-low:     #f2617a;
+
+  /* Geometry */
+  --r-xs: 5px;
+  --r-sm: 9px;
+  --r-md: 13px;
+  --r-lg: 20px;
+  --r-xl: 28px;
+  --r-2xl: 36px;
+  --r-full: 999px;
+
+  /* Elevation */
+  --lift-1: 0 1px 2px rgba(0,0,0,.5);
+  --lift-2: 0 6px 18px -6px rgba(0,0,0,.6), 0 2px 6px rgba(0,0,0,.4);
+  --lift-3: 0 22px 48px -18px rgba(0,0,0,.75), 0 6px 16px rgba(0,0,0,.45);
+  --lift-4: 0 48px 96px -32px rgba(0,0,0,.85), 0 12px 32px rgba(0,0,0,.55);
+
+  /* Type */
+  --serif: 'Fraunces', 'Iowan Old Style', Georgia, serif;
+  --sans:  'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono:  'IBM Plex Mono', ui-monospace, 'Cascadia Mono', monospace;
+
+  /* Motion */
+  --swift: 140ms cubic-bezier(.32,.72,.36,1);
+  --ease:  240ms cubic-bezier(.32,.72,.36,1);
+  --slow:  420ms cubic-bezier(.22,.68,.28,1);
+  --bounce: 520ms cubic-bezier(.16,1.02,.3,1);
+
+  /* Chrome metrics */
+  --deck-h: 62px;
+}
+
+/* Fine-grain film so the flat darks never look like plastic */
+:root {
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='.35'/%3E%3C/svg%3E");
+}
+
+/* ------------------------------------------------------------------- reset */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink);
+  background: var(--base);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: 'ss01' 1, 'cv05' 1;
+}
+
+h1, h2, h3, h4, p, figure { margin: 0; }
+ol, ul { margin: 0; padding: 0; list-style: none; }
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+input, select, textarea { font: inherit; color: inherit; }
+
+a { color: inherit; text-decoration: none; }
+
+::selection { background: var(--jade-glow); color: var(--void); }
+
+:focus { outline: none; }
+:focus-visible {
+  outline: 2px solid var(--jade);
+  outline-offset: 2px;
+  border-radius: var(--r-xs);
+}
+
+/* Scrollbars — hairline, only visible where it matters */
+* { scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
+*::-webkit-scrollbar { width: 11px; height: 11px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: var(--line-2);
+  border: 3.5px solid transparent;
+  border-radius: var(--r-full);
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover { background: var(--line-3); background-clip: content-box; }
+*::-webkit-scrollbar-corner { background: transparent; }
+
+/* -------------------------------------------------------------- typography */
+.kicker {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: .26em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.kicker-jade { color: var(--jade); }
+.kicker-brass { color: var(--brass); }
+
+.numeral {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'zero' 1;
+}
+
+.prose { color: var(--ink-2); line-height: 1.62; }
+.prose-sm { color: var(--ink-3); font-size: 12.5px; line-height: 1.6; }
+
+/* ------------------------------------------------------------------ layers */
+.glass {
+  position: relative;
+  background: linear-gradient(180deg, rgba(23,40,45,.86), rgba(10,17,20,.92));
+  backdrop-filter: blur(22px) saturate(150%);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-lg);
+  box-shadow: var(--lift-3), inset 0 1px 0 rgba(255,255,255,.06);
+}
+
+.grained::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-image: var(--grain);
+  opacity: .16;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+.rule {
+  height: 1px;
+  border: 0;
+  margin: 0;
+  background: linear-gradient(90deg, transparent, var(--line-2) 12%, var(--line-2) 88%, transparent);
+}
+
+/* ----------------------------------------------------------------- buttons */
+.btn {
+  --btn-h: 40px;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: var(--btn-h);
+  padding: 0 18px;
+  border-radius: var(--r-full);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: .005em;
+  white-space: nowrap;
+  transition: transform var(--swift), background var(--swift),
+              border-color var(--swift), box-shadow var(--swift), color var(--swift);
+}
+.btn:active { transform: translateY(1px) scale(.985); }
+.btn svg { flex: none; }
+
+/* Primary — forged verdigris */
+.btn-key {
+  color: #052720;
+  background: linear-gradient(180deg, var(--jade-hi), var(--jade) 52%, var(--jade-lo));
+  box-shadow:
+    0 1px 0 rgba(255,255,255,.4) inset,
+    0 -1px 0 rgba(0,0,0,.25) inset,
+    0 8px 22px -8px var(--jade-glow);
+}
+.btn-key:hover {
+  background: linear-gradient(180deg, #8dfbe6, var(--jade-hi) 52%, var(--jade));
+  box-shadow:
+    0 1px 0 rgba(255,255,255,.5) inset,
+    0 -1px 0 rgba(0,0,0,.25) inset,
+    0 14px 34px -10px var(--jade-glow);
+}
+
+/* Outline — the workhorse */
+.btn-line {
+  color: var(--ink-2);
+  background: linear-gradient(180deg, rgba(31,54,60,.55), rgba(14,23,26,.5));
+  border: 1px solid var(--line-2);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.045);
+}
+.btn-line:hover {
+  color: var(--ink);
+  border-color: var(--line-3);
+  background: linear-gradient(180deg, rgba(41,70,77,.7), rgba(19,32,36,.6));
+}
+
+/* Destructive */
+.btn-hazard {
+  color: var(--danger-hi);
+  background: var(--danger-tint);
+  border: 1px solid rgba(242,97,122,.28);
+}
+.btn-hazard:hover {
+  color: #fff;
+  background: linear-gradient(180deg, #f2617a, #c9394f);
+  border-color: transparent;
+  box-shadow: 0 10px 26px -10px rgba(242,97,122,.6);
+}
+
+/* Sizes & shapes */
+.btn-lg { --btn-h: 48px; padding: 0 26px; font-size: 14px; }
+.btn-sm { --btn-h: 32px; padding: 0 13px; font-size: 12px; gap: 6px; }
+.btn-wide { width: 100%; }
+
+/* Icon-only glyph button on glass */
+.glyph {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--r-sm);
+  color: var(--ink-3);
+  border: 1px solid transparent;
+  transition: all var(--swift);
+}
+.glyph:hover {
+  color: var(--ink);
+  background: rgba(255,255,255,.07);
+  border-color: var(--line-2);
+}
+.glyph-hazard:hover {
+  color: var(--danger-hi);
+  background: var(--danger-tint);
+  border-color: rgba(242,97,122,.3);
+}
+
+/* ------------------------------------------------------------------ inputs */
+.field { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+
+.label {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.note { font-size: 12px; color: var(--ink-3); line-height: 1.55; }
+
+.inp, .sel {
+  width: 100%;
+  height: 42px;
+  padding: 0 14px;
+  color: var(--ink);
+  background: var(--inset);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  font-size: 13.5px;
+  transition: border-color var(--swift), box-shadow var(--swift), background var(--swift);
+}
+.inp::placeholder { color: var(--ink-4); }
+.inp:hover, .sel:hover { border-color: var(--line-2); }
+.inp:focus, .sel:focus {
+  border-color: var(--jade-edge);
+  background: var(--deep);
+  box-shadow: 0 0 0 3px var(--jade-tint);
+}
+.inp:read-only { color: var(--ink-2); background: rgba(0,0,0,.25); }
+
+.sel {
+  appearance: none;
+  padding-right: 34px;
+  cursor: pointer;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--ink-3) 50%),
+    linear-gradient(135deg, var(--ink-3) 50%, transparent 50%);
+  background-position: calc(100% - 17px) 19px, calc(100% - 12px) 19px;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+.sel option { background: var(--surface-2); color: var(--ink); }
+
+.inp-lg { height: 50px; font-size: 16px; padding: 0 16px; }
+
+/* Search shell */
+.seek {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.seek > svg {
+  position: absolute;
+  left: 14px;
+  color: var(--ink-4);
+  pointer-events: none;
+}
+.seek .inp { padding-left: 40px; }
+
+/* Numeric field used in dense grids */
+.micro { display: flex; flex-direction: column; gap: 6px; }
+.micro > label {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.micro .inp, .micro .sel { height: 36px; font-size: 13px; padding: 0 10px; }
+.micro .sel { padding-right: 28px; background-position: calc(100% - 15px) 16px, calc(100% - 10px) 16px; }
+
+/* ------------------------------------------------------------------- chips */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: var(--r-full);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  background: rgba(255,255,255,.045);
+  border: 1px solid var(--line-2);
+  white-space: nowrap;
+}
+.tag-jade  { color: var(--jade);  background: var(--jade-tint);  border-color: var(--jade-edge); }
+.tag-brass { color: var(--brass); background: var(--brass-tint); border-color: rgba(224,176,85,.3); }
+.tag-foe   { color: var(--foe);   background: var(--foe-tint);   border-color: rgba(242,97,122,.3); }
+
+/* Toggleable condition chip */
+.toggle-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  padding: 0 11px;
+  border-radius: var(--r-xs);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink-3);
+  background: rgba(255,255,255,.035);
+  border: 1px solid var(--line);
+  transition: all var(--swift);
+}
+.toggle-chip:hover {
+  color: var(--ink);
+  border-color: var(--jade-edge);
+  background: var(--jade-tint);
+}
+
+/* ---------------------------------------------------------------- steppers */
+.step {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  background: var(--inset);
+  border: 1px solid var(--line);
+  border-radius: var(--r-full);
+}
+.step > button {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--r-full);
+  color: var(--ink-3);
+  transition: all var(--swift);
+}
+.step > button:hover { color: var(--void); background: var(--jade); }
+.step > .val {
+  min-width: 30px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------------ meters */
+.meter {
+  position: relative;
+  height: 7px;
+  border-radius: var(--r-full);
+  background: var(--inset);
+  overflow: hidden;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,.6);
+}
+.meter > i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--jade-lo), var(--jade));
+  box-shadow: 0 0 12px var(--jade-glow);
+  transition: width var(--slow);
+}
+
+/* Range slider */
+.slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 26px;
+  background: transparent;
+  cursor: pointer;
+}
+.slider::-webkit-slider-runnable-track {
+  height: 5px;
+  border-radius: var(--r-full);
+  background: linear-gradient(90deg, var(--jade-lo), var(--jade-deep));
+  box-shadow: inset 0 1px 2px rgba(0,0,0,.6);
+}
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-top: -6.5px;
+  border-radius: var(--r-full);
+  background: linear-gradient(180deg, #fff, var(--jade-hi));
+  border: 1px solid var(--jade-lo);
+  box-shadow: 0 2px 8px rgba(0,0,0,.5), 0 0 0 4px var(--jade-tint);
+  transition: box-shadow var(--swift);
+}
+.slider:hover::-webkit-slider-thumb { box-shadow: 0 2px 10px rgba(0,0,0,.5), 0 0 0 7px var(--jade-tint); }
+.slider::-moz-range-track {
+  height: 5px;
+  border-radius: var(--r-full);
+  background: var(--jade-deep);
+}
+.slider::-moz-range-thumb {
+  width: 16px; height: 16px;
+  border-radius: var(--r-full);
+  background: var(--jade-hi);
+  border: 1px solid var(--jade-lo);
+}
+
+/* ------------------------------------------------------------------ tokens */
+/* Circular creature sigil, used everywhere a creature is referenced */
+.sigil {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--r-full);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0,0,0,.6);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.35),
+    inset 0 -2px 6px rgba(0,0,0,.35),
+    0 3px 10px rgba(0,0,0,.5);
+}
+.sigil::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: inherit;
+  border: 1px solid rgba(255,255,255,.09);
+}
+.sigil-lg { width: 52px; height: 52px; font-size: 16px; }
+.sigil-xl { width: 76px; height: 76px; font-size: 24px; }
+
+/* --------------------------------------------------------------- utilities */
+.row { display: flex; align-items: center; gap: 10px; }
+.push { margin-left: auto; }
+
+/* ------------------------------------------------------------------ motion */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(40px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes pulse-ring {
+  0%, 100% { box-shadow: 0 0 0 0 var(--brass-glow); }
+  50%      { box-shadow: 0 0 0 7px rgba(224,176,85,0); }
+}
+
+.enter { animation: rise var(--bounce) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
