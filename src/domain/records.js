@@ -1,11 +1,14 @@
-const DEFAULT_ABILITIES = Object.freeze({
-  str: 8,
-  dex: 8,
-  con: 8,
-  int: 8,
-  wis: 8,
-  cha: 8,
-});
+import {
+  ABILITY_KEYS,
+  ALIGNMENTS,
+  classById,
+  grantedLanguages,
+  LANGUAGES,
+  normalizeBaseAbilities,
+  raceById,
+  SKILLS,
+  subraceById,
+} from "./heroes.js";
 
 const finiteNumber = (value, fallback) => {
   const number = Number(value);
@@ -91,6 +94,16 @@ export function createHeroRecord(
 ) {
   const heroId = nullableId(input.id) || nullableId(id);
   if (!heroId) throw new TypeError("A Hero requires a stable id.");
+  const selectedClass = classById(input.classId);
+  const selectedRace = raceById(input.raceId);
+  const selectedSubrace = subraceById(selectedRace.id, input.subraceId);
+  const suppliedLanguages = cleanIdList(input.languages).filter((language) =>
+    LANGUAGES.includes(language),
+  );
+  const languages = [...new Set([
+    ...grantedLanguages(selectedRace.id, selectedSubrace?.id),
+    ...suppliedLanguages,
+  ])];
 
   return {
     id: heroId,
@@ -98,26 +111,20 @@ export function createHeroRecord(
       typeof input.name === "string" && input.name.trim()
         ? input.name.trim()
         : "Unnamed hero",
-    classId: nullableId(input.classId) || "fighter",
+    classId: selectedClass.id,
     level: Math.max(1, Math.min(20, Math.floor(finiteNumber(input.level, 1)))),
-    raceId: nullableId(input.raceId) || "human",
-    subraceId: nullableId(input.subraceId),
-    alignment: nullableId(input.alignment) || "Neutral",
+    raceId: selectedRace.id,
+    subraceId: selectedSubrace?.id || null,
+    alignment: ALIGNMENTS.includes(input.alignment) ? input.alignment : "Neutral",
     background: typeof input.background === "string" ? input.background : "",
-    languages: cleanIdList(input.languages).length
-      ? cleanIdList(input.languages)
-      : ["Common"],
-    baseAbilities: Object.fromEntries(
-      Object.keys(DEFAULT_ABILITIES).map((ability) => [
-        ability,
-        Math.max(
-          8,
-          Math.min(15, Math.floor(finiteNumber(input.baseAbilities?.[ability], 8))),
-        ),
-      ]),
+    languages,
+    baseAbilities: normalizeBaseAbilities(input.baseAbilities),
+    saveProficiencies: Array.isArray(input.saveProficiencies)
+      ? cleanIdList(input.saveProficiencies).filter((ability) => ABILITY_KEYS.includes(ability))
+      : [...selectedClass.saveProficiencies],
+    skillProficiencies: cleanIdList(input.skillProficiencies).filter((skill) =>
+      SKILLS.some((entry) => entry.id === skill),
     ),
-    saveProficiencies: cleanIdList(input.saveProficiencies),
-    skillProficiencies: cleanIdList(input.skillProficiencies),
     inventory: cleanInventory(input.inventory),
     loadout: cleanLoadout(input.loadout),
     armorId: nullableId(input.armorId),
@@ -135,4 +142,3 @@ export const normalizeSceneRecord = (record, options = {}) =>
 
 export const normalizeHeroRecord = (record, options = {}) =>
   createHeroRecord(record, { id: record?.id, ...options });
-

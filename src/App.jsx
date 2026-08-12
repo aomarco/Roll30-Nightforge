@@ -67,6 +67,7 @@ export default function App({ browser = window, runtimeFactory = createBrowserRu
   if (!runtimeRef.current) runtimeRef.current = runtimeFactory(browser, dispatch);
   const runtime = runtimeRef.current;
   const workbenchFlushRef = useRef(null);
+  const heroFlushRef = useRef(null);
 
   useEffect(() => {
     runtime.commands.initialize();
@@ -76,6 +77,10 @@ export default function App({ browser = window, runtimeFactory = createBrowserRu
   const go = (route) => {
     if (state.route.page === "settings" && route.page !== "settings") {
       const flushed = workbenchFlushRef.current?.();
+      if (flushed && !flushed.ok) return flushed;
+    }
+    if (state.route.page === "characters" && route.page !== "characters") {
+      const flushed = heroFlushRef.current?.();
       if (flushed && !flushed.ok) return flushed;
     }
     return runtime.commands.navigate(route, state.activeSceneId);
@@ -103,7 +108,20 @@ export default function App({ browser = window, runtimeFactory = createBrowserRu
   }
 
   let screen;
-  if (state.route.page === "characters") screen = <HeroesScreen go={go} />;
+  if (state.route.page === "characters") {
+    screen = (
+      <HeroesScreen
+        heroes={state.heroes}
+        lifecycle={state.lifecycle}
+        persistence={state.persistence}
+        go={go}
+        onCreate={runtime.commands.createHero}
+        onUpdate={runtime.commands.updateHero}
+        onRetire={runtime.commands.removeHero}
+        flushRef={heroFlushRef}
+      />
+    );
+  }
   else if (state.route.page === "settings") {
     screen = (
       <SceneScreen

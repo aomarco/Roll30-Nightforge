@@ -1,5 +1,11 @@
 import { failure, success } from "./result.js";
 import { ROUTES } from "./state.js";
+import {
+  classById,
+  grantedLanguages,
+  raceById,
+  subraceById,
+} from "../domain/heroes.js";
 
 export function createApplicationCommands({
   sceneRepository,
@@ -177,6 +183,44 @@ export function createApplicationCommands({
     return result;
   };
 
+  const updateHero = (id, patch = {}) => {
+    const current = heroRepository.get(id);
+    if (!current.ok) return persist(() => current, refreshHeroes);
+    let normalizedPatch = { ...patch };
+
+    if (patch.classId && classById(patch.classId).id !== current.value.classId) {
+      const selectedClass = classById(patch.classId);
+      normalizedPatch = {
+        ...normalizedPatch,
+        classId: selectedClass.id,
+        saveProficiencies: [...selectedClass.saveProficiencies],
+        skillProficiencies: [],
+      };
+    }
+
+    if (patch.raceId || Object.hasOwn(patch, "subraceId")) {
+      const nextRace = raceById(patch.raceId || current.value.raceId);
+      const nextSubrace = subraceById(nextRace.id, patch.subraceId);
+      const oldGranted = grantedLanguages(current.value.raceId, current.value.subraceId);
+      const chosenLanguages = (patch.languages || current.value.languages).filter(
+        (language) => !oldGranted.includes(language),
+      );
+      normalizedPatch = {
+        ...normalizedPatch,
+        raceId: nextRace.id,
+        subraceId: nextSubrace?.id || null,
+        languages: [
+          ...new Set([
+            ...grantedLanguages(nextRace.id, nextSubrace?.id),
+            ...chosenLanguages,
+          ]),
+        ],
+      };
+    }
+
+    return persist(() => heroRepository.update(id, normalizedPatch), refreshHeroes);
+  };
+
   return {
     initialize,
     navigate,
@@ -287,8 +331,7 @@ export function createApplicationCommands({
       });
     },
     createHero: (input) => persist(() => heroRepository.create(input), refreshHeroes),
-    updateHero: (id, patch) =>
-      persist(() => heroRepository.update(id, patch), refreshHeroes),
+    updateHero,
     removeHero: (id) => persist(() => heroRepository.remove(id), refreshHeroes),
   };
 }

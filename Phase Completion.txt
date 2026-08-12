@@ -1083,3 +1083,298 @@ evidence:
 - Production build: passed.
 
 Phase 3 is complete and ready for Phase 4.
+
+
+NIGHTFORGE - PHASE 4 COMPLETION AND PATCH NOTES
+================================================
+
+Date completed: 12 August 2026
+Phase: 4 - Hero domain and UI
+Previous completed phase: Phase 3 - Scene workbench
+
+
+36. PHASE 4 RESULT
+------------------
+
+Phase 4 is complete.
+
+The existing Nightforge Heroes portrait rail, codex header, vitals ribbon,
+chapter tabs, Identity sheet, and six ability dials now use independently
+implemented Hero rules and fresh Nightforge persistence. No original Roll30
+React, CSS, layout, storage, characters, or implementation code was copied.
+
+The protected Nightforge Heroes stylesheet and every other permanent visual
+file remain byte-identical to the approved baseline. New conditional and
+below-the-fold functional states use only the scoped nf-state namespace and
+existing Nightforge variables and primitives.
+
+
+37. HERO LIFECYCLE
+------------------
+
+- The portrait rail renders persisted Heroes rather than fixture characters.
+- Portrait selection targets stable Hero IDs.
+- Both existing New hero actions create a real level-1 Human Fighter, persist
+  it, and select it.
+- Fresh Heroes begin with all six purchased abilities at 8 and 27 points left.
+- Hero name and background drafts debounce for 450 ms.
+- Final drafts flush on blur, Hero selection, creation, and navigation.
+- Failed saves retain the local text draft and show Not saved with recovery.
+- Retire hero opens a Nightforge confirmation naming the exact Hero.
+- Successful retirement removes only the Hero record.
+- Failed retirement leaves the Hero visible and unchanged.
+- Existing Scene token snapshots remain unchanged after their source Hero is
+  edited or retired.
+- A fresh empty roster uses the existing Nightforge codex language and contains
+  no fake production Heroes.
+
+
+38. CLASS RULES
+---------------
+
+Implemented classes:
+
+- Fighter: d10 Hit Die, Strength and Constitution saving throws, no casting.
+- Wizard: d6 Hit Die, Intelligence and Wisdom saving throws, placeholder
+  spellcasting only.
+
+Changing class is enforced at the application-command boundary as well as the
+screen: saving throws reset to the selected class defaults and selected skills
+reset to empty.
+
+Wizard scaffold:
+
+- Spell save DC = 8 + proficiency bonus + Intelligence modifier.
+- Spell attack = proficiency bonus + Intelligence modifier.
+- Slots display as unlimited.
+- Spells display as unlimited.
+- The UI explicitly states that no spell list, slot economy, or in-battle
+  casting exists.
+
+
+39. RACE AND IDENTITY RULES
+---------------------------
+
+All nine required races are implemented:
+
+- Dwarf.
+- Elf.
+- Halfling.
+- Human.
+- Dragonborn.
+- Gnome.
+- Half-Elf.
+- Half-Orc.
+- Tiefling.
+
+All four required subraces are implemented:
+
+- Hill Dwarf.
+- High Elf.
+- Lightfoot Halfling.
+- Rock Gnome.
+
+Implemented traits are deliberately limited to the current numeric/flavor
+scope: ability bonuses, speed, size, and granted languages. Darkvision,
+resistances, Breath Weapon, and other future effects remain excluded.
+
+The Identity chapter now persists:
+
+- Name.
+- Class.
+- Level from 1 through 20.
+- Race.
+- Conditional subrace.
+- Read-only derived size.
+- All nine alignments.
+- Free-text background with 13 SRD suggestions.
+- All 16 SRD languages as toggle chips.
+
+Granted languages cannot be removed while their race grants them. Changing
+race or subrace replaces old grants, installs new grants, and retains languages
+the user selected independently.
+
+
+40. POINT BUY AND DERIVED VALUES
+--------------------------------
+
+- Six independently purchased base abilities.
+- Minimum purchased score 8.
+- Maximum purchased score 15.
+- Standard cost curve: 0, 1, 2, 3, 4, 5, 7, and 9 points for scores 8-15.
+- Total budget 27.
+- Overspending is blocked in the UI and normalized at the record boundary.
+- Racial and subracial bonuses apply only after purchased scores.
+- Each dial shows base score, final score, modifier, and legal step controls.
+- Remaining budget updates from real point-buy state.
+
+Derived values:
+
+- Proficiency bonus from level 1 through 20.
+- HP using full class Hit Die at level 1.
+- Additional Fighter HP using 6 + Constitution modifier per level.
+- Additional Wizard HP using 4 + Constitution modifier per level.
+- Initiative from Dexterity modifier.
+- Base speed and size from race.
+- Ten-foot heavy-armour speed penalty when Strength is below the requirement.
+- Unarmoured, light, medium-capped, and heavy Armour Class calculations.
+- Shield and persisted armour/shield enchantment contributions.
+- Wizard spell save and attack values.
+
+
+41. SKILLS AND SAVING THROWS
+----------------------------
+
+- All six saving throws render with live modifiers and proficiency toggles.
+- All 18 SRD skills render with their exact governing ability.
+- A selected proficiency adds the level-based proficiency bonus.
+- An unselected proficiency uses only the governing ability modifier.
+- Fighter begins with Strength and Constitution saves selected.
+- Fighter guidance displays the live selected count out of two.
+- Selecting more than two skills remains allowed and displays a warning.
+- No in-combat skill or saving-throw roller was added.
+
+
+42. PHASE BOUNDARY
+------------------
+
+Gear catalogs, inventory operations, item drawers, equipment legality, and
+magic-item controls remain assigned to Phase 5. The existing Gear chapter is
+honestly disabled with an explanation rather than showing prototype inventory
+or fake enabled controls. No Phase 5 catalog data was introduced in Phase 4.
+
+
+43. FILES ADDED
+---------------
+
+- src/domain/heroes.js
+  Independently authored classes, races, subraces, identity catalogs, point-buy
+  rules, derivations, saves, skills, and Wizard scaffold.
+
+- src/phase4.test.js
+  Phase 4 catalog, derivation, transition, lifecycle, failure, and isolation
+  tests.
+
+- scripts/phase4-render-smoke.mjs
+  Render verification for fresh-empty, Identity, Fighter Abilities, Fighter
+  over-selection, Wizard, retirement, disabled Gear, and error states.
+
+- scripts/verify-phase4.mjs
+  Structural counts, integration checks, clean-room checks, scoped-functional-
+  CSS checks, and permanent visual hash verification.
+
+
+44. FILES UPDATED
+-----------------
+
+- src/screens/HeroesScreen.jsx
+  Replaces prototype fixtures and inert Hero controls with persisted Hero data
+  and Phase 4 behavior while retaining Nightforge composition and landmarks.
+
+- src/domain/records.js
+  Enforces valid class, race, subrace, alignment, language, point-buy,
+  proficiency, and default-save data.
+
+- src/application/commands.js
+  Enforces class and race transition policies outside the UI.
+
+- src/App.jsx
+  Supplies repository Heroes and lifecycle commands and flushes drafts before
+  leaving Heroes.
+
+- src/styles/functional-states.css
+  Adds only nf-state-scoped empty, skills, saves, and Wizard continuation
+  layouts using existing Nightforge design tokens.
+
+- package.json
+  Adds Phase 4 render and structural verification to the complete gate.
+
+
+45. VERIFICATION EVIDENCE
+-------------------------
+
+Full command:
+
+    npm run verify
+
+Result: Pass.
+
+- Node test suite: 72 passed, 0 failed.
+- Phase 2 render smoke: Pass.
+- Phase 3 render smoke: Pass.
+- Phase 4 render smoke: Pass.
+- Phase 1 verifier: Pass.
+- Phase 2 verifier: Pass.
+- Phase 3 verifier: Pass.
+- Phase 4 verifier: Pass.
+- Production Vite build: Pass.
+- Permanent Nightforge visual hashes: unchanged.
+- Protected heroes.css hash: unchanged.
+- Functional-state CSS selectors: fully nf-state scoped.
+- Runtime references to original Roll30 files: none.
+- Original Roll30 browser-save identifiers used by runtime: none.
+
+Focused tests prove:
+
+- Exact 2-class profiles.
+- Exact 9-race and 4-subrace numeric trait matrix.
+- Nine alignments and 16 languages.
+- Six saves and exact mappings for all 18 skills.
+- Every point-buy cost and legal boundary.
+- Exact-budget acceptance and overspend prevention.
+- Racial bonuses after purchased scores.
+- Proficiency progression at every level boundary.
+- Fighter and Wizard HP at normal, level-1, and level-20 boundaries.
+- Initiative, speed, size, every armour category, shield, enchantment, and heavy
+  speed penalty.
+- Wizard DC, attack, and placeholder-only state.
+- Proficient and non-proficient save/skill modifiers.
+- Valid defaults and corrupt-input normalization.
+- Exact stable-ID Hero CRUD.
+- Class and race transition policies.
+- Hero retirement preserving Scene token snapshots.
+- Create and retire storage-failure preservation.
+- Fresh empty, populated Identity, Fighter, Wizard, over-guidance, retirement,
+  disabled Gear, and Not saved render states.
+
+
+46. UI AND DATA BOUNDARY AUDIT
+------------------------------
+
+- No Roll30 UI, UX, layout, CSS, React, component, or test was copied.
+- No Roll30 characters, Scenes, games, artwork, battles, or browser saves were
+  imported, shared, migrated, deleted, or modified.
+- The original app was used only as the plan-authorized read-only behavioral
+  oracle to verify observable race trait outputs.
+- No original Roll30 module is imported by Nightforge runtime or tests.
+- Existing Nightforge top composition and protected stylesheet remain intact.
+- Identity continues inside the existing Identity sheet.
+- Abilities continues beneath the existing six dials in the same chapter flow.
+- No original-style character form or panel was introduced.
+- No future class features, feats, spellcasting, tool proficiency, or combat
+  check/save mechanics were added.
+
+
+47. PHASE 4 COMPLETION STATEMENT
+--------------------------------
+
+Every Phase 4 plan requirement has direct evidence:
+
+- Classes: Fighter and Wizard catalogued, derived, persisted, and tested.
+- Races: all nine and all four subraces trait-tested and rendered through real
+  selection controls.
+- Point buy: all costs, limits, budget, racial application, and UI states tested.
+- Derived values: HP, AC, initiative, speed, size, proficiency, heavy penalty,
+  and Wizard values tested.
+- Hero CRUD: real create, stable-ID select/update/delete, reload persistence,
+  failure preservation, empty state, and token independence implemented.
+- Identity chapter: every specified field connected.
+- Abilities chapter: six real dials, six saves, 18 skills, live modifiers,
+  proficiency state, and class guidance connected.
+- Wizard scaffold: correct values with no real casting surface.
+- Nightforge appearance: permanent visual hashes unchanged and all additions
+  conditionally scoped.
+- Clean-room and fresh-data limits: verified.
+- Production build: passed.
+
+Phase 4 is complete and ready for Phase 5.
