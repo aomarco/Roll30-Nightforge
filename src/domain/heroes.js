@@ -179,7 +179,7 @@ export function canSetBaseAbility(baseAbilities, ability, score) {
 
 export const abilityModifier = (score) => Math.floor((Number(score) - 10) / 2);
 export const proficiencyBonus = (level) => 2 + Math.floor((Math.max(1, Math.min(20, level)) - 1) / 4);
-export const formatModifier = (value) => (value >= 0 ? `+${value}` : String(value).replace("-", "âˆ’"));
+export const formatModifier = (value) => (value >= 0 ? `+${value}` : String(value).replace("-", "−"));
 
 export function racialAbilityBonuses(raceId, subraceId) {
   const race = raceById(raceId);
@@ -288,4 +288,3 @@ export const saveModifier = (hero, derived, ability) =>
 export const skillModifier = (hero, derived, skill) =>
   derived.abilityModifiers[skill.ability] +
   (hero.skillProficiencies?.includes(skill.id) ? derived.proficiency : 0);
-

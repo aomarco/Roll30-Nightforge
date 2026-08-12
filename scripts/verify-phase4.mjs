@@ -90,6 +90,9 @@ for (const path of sourceFiles) {
   if (/Documents[\\/]Roll30|UI Redesign Attempt|\.\.[\\/]\.\.[\\/]Roll30/.test(contents)) {
     failures.push(`${relativePath}: contains an original-project path or import.`);
   }
+  if (/[\u00c2\u00c3\ufffd]|\u00e2[^\s]/u.test(contents)) {
+    failures.push(`${relativePath}: contains malformed UTF-8/mojibake text.`);
+  }
 }
 
 const packageJson = JSON.parse(await read("package.json"));

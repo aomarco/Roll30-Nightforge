@@ -1378,3 +1378,28 @@ Every Phase 4 plan requirement has direct evidence:
 - Production build: passed.
 
 Phase 4 is complete and ready for Phase 5.
+
+
+PHASE 4 POST-COMPLETION PATCH - TEXT ENCODING
+==============================================
+
+Date: 12 August 2026
+
+Corrected malformed UTF-8/mojibake sequences in user-visible Hero and Scene
+text without changing UI structure, layout, styling, or behavior.
+
+Examples:
+
+- `Level 1 Fighter Â· Human` now renders as `Level 1 Fighter · Human`.
+- Negative modifiers such as `âˆ’1` now render as `−1`.
+- Broken ellipses, em dashes, middle dots, and infinity symbols were corrected.
+
+Regression protection:
+
+- Phase 4 structural verification now rejects malformed UTF-8 patterns in all
+  runtime source files.
+- Phase 4 render smoke explicitly verifies the corrected Hero level separator,
+  Unicode minus sign, and absence of mojibake in every covered Hero state.
+- A complete runtime scan reports zero malformed text occurrences.
+- `npm run verify` passes with 72 tests, all render suites, all phase verifiers,
+  unchanged permanent visual hashes, and a successful production build.

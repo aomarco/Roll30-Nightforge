@@ -11,6 +11,7 @@ import {
   CLASSES,
   computeArmorClass,
   deriveHero,
+  formatModifier,
   grantedLanguages,
   LANGUAGES,
   normalizeBaseAbilities,
@@ -212,6 +213,8 @@ test("ability and proficiency modifiers follow the 20-level progression", () => 
   assert.equal(abilityModifier(9), -1);
   assert.equal(abilityModifier(10), 0);
   assert.equal(abilityModifier(15), 2);
+  assert.equal(formatModifier(-1), "−1");
+  assert.equal(formatModifier(0), "+0");
   assert.deepEqual([1, 4, 5, 8, 9, 12, 13, 16, 17, 20].map(proficiencyBonus), [2, 2, 3, 3, 4, 4, 5, 5, 6, 6]);
 });
 

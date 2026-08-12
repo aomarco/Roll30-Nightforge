@@ -194,7 +194,7 @@ export default function SceneScreen({
     : cleanupIssue
       ? `Changes saved. Cleanup pending. ${errorText(cleanupIssue)}`
       : busy
-        ? "Saving changes to this browserâ€¦"
+        ? "Saving changes to this browser…"
         : "Changes save automatically to this browser.";
 
   return (
@@ -236,7 +236,7 @@ export default function SceneScreen({
               <h2>{name || "Untitled map"}</h2>
               {mode === "battle" && (
                 <span className="rig-scale numeral">
-                  5 ft squares Â· {gridSize}px
+                  5 ft squares · {gridSize}px
                 </span>
               )}
             </div>
@@ -298,7 +298,7 @@ export default function SceneScreen({
                   <span className="pick-ico"><Sparkles size={18} /></span>
                   <span>
                     <b>Play</b>
-                    <small>Scenery only â€” no grid or turn order.</small>
+                    <small>Scenery only — no grid or turn order.</small>
                   </span>
                 </button>
                 <button
@@ -332,7 +332,7 @@ export default function SceneScreen({
             </div>
           </section>
 
-          {/* Grid â€” battle only */}
+          {/* Grid — battle only */}
           {mode === "battle" && (
             <section className="tune-group">
               <div className="tune-title">

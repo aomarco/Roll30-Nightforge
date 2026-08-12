@@ -225,7 +225,7 @@ export default function HeroesScreen({
   const saveMessage = visibleError
     ? `Not saved. ${errorText(visibleError)}`
     : busy
-      ? "Saving heroâ€¦"
+      ? "Saving hero…"
       : activeHero
         ? "Hero changes save automatically to this browser."
         : "Forge your first persisted Nightforge hero.";
@@ -270,7 +270,7 @@ export default function HeroesScreen({
                 <span className="portrait-face"><HeroIcon size={19} /></span>
                 <span className="portrait-meta">
                   <strong>{hero.name}</strong>
-                  <small>Lv {hero.level} Â· {CLASSES.find((entry) => entry.id === hero.classId)?.name || "Fighter"}</small>
+                  <small>Lv {hero.level} · {CLASSES.find((entry) => entry.id === hero.classId)?.name || "Fighter"}</small>
                 </span>
               </button>
             );
@@ -290,7 +290,7 @@ export default function HeroesScreen({
               </span>
               <div>
                 <span className="kicker kicker-brass">The codex awaits</span>
-                <h2>{lifecycle === "booting" ? "Opening the party recordâ€¦" : "No heroes written yet"}</h2>
+                <h2>{lifecycle === "booting" ? "Opening the party record…" : "No heroes written yet"}</h2>
                 <p className="prose-sm">Create a fresh Nightforge Hero to open Identity and Abilities.</p>
               </div>
               <button className="btn btn-key" onClick={createHero} disabled={busy || lifecycle === "booting"}>
@@ -310,7 +310,7 @@ export default function HeroesScreen({
                   <span className="kicker kicker-brass">Character sheet</span>
                   <h2>{drafts.name || "Unnamed hero"}</h2>
                   <p className="prose-sm">
-                    Level {activeHero.level} {selectedClass.name} Â· {derived.race.name}
+                    Level {activeHero.level} {selectedClass.name} · {derived.race.name}
                     {derived.subrace ? ` (${derived.subrace.name})` : ""}
                   </p>
                 </div>
@@ -385,7 +385,7 @@ export default function HeroesScreen({
                   </label>
                   <label className="field span-all">
                     <span className="label">Background</span>
-                    <input className="inp" value={drafts.background} list="nightforge-backgrounds" onChange={(event) => queueDraft("background", event.target.value)} onBlur={flushDraft} placeholder="Acolyte, Soldier, Sageâ€¦" />
+                    <input className="inp" value={drafts.background} list="nightforge-backgrounds" onChange={(event) => queueDraft("background", event.target.value)} onBlur={flushDraft} placeholder="Acolyte, Soldier, Sage…" />
                     <datalist id="nightforge-backgrounds">{BACKGROUNDS.map((background) => <option value={background} key={background} />)}</datalist>
                   </label>
                   <div className="field span-all">
@@ -403,7 +403,7 @@ export default function HeroesScreen({
                             title={isGranted ? `Granted by ${derived.race.name}` : undefined}
                             onClick={() => apply({ languages: toggleValue(activeHero.languages, language) })}
                           >
-                            {language}{isGranted ? " Â· granted" : ""}
+                            {language}{isGranted ? " · granted" : ""}
                           </button>
                         );
                       })}
@@ -486,8 +486,8 @@ export default function HeroesScreen({
                       <div className="quad">
                         <div className="quad-cell"><span>Spell save DC</span><strong className="numeral">{derived.spellcasting.saveDc}</strong></div>
                         <div className="quad-cell"><span>Spell attack</span><strong className="numeral">{formatModifier(derived.spellcasting.attackBonus)}</strong></div>
-                        <div className="quad-cell"><span>Slots</span><strong className="numeral">âˆž</strong></div>
-                        <div className="quad-cell"><span>Spells</span><strong className="numeral">âˆž</strong></div>
+                        <div className="quad-cell"><span>Slots</span><strong className="numeral">∞</strong></div>
+                        <div className="quad-cell"><span>Spells</span><strong className="numeral">∞</strong></div>
                       </div>
                       <p className="note">No spell list, slot economy, or in-battle casting is enabled.</p>
                     </section>
@@ -514,7 +514,7 @@ export default function HeroesScreen({
             </div>
             <div className="drawer-foot">
               <button className="btn btn-line" onClick={() => setRetiring(null)} autoFocus>Keep hero</button>
-              <button className="btn btn-hazard" onClick={confirmRetire} disabled={busy}><Trash2 size={15} /> {busy ? "Retiringâ€¦" : "Retire hero"}</button>
+              <button className="btn btn-hazard" onClick={confirmRetire} disabled={busy}><Trash2 size={15} /> {busy ? "Retiring…" : "Retire hero"}</button>
             </div>
           </aside>
         </>

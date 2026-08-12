@@ -85,9 +85,10 @@ try {
   assert.match(identity, /Aster Vale/);
   assert.match(identity, /Lv 5/);
   assert.match(identity, /Hill Dwarf/);
+  assert.match(identity, /Level 3 Fighter · Dwarf/);
   assert.match(identity, /Lawful Good/);
   assert.match(identity, /Soldier/);
-  assert.match(identity, /Dwarvish Â· granted/);
+  assert.match(identity, /Dwarvish · granted/);
   assert.match(identity, /Gear becomes functional in Phase 5/);
   assert.doesNotMatch(identity, /Longsword|Plate Armor|Potion of Healing/);
 
@@ -105,6 +106,7 @@ try {
   assert.match(fighterAbilities, /Athletics/);
   assert.match(fighterAbilities, /Sleight of Hand/);
   assert.match(fighterAbilities, /2 \/ 2 chosen/);
+  assert.match(fighterAbilities, /−1/);
   assert.doesNotMatch(fighterAbilities, /Wizard spellcasting/);
 
   const overGuidance = renderToStaticMarkup(
@@ -160,6 +162,10 @@ try {
   );
   assert.match(retiring, /Retire <strong>Aster Vale<\/strong>/);
   assert.match(retiring, /Existing Scene tokens are independent snapshots and remain untouched/);
+
+  for (const markup of [empty, identity, fighterAbilities, overGuidance, wizardAbilities, failed, retiring]) {
+    assert.doesNotMatch(markup, /[\u00c2\u00c3\ufffd]|\u00e2[^\s]/u);
+  }
 
   console.log("Phase 4 render smoke passed for empty, Identity, Fighter guidance, Wizard scaffold, retirement, disabled Gear, and error states.");
 } finally {
