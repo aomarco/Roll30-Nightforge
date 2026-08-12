@@ -78,6 +78,36 @@ export function createApplicationCommands({
     return heroes;
   };
 
+  const applySceneSave = (result) => {
+    dispatch({ type: "replace-scenes", scenes: result.envelope.scenes });
+    dispatch({ type: "set-active-scene", sceneId: result.envelope.lastActiveSceneId });
+    dispatch({ type: "persistence-saved", revision: result.revision || 0 });
+  };
+
+  const rememberScene = (sceneId) => {
+    const remembered = sceneId
+      ? sessionRepository.save({ activeSceneId: sceneId })
+      : sessionRepository.clear();
+    return remembered.ok ? [] : [remembered];
+  };
+
+  const enterScene = (operation, route) => {
+    dispatch({ type: "persistence-saving" });
+    const result = operation();
+    if (!result.ok) {
+      dispatch({ type: "persistence-failed", error: result });
+      return result;
+    }
+    applySceneSave(result);
+    const issues = rememberScene(result.value.id);
+    dispatch({ type: "navigate", route });
+    return success(result.value, {
+      envelope: result.envelope,
+      revision: result.revision,
+      issues,
+    });
+  };
+
   const persist = (operation, refresh) => {
     dispatch({ type: "persistence-saving" });
     const result = operation();
@@ -94,20 +124,22 @@ export function createApplicationCommands({
     initialize,
     navigate,
     selectScene,
+    forgeScene: (input, route = { page: "board", mode: "setup" }) =>
+      enterScene(() => sceneRepository.createActive(input), route),
+    openScene: (id, route = { page: "board", mode: "setup" }) =>
+      enterScene(() => sceneRepository.open(id), route),
     createScene: (input) => persist(() => sceneRepository.create(input), refreshScenes),
     updateScene: (id, patch) =>
       persist(() => sceneRepository.update(id, patch), refreshScenes),
     removeScene: (id) => {
-      const result = persist(() => sceneRepository.remove(id), refreshScenes);
-      if (!result.ok) return result;
-      const session = sessionRepository.load();
-      const issues = [];
-      if (!session.ok) issues.push(session);
-      else if (session.value.activeSceneId === id) {
-        const cleared = sessionRepository.clear();
-        if (!cleared.ok) issues.push(cleared);
-        dispatch({ type: "set-active-scene", sceneId: null });
+      dispatch({ type: "persistence-saving" });
+      const result = sceneRepository.remove(id);
+      if (!result.ok) {
+        dispatch({ type: "persistence-failed", error: result });
+        return result;
       }
+      applySceneSave(result);
+      const issues = rememberScene(result.envelope.lastActiveSceneId);
       return success(result.value, {
         envelope: result.envelope,
         revision: result.revision,

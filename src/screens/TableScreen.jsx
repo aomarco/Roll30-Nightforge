@@ -9,6 +9,7 @@ import {
   Plus,
   ShieldHalf,
   SlidersHorizontal,
+  Sparkles,
   Swords,
   Trash2,
   Wind,
@@ -37,9 +38,10 @@ const healthTone = (hp, maxHp) => {
   return "var(--hp-low)";
 };
 
-export default function TableScreen({ mode = "setup", go = noop, setMode = noop }) {
+export default function TableScreen({ scene = null, mode = "setup", go = noop, setMode = noop }) {
   const [selectedId, setSelectedId] = useState("1");
-  const isBattle = mode === "battle";
+  const isPlay = scene?.kind === "play" || mode === "play";
+  const isBattle = !isPlay && mode === "battle";
   const active = TOKENS[0];
   const selected = TOKENS.find((t) => t.id === selectedId) || null;
 
@@ -48,7 +50,7 @@ export default function TableScreen({ mode = "setup", go = noop, setMode = noop 
       {/* ==================================================== the map ==== */}
       <div className="map">
         <div className="map-wash" aria-hidden="true" />
-        <div className="map-grid" aria-hidden="true" />
+        {!isPlay && <div className="map-grid" aria-hidden="true" />}
         <div className="map-fog" aria-hidden="true" />
 
         {TOKENS.map((token) => (
@@ -86,9 +88,9 @@ export default function TableScreen({ mode = "setup", go = noop, setMode = noop 
         </button>
         <span className="hud-div" />
         <div className="hud-scene">
-          <span className="kicker">Goblin Ambush</span>
+          <span className="kicker">{scene?.name || "Untitled scene"}</span>
           <strong>
-            {isBattle ? `Round 1 · ${active.name}'s turn` : "Setup mode"}
+            {isPlay ? "Free play" : isBattle ? `Round 1 · ${active.name}'s turn` : "Setup mode"}
           </strong>
         </div>
       </div>
@@ -96,21 +98,29 @@ export default function TableScreen({ mode = "setup", go = noop, setMode = noop 
       {/* ============================================== top-centre HUD ==== */}
       <div className="hud hud-tc glass grained">
         <div className="phase">
-          <button className={!isBattle ? "on" : ""} onClick={() => setMode("setup")}>
-            <Hammer size={14} /> Setup
-          </button>
-          <button className={isBattle ? "on" : ""} onClick={() => setMode("battle")}>
-            <Swords size={14} /> Battle
-          </button>
+          {isPlay ? (
+            <button className="on" disabled aria-current="page"><Sparkles size={14} /> Play</button>
+          ) : (
+            <>
+              <button className={!isBattle ? "on" : ""} onClick={() => setMode("setup")}>
+                <Hammer size={14} /> Setup
+              </button>
+              <button className={isBattle ? "on" : ""} onClick={() => setMode("battle")}>
+                <Swords size={14} /> Battle
+              </button>
+            </>
+          )}
         </div>
       </div>
 
       {/* =============================================== top-right HUD ==== */}
       <div className="hud hud-tr glass grained">
-        <span className="tag tag-brass">
-          <Grid3x3 size={12} /> 5 ft
-        </span>
-        <span className="hud-div" />
+        {!isPlay && (
+          <>
+            <span className="tag tag-brass"><Grid3x3 size={12} /> 5 ft</span>
+            <span className="hud-div" />
+          </>
+        )}
         <button
           className="glyph"
           onClick={() => go({ page: "settings" })}
@@ -145,7 +155,7 @@ export default function TableScreen({ mode = "setup", go = noop, setMode = noop 
             <button className="btn btn-key btn-sm btn-wide" onClick={noop}>
               <Plus size={15} strokeWidth={2.4} /> Add to map
             </button>
-            {!isBattle && (
+            {!isBattle && !isPlay && (
               <button className="btn btn-line btn-sm btn-wide" onClick={noop}>
                 <Package size={14} /> Place a chest
               </button>
@@ -177,7 +187,7 @@ export default function TableScreen({ mode = "setup", go = noop, setMode = noop 
             </div>
           </section>
 
-          {!isBattle && (
+          {!isBattle && !isPlay && (
             <p className="whisper">
               Arrange the scene, then switch to Battle to roll initiative.
             </p>

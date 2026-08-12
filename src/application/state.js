@@ -63,6 +63,7 @@ export function applicationReducer(state, action) {
           status: "saved",
           revision: action.revision,
           error: null,
+          recovered: false,
         },
       };
     case "persistence-failed":
@@ -74,4 +75,3 @@ export function applicationReducer(state, action) {
       return state;
   }
 }
-

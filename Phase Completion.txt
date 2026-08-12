@@ -491,3 +491,386 @@ Every implementation requirement in Phase 1 has direct evidence:
 
 Phase 1 is complete and ready for the next implementation phase.
 
+
+===============================================================================
+NIGHTFORGE — PHASE 2 COMPLETION AND PATCH NOTES
+===============================================================================
+
+Completed: 12 August 2026 (Australia/Sydney)
+Project: C:\Users\Marcelo\Documents\Roll30 UI Rebuild
+Phase: Library and routing
+Previous completed phase: Phase 1 — application and repository foundation
+
+
+16. PHASE 2 RESULT
+------------------
+
+Phase 2 is complete.
+
+Nightforge now starts from its real, fresh Nightforge-only application state.
+The Library no longer contains prototype Scene records. Forge, Open, Settings,
+Delete, command-deck navigation, active Scene context, and reload restoration are
+connected to the independently written Phase 1 repositories.
+
+No original Roll30 UI, UX, CSS, JSX, component, storage record, runtime module,
+or browser save was imported or accessed.
+
+
+17. APPLICATION BOOTSTRAP AND ROUTING
+-------------------------------------
+
+Implemented:
+
+- Added a browser runtime that creates Nightforge-only state, Scene, Hero,
+  session, and artwork repositories.
+- Connected the React application to the Phase 1 reducer and commands.
+- Hydrates Scenes, Heroes, durable active Scene context, and session context on
+  startup.
+- Every fresh page load opens Library, even when an active Scene is remembered.
+- Brand and Library navigation return to Library.
+- Heroes remains globally available.
+- Scene navigation requires an active Scene.
+- Enter the Table requires an active Scene.
+- Scene and Table controls are visibly and semantically disabled when no Scene
+  exists, with an explanation in their title.
+- The Table remains full-screen without the command deck.
+- The active Scene is supplied to Scene Settings and Table.
+- Play Scenes open in Play state.
+- Battle Scenes without an encounter open in Setup.
+- A restored active/complete encounter is routed to Battle state.
+
+Files:
+
+- src/App.jsx
+- src/main.jsx
+- src/application/browserRuntime.js
+- src/application/library.js
+
+
+18. REAL LIBRARY DATA
+---------------------
+
+Implemented:
+
+- Removed all three hardcoded prototype Scenes from Library.
+- Library renders only records returned by the Nightforge Scene repository.
+- Featured stage displays the most recently opened Scene.
+- Remaining Scenes render in the existing Nightforge ledger.
+- Scene count is derived from repository records.
+- Scene identity is always stable-ID based.
+- Play and Battle labels are derived from Scene kind.
+- Battle Scenes show the 5-foot-grid treatment.
+- Play Scenes show Free play without a false grid label.
+- Scene color accents are deterministic without adding persisted presentation
+  data to the Scene record.
+- Stored IndexedDB artwork is loaded into the existing Nightforge art treatment.
+- Missing or failed artwork falls back safely to Nightforge's existing painted
+  wash.
+- No production dummy Scene is seeded.
+
+File:
+
+- src/screens/LibraryScreen.jsx
+
+
+19. FORGE WORKFLOW
+------------------
+
+The existing Forge drawer now:
+
+- Accepts a Scene name.
+- Creates either a Play or Battle Scene.
+- Normalizes an empty name to Untitled scene.
+- Persists the Scene before changing the visible collection.
+- Makes the new Scene active in the same state-envelope save.
+- Records its initial last-opened timestamp.
+- Remembers active context in the isolated Nightforge session key.
+- Closes only after successful persistence.
+- Enters the new Scene's Table after success.
+- Preserves the entered name, selected kind, and open drawer after failure.
+- Shows the error and recovery instruction inside the Forge drawer.
+- Exposes an honest Forging state while persistence is active.
+
+
+20. OPEN AND SETTINGS WORKFLOWS
+-------------------------------
+
+Implemented:
+
+- Featured-stage Open targets the exact Scene ID.
+- Ledger thumbnail and Open button target the exact Scene ID.
+- Featured and ledger Settings controls target the exact Scene ID.
+- Opening a Scene updates lastOpenedAt and durable active context in one verified
+  state save.
+- The opened Scene becomes the featured Scene on return to Library.
+- Table receives the selected Scene's real name and kind.
+- Scene workbench initializes its visible name, kind, and grid size from the
+  selected Scene.
+- Play Table presents an honest Play state and does not display Setup/Battle or
+  a 5-foot-grid label.
+
+
+21. DELETE WORKFLOW
+-------------------
+
+Implemented:
+
+- Every Delete glyph opens a Nightforge-native confirmation drawer.
+- Confirmation names the exact Scene being deleted.
+- The Scene remains visible until the state-envelope write is verified.
+- Failed deletion keeps the Scene and active selection intact.
+- Failed deletion remains open and displays an actionable error inside the
+  drawer.
+- Deleting a non-active Scene preserves the current active Scene.
+- Deleting the active Scene chooses the safest remaining Scene by recency.
+- Deleting the final Scene clears durable and session active context.
+- Scene artwork keys are added to pendingArtworkDeletes only after successful
+  Scene removal, ready for the staged cleanup coordinator in Phase 3.
+- Original Roll30 browser data is never inspected or changed.
+
+
+22. EMPTY, LOADING, ERROR, AND DISABLED STATES
+----------------------------------------------
+
+Implemented:
+
+- Empty Library retains the Nightforge masthead, stage, ledger, and Forge
+  language while teaching the first action.
+- Startup loading retains the stage structure and explains that Nightforge is
+  restoring this browser's campaign state.
+- Repository and artwork errors identify what failed and what to do next.
+- Backup recovery is reported visibly when Nightforge restores a valid backup
+  after detecting an invalid primary save.
+- Forge and Delete failures display in the active drawer rather than behind it.
+- Busy controls are disabled and visually communicate that work is in progress.
+- Escape closes the active Forge or Delete drawer without performing an action.
+- Destructive action remains separated behind exact-target confirmation.
+
+
+23. VISUAL AND CLEAN-ROOM PROTECTION
+------------------------------------
+
+The following six original Nightforge stylesheets remain byte-identical to the
+nightforge-ui-baseline tag:
+
+- src/styles/core.css
+- src/styles/shell.css
+- src/styles/library.css
+- src/styles/heroes.css
+- src/styles/scene.css
+- src/styles/table.css
+
+All new conditional styling lives in:
+
+- src/styles/functional-states.css
+
+Every selector in that file begins under an nf-state functional namespace.
+It does not restyle an existing Nightforge base class by itself and does not
+introduce a second visual language.
+
+The existing Nightforge stage, ledger, masthead, command deck, drawer, buttons,
+tags, typography, spacing, palette, and Table HUD remain the presentation
+authority. No Roll30 presentation material was transferred.
+
+
+24. PHASE 2 TESTING AND VERIFICATION
+------------------------------------
+
+New automated workflow coverage includes:
+
+- Featured-Scene recency ordering.
+- Stable presentation helpers and Play/Setup/Battle routing.
+- Complete Forge persistence, selection, session, and route transition.
+- Blank-name normalization.
+- Exact-ID Open and last-opened refresh.
+- Reload restoration with mandatory Library-first startup.
+- Active-Scene deletion with safe fallback.
+- Final-Scene deletion with context clearing.
+- Artwork-cleanup scheduling.
+- Forge write-failure preservation.
+- Delete write-failure preservation.
+
+Total automated test results:
+
+- Tests: 34
+- Passed: 34
+- Failed: 0
+- Skipped: 0
+
+Render smoke coverage:
+
+- Populated Library.
+- Empty Library.
+- Guarded command deck without a Scene.
+- Enabled command deck with an active Scene.
+- Active Scene workbench context.
+- Play Table context.
+- Result: Pass.
+
+Static Phase 2 verifier:
+
+- Six frozen stylesheet hashes match: Pass.
+- Functional-state selector namespace: Pass.
+- Library placeholder Scene detection: Pass; none found.
+- Required Forge/Open/Settings/Delete connections: Pass.
+- Active-context and browser-runtime boundaries: Pass.
+- Original-project runtime paths/imports: 0.
+- Original Roll30 runtime storage-key uses: 0.
+
+Production build:
+
+- Result: Pass.
+- CSS asset: index-Dxd5srfU.css
+- JavaScript asset: index-UNEsmpwi.js
+
+Combined verification command:
+
+- npm run verify
+- Result: Pass.
+
+Interactive browser-plugin verification:
+
+- Not performed because the in-app browser control surface was not exposed in
+  this execution session.
+- No substitute browser automation was used.
+- Runtime rendering was instead verified through the deterministic Vite SSR
+  render smoke plus application workflow tests and production compilation.
+
+
+25. IMPORTANT PHASE 2 BOUNDARY
+------------------------------
+
+Phase 2 makes Library and routing real. Later phase boundaries remain intact:
+
+- Scene workbench inputs initialize from the active Scene, but persistent name,
+  kind, artwork, blank-canvas, grid, preview, and return-context editing belongs
+  to Phase 3.
+- Heroes still shows prototype Hero data until Phase 4.
+- Gear remains prototype data until Phase 5.
+- Table camera, map tools, walls, ruler, and real Play tokens belong to Phase 6.
+- Table tokens, Inspector editing, and chests remain prototype behavior until
+  Phase 7.
+- Initiative, movement, combat, conditions, thrown items, and ammunition remain
+  scheduled for later phases.
+
+These are explicit phase boundaries, not Phase 2 failures.
+
+
+26. PHASE 2 TESTING LIST FOR THE OWNER
+--------------------------------------
+
+Run commands from:
+
+C:\Users\Marcelo\Documents\Roll30 UI Rebuild
+
+[ ] 1. Run all automated tests:
+
+        npm test
+
+    Expected:
+    - 34 tests.
+    - 34 pass.
+    - 0 fail.
+
+[ ] 2. Run the render smoke:
+
+        npm run test:phase2:render
+
+    Expected:
+    - Phase 2 render smoke passed for populated, empty, guarded, settings, and
+      Play Table states.
+
+[ ] 3. Run Phase 2 structural verification:
+
+        npm run verify:phase2
+
+    Expected:
+    - Six frozen Nightforge stylesheets match.
+    - Library/routing/active-context boundaries are present.
+    - Functional-state CSS is scoped.
+
+[ ] 4. Run the complete verification command:
+
+        npm run verify
+
+    Expected:
+    - Tests, render smoke, Phase 1 verifier, Phase 2 verifier, and build pass.
+
+[ ] 5. Start Nightforge:
+
+        npm run dev
+
+    Open the local URL Vite prints.
+
+[ ] 6. Confirm fresh startup:
+
+    - Library appears first.
+    - No Goblin Ambush, Tavern of the Salty Dog, or Dragon's Lair dummy Scene
+      appears in a fresh Nightforge browser profile.
+    - Scene and Enter the Table are disabled until a Scene exists.
+
+[ ] 7. Test Forge:
+
+    - Forge a Battle Scene named The Sunken Crypt.
+    - Confirm its Table opens in Setup and shows The Sunken Crypt.
+    - Return to Library.
+    - Forge a Play Scene named Moonlit Parley.
+    - Confirm its Table shows Free play and no Setup/Battle switch.
+
+[ ] 8. Test Library identity:
+
+    - Return to Library.
+    - Confirm the most recently opened Scene occupies the featured stage.
+    - Confirm the other Scene appears in the ledger.
+    - Confirm the Scene count is 2.
+    - Open each Scene and verify the exact selected name reaches Table.
+
+[ ] 9. Test Settings identity:
+
+    - Use each Scene's Settings glyph.
+    - Confirm the workbench opens with that Scene's exact name, kind, and grid.
+    - Do not use workbench editing as a Phase 2 test; persistence for those fields
+      is Phase 3.
+
+[ ] 10. Test reload behavior:
+
+    - Open a Scene's Table.
+    - Reload the page.
+    - Confirm startup returns to Library.
+    - Confirm Enter the Table remains enabled for the remembered active Scene.
+
+[ ] 11. Test deletion:
+
+    - Open Delete for one Scene and confirm its exact name appears.
+    - Choose Keep scene and confirm nothing is removed.
+    - Delete the active Scene and confirm the remaining Scene becomes active.
+    - Delete the final Scene and confirm the real empty state appears and the
+      Scene/Table command-deck actions disable again.
+
+[ ] 12. Confirm data separation:
+
+    - Inspect Local Storage and confirm Nightforge uses only
+      roll30-nightforge-v1:* keys.
+    - Confirm original roll30-maps, roll30-active-map, roll30-characters, and
+      roll30-assets data remains untouched.
+
+
+27. PHASE 2 COMPLETION STATEMENT
+--------------------------------
+
+Every Phase 2 plan requirement now has direct evidence:
+
+- Placeholder replacement: implemented and render-verified.
+- Forge: implemented and workflow-tested.
+- Open: implemented and stable-ID tested.
+- Settings: implemented with exact active context and render-verified.
+- Delete: implemented with persistence-first behavior and failure tests.
+- Active context: implemented across envelope, session, reducer, and route.
+- Empty/loading/error/disabled states: implemented and structurally verified.
+- Scene lifecycle across reload: tested.
+- Mandatory Library-first startup: tested.
+- Frozen Nightforge visual foundation: hash-verified.
+- Clean-room and fresh-storage boundaries: statically verified.
+- Production build: passed.
+
+Phase 2 is complete and ready for Phase 3.

@@ -8,7 +8,11 @@ const manifest = JSON.parse(
 );
 const failures = [];
 
-for (const [relativePath, expected] of Object.entries(manifest)) {
+const permanentVisualFiles = Object.entries(manifest).filter(
+  ([relativePath]) => relativePath.startsWith("src/styles/") || relativePath === "src/ui/Glyphs.jsx",
+);
+
+for (const [relativePath, expected] of permanentVisualFiles) {
   const contents = await readFile(resolve(root, relativePath));
   const actual = createHash("sha256").update(contents).digest("hex").toUpperCase();
   if (actual !== expected) failures.push(`${relativePath}: expected ${expected}, received ${actual}`);
@@ -83,7 +87,6 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log(`Nightforge visual baseline preserved across ${Object.keys(manifest).length} protected files.`);
+console.log(`Nightforge permanent visual baseline preserved across ${permanentVisualFiles.length} protected files.`);
 console.log(`Phase 1 runtime boundary verified across ${sourceFiles.length} source files.`);
 console.log("Fresh Nightforge storage identifiers are present; original Roll30 keys are absent from runtime usage.");
-

@@ -12,10 +12,10 @@ import {
 
 const noop = () => {};
 
-export default function SceneScreen({ go = noop }) {
-  const [name, setName] = useState("Goblin Ambush");
-  const [mode, setMode] = useState("battle");
-  const [gridSize, setGridSize] = useState(44);
+export default function SceneScreen({ scene = null, go = noop }) {
+  const [name, setName] = useState(() => scene?.name || "Untitled scene");
+  const [mode, setMode] = useState(() => scene?.kind || "battle");
+  const [gridSize, setGridSize] = useState(() => scene?.gridSize || 44);
   const map = null;
   const noMap = false;
   const onBack = () => go({ page: "home" });

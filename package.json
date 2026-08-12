@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "test": "node --test \"src/**/*.test.js\"",
     "verify:phase1": "node scripts/verify-phase1.mjs",
-    "verify": "npm test && npm run verify:phase1 && npm run build"
+    "verify:phase2": "node scripts/verify-phase2.mjs",
+    "test:phase2:render": "node scripts/phase2-render-smoke.mjs",
+    "verify": "npm test && npm run test:phase2:render && npm run verify:phase1 && npm run verify:phase2 && npm run build"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",

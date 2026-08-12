@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowUpRight,
   Grid3x3,
@@ -12,30 +12,73 @@ import {
   X,
 } from "lucide-react";
 
-const PLACEHOLDER_MAPS = [
-  { id: "1", name: "Goblin Ambush", mode: "battle", accent: "#f2617a" },
-  { id: "2", name: "Tavern of the Salty Dog", mode: "play", accent: "#2fd3b4" },
-  { id: "3", name: "Dragon's Lair", mode: "battle", accent: "#e0b055" },
-];
+import { accentForScene, orderScenesForLibrary } from "../application/library.js";
 
 const noop = () => {};
+const modeLabel = (kind) => (kind === "battle" ? "Battle" : "Play");
+const modeNote = (kind) => (kind === "battle" ? "Combat ready" : "Free play");
+const errorText = (error) =>
+  error ? `${error.message} ${error.recovery || "Please retry."}` : "";
 
-const modeLabel = (mode) => (mode === "battle" ? "Battle" : "Play");
-const modeNote = (mode) => (mode === "battle" ? "Combat ready" : "Free play");
+function useArtworkUrls(scenes, artworkRepository) {
+  const [artworkUrls, setArtworkUrls] = useState({});
+  const [artworkError, setArtworkError] = useState(null);
+  const signature = scenes.map((scene) => `${scene.id}:${scene.artworkKey || ""}`).join("|");
 
-/** Painted scene art — a tinted wash over a faint battle grid. */
-function SceneArt({ accent, children, className = "" }) {
+  useEffect(() => {
+    let active = true;
+    const objectUrls = [];
+    setArtworkError(null);
+    if (!artworkRepository) {
+      setArtworkUrls({});
+      return () => {};
+    }
+
+    const load = async () => {
+      const next = {};
+      for (const scene of scenes) {
+        if (!scene.artworkKey) continue;
+        const result = await artworkRepository.get(scene.artworkKey);
+        if (!active) return;
+        if (!result.ok) {
+          setArtworkError(result);
+          continue;
+        }
+        if (result.value instanceof Blob && globalThis.URL?.createObjectURL) {
+          const url = URL.createObjectURL(result.value);
+          objectUrls.push(url);
+          next[scene.id] = url;
+        }
+      }
+      if (active) setArtworkUrls(next);
+    };
+    load();
+
+    return () => {
+      active = false;
+      for (const url of objectUrls) URL.revokeObjectURL(url);
+    };
+  }, [artworkRepository, signature]);
+
+  return { artworkUrls, artworkError };
+}
+
+function SceneArt({ accent, artworkUrl, children, className = "" }) {
   return (
-    <div className={"art " + className}>
-      <div
-        className="art-wash"
-        style={{
-          background:
-            `radial-gradient(700px 340px at 74% 6%, ${accent}55, transparent 62%),` +
-            `radial-gradient(500px 400px at 10% 100%, ${accent}22, transparent 60%),` +
-            `linear-gradient(155deg, #16242a, #070d0f)`,
-        }}
-      />
+    <div className={`art ${className}`}>
+      {artworkUrl ? (
+        <img className="nf-state-artwork-image" src={artworkUrl} alt="" />
+      ) : (
+        <div
+          className="art-wash"
+          style={{
+            background:
+              `radial-gradient(700px 340px at 74% 6%, ${accent}55, transparent 62%),` +
+              `radial-gradient(500px 400px at 10% 100%, ${accent}22, transparent 60%),` +
+              "linear-gradient(155deg, #16242a, #070d0f)",
+          }}
+        />
+      )}
       <div className="art-grid" aria-hidden="true" />
       <div className="art-vignette" aria-hidden="true" />
       {children}
@@ -43,18 +86,61 @@ function SceneArt({ accent, children, className = "" }) {
   );
 }
 
-export default function LibraryScreen({ go = noop }) {
+export default function LibraryScreen({
+  scenes = [],
+  lifecycle = "ready",
+  persistence = { status: "idle", error: null },
+  artworkRepository = null,
+  go = noop,
+  onForge = noop,
+  onOpen = noop,
+  onSettings = noop,
+  onDelete = noop,
+}) {
   const [mapName, setMapName] = useState("");
   const [createMode, setCreateMode] = useState("battle");
   const [forging, setForging] = useState(false);
+  const [deleting, setDeleting] = useState(null);
+  const orderedScenes = useMemo(() => orderScenesForLibrary(scenes), [scenes]);
+  const [featured, ...rest] = orderedScenes;
+  const { artworkUrls, artworkError } = useArtworkUrls(orderedScenes, artworkRepository);
+  const busy = persistence.status === "saving";
+  const visibleError = persistence.error || artworkError;
 
-  const openMap = (mode) =>
-    go({ page: "board", mode: mode === "battle" ? "battle" : "setup" });
+  useEffect(() => {
+    if (!forging && !deleting) return undefined;
+    const close = (event) => {
+      if (event.key !== "Escape") return;
+      setForging(false);
+      setDeleting(null);
+    };
+    document.addEventListener("keydown", close);
+    return () => document.removeEventListener("keydown", close);
+  }, [forging, deleting]);
 
-  const [featured, ...rest] = PLACEHOLDER_MAPS;
+  const forge = (event) => {
+    event.preventDefault();
+    const result = onForge({ name: mapName, kind: createMode });
+    if (!result?.ok) return;
+    setMapName("");
+    setCreateMode("battle");
+    setForging(false);
+  };
+
+  const confirmDelete = () => {
+    const result = onDelete(deleting);
+    if (result?.ok) setDeleting(null);
+  };
+
+  const sceneTag = (scene) => (
+    <span className={`tag ${scene.kind === "battle" ? "tag-foe" : "tag-jade"}`}>
+      {scene.kind === "battle" ? <Swords size={12} /> : <Sparkles size={12} />}
+      {modeLabel(scene.kind)}
+    </span>
+  );
 
   return (
-    <div className="scroller">
+    <div className={`scroller${busy ? " nf-state-busy" : ""}`}>
       <div className="measure measure-wide enter">
         <div className="masthead">
           <div>
@@ -69,189 +155,198 @@ export default function LibraryScreen({ go = noop }) {
             <button className="btn btn-line" onClick={() => go({ page: "characters" })}>
               <Users size={16} /> Party roster
             </button>
-            <button className="btn btn-key" onClick={() => setForging(true)}>
+            <button className="btn btn-key" onClick={() => setForging(true)} disabled={busy}>
               <Plus size={17} strokeWidth={2.4} /> Forge a scene
             </button>
           </div>
         </div>
 
-        {/* ---------------------------------------------------- featured */}
-        <section className="stage">
-          <SceneArt accent={featured.accent} className="stage-art">
-            <div className="stage-veil" />
-          </SceneArt>
-
-          <div className="stage-corner">
-            <button
-              className="glyph"
-              onClick={() => go({ page: "settings" })}
-              title="Scene settings"
-              aria-label={`Settings for ${featured.name}`}
-            >
-              <SlidersHorizontal size={16} />
-            </button>
-            <button
-              className="glyph glyph-hazard"
-              onClick={noop}
-              title="Delete scene"
-              aria-label={`Delete ${featured.name}`}
-            >
-              <Trash2 size={16} />
-            </button>
+        {visibleError && (
+          <div className="nf-state-notice" role="alert">
+            <strong>Nightforge could not complete that action.</strong>
+            <span>{errorText(visibleError)}</span>
           </div>
+        )}
 
-          <div className="stage-body">
-            <div className="stage-tags">
-              <span className={"tag " + (featured.mode === "battle" ? "tag-foe" : "tag-jade")}>
-                {featured.mode === "battle" ? <Swords size={12} /> : <Sparkles size={12} />}
-                {modeLabel(featured.mode)}
-              </span>
-              <span className="tag">
-                <Grid3x3 size={12} /> 5 ft grid
-              </span>
-            </div>
-            <span className="kicker">Continue where you left off</span>
-            <h2>{featured.name}</h2>
-            <div className="stage-foot">
-              <button className="btn btn-key btn-lg" onClick={() => openMap(featured.mode)}>
-                <Play size={17} fill="currentColor" /> Enter the table
+        {!visibleError && persistence.recovered && (
+          <div className="nf-state-recovery" role="status">
+            <strong>Nightforge restored the backup vault.</strong>
+            <span>The primary browser save was invalid, so the newest valid backup is active.</span>
+          </div>
+        )}
+
+        {featured ? (
+          <section className="stage">
+            <SceneArt
+              accent={accentForScene(featured)}
+              artworkUrl={artworkUrls[featured.id]}
+              className="stage-art"
+            >
+              <div className="stage-veil" />
+            </SceneArt>
+
+            <div className="stage-corner">
+              <button
+                className="glyph"
+                onClick={() => onSettings(featured)}
+                title="Scene settings"
+                aria-label={`Settings for ${featured.name}`}
+                disabled={busy}
+              >
+                <SlidersHorizontal size={16} />
               </button>
-              <span className="prose-sm">{modeNote(featured.mode)}</span>
+              <button
+                className="glyph glyph-hazard"
+                onClick={() => setDeleting(featured)}
+                title="Delete scene"
+                aria-label={`Delete ${featured.name}`}
+                disabled={busy}
+              >
+                <Trash2 size={16} />
+              </button>
             </div>
-          </div>
-        </section>
 
-        {/* ------------------------------------------------------ ledger */}
+            <div className="stage-body">
+              <div className="stage-tags">
+                {sceneTag(featured)}
+                {featured.kind === "battle" && (
+                  <span className="tag"><Grid3x3 size={12} /> 5 ft grid</span>
+                )}
+              </div>
+              <span className="kicker">Continue where you left off</span>
+              <h2>{featured.name}</h2>
+              <div className="stage-foot">
+                <button className="btn btn-key btn-lg" onClick={() => onOpen(featured)} disabled={busy}>
+                  <Play size={17} fill="currentColor" /> Enter the table
+                </button>
+                <span className="prose-sm">{modeNote(featured.kind)}</span>
+              </div>
+            </div>
+          </section>
+        ) : (
+          <section className="stage nf-state-empty-stage">
+            <SceneArt accent="#2fd3b4" className="stage-art"><div className="stage-veil" /></SceneArt>
+            <div className="stage-body">
+              <div className="stage-tags"><span className="tag tag-jade">Fresh campaign</span></div>
+              <span className="kicker">
+                {lifecycle === "booting" ? "Opening campaign vault" : "Your first scene"}
+              </span>
+              <h2>{lifecycle === "booting" ? "Gathering your scenes…" : "The vault is ready"}</h2>
+              <p className="prose">
+                {lifecycle === "booting"
+                  ? "Nightforge is restoring this browser’s campaign state."
+                  : "Forge a Play scene for open roleplay or a Battle scene for the grid."}
+              </p>
+            </div>
+          </section>
+        )}
+
         <div className="band">
           <span className="kicker">All scenes</span>
-          <span className="tag tag-jade numeral">{PLACEHOLDER_MAPS.length}</span>
+          <span className="tag tag-jade numeral">{orderedScenes.length}</span>
           <hr className="rule" />
         </div>
 
         <div className="ledger">
-          {rest.map((entry) => (
-            <article className="ledger-row" key={entry.id}>
-              <button
-                className="ledger-open"
-                onClick={() => openMap(entry.mode)}
-                aria-label={`Open ${entry.name}`}
-              >
-                <SceneArt accent={entry.accent} className="ledger-art">
-                  <span className="ledger-play">
-                    <Play size={15} fill="currentColor" />
-                  </span>
+          {rest.map((scene) => (
+            <article className="ledger-row" key={scene.id}>
+              <button className="ledger-open" onClick={() => onOpen(scene)} aria-label={`Open ${scene.name}`} disabled={busy}>
+                <SceneArt accent={accentForScene(scene)} artworkUrl={artworkUrls[scene.id]} className="ledger-art">
+                  <span className="ledger-play"><Play size={15} fill="currentColor" /></span>
                 </SceneArt>
                 <span className="ledger-meta">
-                  <strong>{entry.name}</strong>
-                  <small>5 ft grid · {modeNote(entry.mode)}</small>
+                  <strong>{scene.name}</strong>
+                  <small>{scene.kind === "battle" ? "5 ft grid · Combat ready" : "Free play"}</small>
                 </span>
               </button>
 
-              <span className={"tag " + (entry.mode === "battle" ? "tag-foe" : "tag-jade")}>
-                {entry.mode === "battle" ? <Swords size={12} /> : <Sparkles size={12} />}
-                {modeLabel(entry.mode)}
-              </span>
+              {sceneTag(scene)}
 
               <div className="ledger-acts">
-                <button
-                  className="btn btn-line btn-sm"
-                  onClick={() => openMap(entry.mode)}
-                >
+                <button className="btn btn-line btn-sm" onClick={() => onOpen(scene)} disabled={busy}>
                   Open <ArrowUpRight size={14} />
                 </button>
-                <button
-                  className="glyph"
-                  onClick={() => go({ page: "settings" })}
-                  title="Scene settings"
-                  aria-label={`Settings for ${entry.name}`}
-                >
+                <button className="glyph" onClick={() => onSettings(scene)} title="Scene settings" aria-label={`Settings for ${scene.name}`} disabled={busy}>
                   <SlidersHorizontal size={16} />
                 </button>
-                <button
-                  className="glyph glyph-hazard"
-                  onClick={noop}
-                  title="Delete scene"
-                  aria-label={`Delete ${entry.name}`}
-                >
+                <button className="glyph glyph-hazard" onClick={() => setDeleting(scene)} title="Delete scene" aria-label={`Delete ${scene.name}`} disabled={busy}>
                   <Trash2 size={16} />
                 </button>
               </div>
             </article>
           ))}
 
-          <button className="ledger-new" onClick={() => setForging(true)}>
-            <span className="ledger-new-ico">
-              <Plus size={18} strokeWidth={2.4} />
-            </span>
-            <span>
-              <strong>Forge a new scene</strong>
-              <small>Name it, choose a type, and start building</small>
-            </span>
+          <button className="ledger-new" onClick={() => setForging(true)} disabled={busy}>
+            <span className="ledger-new-ico"><Plus size={18} strokeWidth={2.4} /></span>
+            <span><strong>Forge a new scene</strong><small>Name it, choose a type, and start building</small></span>
           </button>
         </div>
       </div>
 
-      {/* ----------------------------------------------------- the forge */}
       {forging && (
         <>
           <div className="veil" onClick={() => setForging(false)} />
-          <aside className="drawer" role="dialog" aria-label="Forge a scene">
-            <div className="drawer-top">
-              <div>
-                <span className="kicker kicker-jade">New scene</span>
-                <h2>The Forge</h2>
+          <aside className="drawer" role="dialog" aria-modal="true" aria-label="Forge a scene">
+            <form className="nf-state-drawer-form" onSubmit={forge}>
+              <div className="drawer-top">
+                <div><span className="kicker kicker-jade">New scene</span><h2>The Forge</h2></div>
+                <button className="glyph" type="button" onClick={() => setForging(false)} aria-label="Close"><X size={17} /></button>
               </div>
-              <button className="glyph" onClick={() => setForging(false)} aria-label="Close">
-                <X size={17} />
-              </button>
-            </div>
-
-            <div className="drawer-body">
-              <label className="field">
-                <span className="label">Scene name</span>
-                <input
-                  className="inp inp-lg"
-                  value={mapName}
-                  onChange={(e) => setMapName(e.target.value)}
-                  placeholder="The Sunken Crypt…"
-                  autoFocus
-                />
-              </label>
-
-              <div className="field">
-                <span className="label">What is this scene for?</span>
-                <div className="picks">
-                  <button
-                    className={"pick" + (createMode === "play" ? " on" : "")}
-                    onClick={() => setCreateMode("play")}
-                  >
-                    <span className="pick-ico"><Sparkles size={18} /></span>
-                    <span>
-                      <b>Play</b>
-                      <small>Open roleplay. No grid, no initiative — just the scene.</small>
-                    </span>
-                  </button>
-                  <button
-                    className={"pick" + (createMode === "battle" ? " on" : "")}
-                    onClick={() => setCreateMode("battle")}
-                  >
-                    <span className="pick-ico"><Swords size={18} /></span>
-                    <span>
-                      <b>Battle</b>
-                      <small>Grid, initiative order, movement and attacks.</small>
-                    </span>
-                  </button>
+              <div className="drawer-body">
+                {persistence.error && (
+                  <div className="nf-state-inline-error" role="alert">
+                    <strong>Scene not saved</strong>
+                    <span>{errorText(persistence.error)}</span>
+                  </div>
+                )}
+                <label className="field">
+                  <span className="label">Scene name</span>
+                  <input className="inp inp-lg" value={mapName} onChange={(event) => setMapName(event.target.value)} placeholder="The Sunken Crypt…" autoFocus />
+                </label>
+                <div className="field">
+                  <span className="label">What is this scene for?</span>
+                  <div className="picks">
+                    <button type="button" className={`pick${createMode === "play" ? " on" : ""}`} onClick={() => setCreateMode("play")}>
+                      <span className="pick-ico"><Sparkles size={18} /></span>
+                      <span><b>Play</b><small>Open roleplay. No grid, no initiative — just the scene.</small></span>
+                    </button>
+                    <button type="button" className={`pick${createMode === "battle" ? " on" : ""}`} onClick={() => setCreateMode("battle")}>
+                      <span className="pick-ico"><Swords size={18} /></span>
+                      <span><b>Battle</b><small>Grid, initiative order, movement and attacks.</small></span>
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
+              <div className="drawer-foot">
+                <button className="btn btn-line" type="button" onClick={() => setForging(false)}>Cancel</button>
+                <button className="btn btn-key" type="submit" disabled={busy}><Plus size={16} strokeWidth={2.4} /> {busy ? "Forging…" : "Forge scene"}</button>
+              </div>
+            </form>
+          </aside>
+        </>
+      )}
 
+      {deleting && (
+        <>
+          <div className="veil" onClick={() => setDeleting(null)} />
+          <aside className="drawer" role="dialog" aria-modal="true" aria-labelledby="delete-scene-title">
+            <div className="drawer-top">
+              <div><span className="kicker">Remove scene</span><h2 id="delete-scene-title">Close this chapter?</h2></div>
+              <button className="glyph" onClick={() => setDeleting(null)} aria-label="Close"><X size={17} /></button>
+            </div>
+            <div className="drawer-body">
+              {persistence.error && (
+                <div className="nf-state-inline-error" role="alert">
+                  <strong>Scene not deleted</strong>
+                  <span>{errorText(persistence.error)}</span>
+                </div>
+              )}
+              <p className="prose">Delete <strong>{deleting.name}</strong> from this Nightforge vault?</p>
+              <p className="note">This removes the Scene record. Original Roll30 saves are never accessed or changed.</p>
+            </div>
             <div className="drawer-foot">
-              <button className="btn btn-line" onClick={() => setForging(false)}>
-                Cancel
-              </button>
-              <button className="btn btn-key" onClick={() => openMap(createMode)}>
-                <Plus size={16} strokeWidth={2.4} /> Forge scene
-              </button>
+              <button className="btn btn-line" onClick={() => setDeleting(null)} autoFocus>Keep scene</button>
+              <button className="btn btn-hazard" onClick={confirmDelete} disabled={busy}><Trash2 size={15} /> {busy ? "Deleting…" : "Delete scene"}</button>
             </div>
           </aside>
         </>

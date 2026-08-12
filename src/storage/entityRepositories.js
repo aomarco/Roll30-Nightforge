@@ -106,6 +106,20 @@ function createCollectionRepository({
   return { list, get, create, update, remove };
 }
 
+const sceneRecency = (scene) => {
+  const candidates = [scene.lastOpenedAt, scene.updatedAt, scene.createdAt];
+  for (const candidate of candidates) {
+    const parsed = Date.parse(candidate || "");
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return 0;
+};
+
+const fallbackSceneId = (scenes) =>
+  [...scenes]
+    .sort((left, right) => sceneRecency(right) - sceneRecency(left) || left.id.localeCompare(right.id))
+    .at(0)?.id || null;
+
 export const createSceneRepository = (stateRepository, options = {}) => {
   const repository = createCollectionRepository({
     stateRepository,
@@ -132,7 +146,79 @@ export const createSceneRepository = (stateRepository, options = {}) => {
       : saved;
   };
 
-  return { ...repository, setActive };
+  const createActive = (input = {}) => {
+    const loaded = stateRepository.load();
+    if (!loaded.ok) return loaded;
+    const now = options.clock?.() || new Date().toISOString();
+    const id = options.idFactory?.() || defaultIdFactory();
+    const scene = createSceneRecord({ ...input, lastOpenedAt: now }, { id, now });
+    const saved = stateRepository.save({
+      ...loaded.value,
+      scenes: [...loaded.value.scenes, scene],
+      lastActiveSceneId: scene.id,
+    });
+    return saved.ok
+      ? success(scene, { envelope: saved.value, revision: saved.revision })
+      : saved;
+  };
+
+  const open = (id) => {
+    const loaded = stateRepository.load();
+    if (!loaded.ok) return loaded;
+    const index = loaded.value.scenes.findIndex((scene) => scene.id === id);
+    if (index < 0) {
+      return failure("scenes-not-found", `No Scene exists with id ${id}.`, {
+        recovery: "Refresh the Scene collection and choose an existing Scene.",
+        retryable: false,
+      });
+    }
+    const now = options.clock?.() || new Date().toISOString();
+    const scene = normalizeSceneRecord(
+      { ...loaded.value.scenes[index], lastOpenedAt: now },
+      { now },
+    );
+    const scenes = [...loaded.value.scenes];
+    scenes[index] = scene;
+    const saved = stateRepository.save({
+      ...loaded.value,
+      scenes,
+      lastActiveSceneId: id,
+    });
+    return saved.ok
+      ? success(scene, { envelope: saved.value, revision: saved.revision })
+      : saved;
+  };
+
+  const remove = (id) => {
+    const loaded = stateRepository.load();
+    if (!loaded.ok) return loaded;
+    const scene = loaded.value.scenes.find((item) => item.id === id);
+    if (!scene) {
+      return failure("scenes-not-found", `No Scene exists with id ${id}.`, {
+        recovery: "Refresh the Scene collection and choose an existing Scene.",
+        retryable: false,
+      });
+    }
+    const scenes = loaded.value.scenes.filter((item) => item.id !== id);
+    const activeSceneId =
+      loaded.value.lastActiveSceneId === id
+        ? fallbackSceneId(scenes)
+        : loaded.value.lastActiveSceneId;
+    const pendingArtworkDeletes = scene.artworkKey
+      ? [...new Set([...loaded.value.pendingArtworkDeletes, scene.artworkKey])]
+      : loaded.value.pendingArtworkDeletes;
+    const saved = stateRepository.save({
+      ...loaded.value,
+      scenes,
+      lastActiveSceneId: activeSceneId,
+      pendingArtworkDeletes,
+    });
+    return saved.ok
+      ? success(scene, { envelope: saved.value, revision: saved.revision })
+      : saved;
+  };
+
+  return { ...repository, createActive, open, remove, setActive };
 };
 
 export const createHeroRepository = (stateRepository, options = {}) =>

@@ -1,0 +1,1862 @@
+# Nightforge Clean-Room Functional Reconstruction Plan â€” Revision 2
+
+## 1. Plan artifact and objective
+
+Save this revised plan at:
+
+`C:\Users\Marcelo\Documents\Roll30 UI Rebuild\NIGHTFORGE_FULL_FUNCTIONALITY_PORT_PLAN.txt`
+
+The objective is to make the existing Nightforge prototype fully functional while preserving Nightforge as the exclusive authority for **UI, UX, layout, styling, terminology, hierarchy, and motion**.
+
+Original Roll30 supplies only:
+
+- A behavioral specification.
+- A list of implemented features.
+- Observable rules and edge cases.
+- SRD reference material used to regenerate static catalogs.
+
+Original Roll30 does **not** supply implementation code, frontend code, components, styles, layouts, UX flows, storage records, or saved user data.
+
+### Audit corrections incorporated
+
+This revision fixes the following problems from the first plan:
+
+- Removes the contradiction between immutable Nightforge stylesheets and self-hosted fonts.
+- Keeps Nightforgeâ€™s Scene Settings button semantically unchanged.
+- Uses the existing 5-foot Table status control as the pixel-identical entry point for Table Tools.
+- Adds persisted Armor Class for manual tokens.
+- Separates scene type from encounter phase.
+- Replaces impossible cross-storage atomicity claims with staged IndexedDB operations and recoverable cleanup.
+- Defines exact artwork replacement and deletion ordering.
+- Defines measurable visual-regression thresholds.
+- Defines Battle-to-Setup reset behavior and the two-token battle-start requirement.
+- Clarifies how missing functionality appears without altering the idle Nightforge composition.
+- Clarifies which parts of original save migration are intentionally excluded.
+- Removes vague â€œwhere supportedâ€ testing language.
+- Strengthens clean-room enforcement and visual-purity checks.
+
+---
+
+## 2. Immutable product contracts
+
+### 2.1 Nightforge is visually authoritative
+
+The following Nightforge structures remain the product:
+
+- Command deck.
+- Library masthead, featured stage, ledger, and Forge drawer.
+- Heroes portrait rail, codex header, vitals ribbon, and three chapters.
+- Scene workbench, live preview, and tuner.
+- Full-screen Table.
+- Top-left scene HUD.
+- Top-center phase capsule.
+- Top-right grid/settings/library HUD.
+- Left Encounter dock.
+- Right Inspector dock.
+- Bottom turn track.
+- Nightforge typography, palette, grain, glass, shadows, spacing, radii, motion, and terminology.
+
+No original Roll30 visual or interaction implementation may be transferred.
+
+Prohibited material includes:
+
+- CSS and selectors.
+- JSX and HTML structures.
+- Components and component composition.
+- Modals, panels, sidebars, forms, buttons, menus, or toolbars.
+- Original layout and responsive behavior.
+- Original class names.
+- Original presentation logic.
+- Original icons or visual assets.
+- Original instructional wording when Nightforge already has its own terminology.
+
+### 2.2 Meaning of â€œthe UI must stay the sameâ€
+
+The visual contract has two parts.
+
+#### Existing idle compositions
+
+With the same fixture data, these views must remain pixel-equivalent to the current prototype:
+
+- Populated Library.
+- Open Forge drawer.
+- Heroes roster and codex header.
+- Identity chapter.
+- Abilities chapter.
+- Gear chapter.
+- Scene workbench in Play and Battle configurations.
+- Table Setup.
+- Table Battle.
+- Selected and unselected Table tokens.
+- Existing responsive compositions.
+
+#### New functional states
+
+Features absent from the prototype may appear only:
+
+- After the user invokes an existing Nightforge affordance.
+- As a continuation inside an existing scroll region.
+- As a Nightforge-native drawer, dock state, contextual overlay, cinematic, or confirmation.
+- Using existing Nightforge tokens and primitives.
+- Without adding original Roll30 UI patterns.
+- Without permanently altering the idle screen composition.
+
+Dynamic content may naturally change:
+
+- Names.
+- Counts.
+- Artwork.
+- Inventory length.
+- Hero details.
+- HP.
+- Turn order.
+- Messages.
+- Active, disabled, selected, error, and empty states.
+
+### 2.3 Existing stylesheet protection
+
+The following files are frozen after the baseline commit:
+
+- `src/styles/core.css`
+- `src/styles/shell.css`
+- `src/styles/library.css`
+- `src/styles/heroes.css`
+- `src/styles/scene.css`
+- `src/styles/table.css`
+
+Rules:
+
+- Their SHA-256 hashes must remain unchanged.
+- Existing Google Font declarations remain unchanged.
+- Visual tests wait for `document.fonts.ready` before capture.
+- New conditional states use a new `src/styles/functional-states.css`.
+- Every selector in the additive stylesheet must begin beneath a Nightforge functional namespace such as `.nf-state-*`.
+- The additive stylesheet must not restyle an existing base class by itself.
+- Existing CSS variables are reused; no parallel visual system is created.
+- Existing Nightforge components may be refactored to accept real data, but their baseline DOM order and visual landmarks remain stable.
+
+### 2.4 Clean-room rule
+
+Implementation must be written independently.
+
+Allowed:
+
+- Reading `MASTER_HANDOFF.md`.
+- Running original Roll30 as a behavioral oracle.
+- Comparing observable outputs.
+- Reading public SRD reference data.
+- Writing a parity register in original-feature language.
+- Reimplementing the documented rules independently.
+- Regenerating static catalogs from the local SRD corpus.
+
+Prohibited:
+
+- Copying or mechanically translating original functions.
+- Copying original tests.
+- Importing original domain modules.
+- Copying original generated catalog modules.
+- Referencing original files at runtime.
+- Symlinking either project.
+- Copying original React or CSS.
+- Copying storage schemas merely for compatibility.
+- Reading original Roll30 browser saves.
+
+### 2.5 Feature boundary
+
+Rebuild everything currently implemented, including backend-only support used by the current app.
+
+Do not implement documented future work:
+
+- Multiplayer or accounts.
+- Cloud saves.
+- Monsters or AI.
+- Full spellcasting.
+- Spell lists or slot economy.
+- Reactions.
+- Class features.
+- Feats.
+- Automatic condition application.
+- In-combat skill checks or saving throws.
+- Magic-item Tiers 2â€“4.
+- Attunement limits.
+- Encumbrance.
+- Tool proficiency.
+- Mounted combat.
+- Net mechanics.
+- Complete Lance mounting rules.
+- Undo/redo.
+
+### 2.6 Fresh-data rule
+
+Nightforge must not import, share, migrate, delete, or modify original Roll30 data.
+
+Forbidden original identifiers include:
+
+- `roll30-maps`
+- `roll30-active-map`
+- `roll30-characters`
+- `roll30-assets`
+
+Nightforge identifiers:
+
+```text
+roll30-nightforge-v1:state
+roll30-nightforge-v1:state-backup
+roll30-nightforge-v1:session
+roll30-nightforge-assets
+scene-artwork
+```
+
+A production replacement will therefore open with fresh Nightforge data even if original Roll30 saves remain in the same browser. Those original saves remain untouched.
+
+---
+
+## 3. Repository and baseline protection
+
+Before functional implementation:
+
+1. Stop the running Nightforge development server.
+2. Initialize Git inside:
+
+   `C:\Users\Marcelo\Documents\Roll30 UI Rebuild`
+
+3. Add ignores for:
+
+   - `node_modules`
+   - `dist`
+   - Playwright output
+   - screenshots generated during tests
+   - coverage
+   - temporary logs
+   - local environment files
+
+4. Commit the untouched prototype.
+5. Tag it:
+
+   `nightforge-ui-baseline`
+
+6. Record hashes for every existing source file.
+7. Capture baseline screenshots using fixed fixture data.
+8. Record the current dependency lockfile.
+9. Confirm the untouched baseline builds.
+10. Add a purity verifier before writing domain functionality.
+11. Keep original Roll30â€™s repository and working tree unchanged.
+
+The new Nightforge repository becomes the sole implementation workspace.
+
+---
+
+## 4. Architecture
+
+### 4.1 Layer boundaries
+
+| Layer | Responsibility |
+|---|---|
+| Nightforge views | Render state and dispatch commands |
+| Application layer | Coordinate workflows, routing, selections, and persistence |
+| Domain layer | Pure game rules, validation, calculations, and geometry |
+| Repository layer | LocalStorage, IndexedDB, normalization, recovery, and errors |
+| Generated data | Clean-room catalogs derived from SRD reference files |
+
+### 4.2 View rules
+
+Views may:
+
+- Display supplied records.
+- Track transient presentation state.
+- Dispatch user intent.
+- Render loading, disabled, error, success, and empty states.
+
+Views may not:
+
+- Calculate AC.
+- Calculate attack legality.
+- Normalize inventory.
+- Apply equipment rules.
+- Advance initiative directly.
+- Calculate movement.
+- Perform pathfinding.
+- Interpret conditions.
+- Write directly to browser storage.
+- Duplicate domain calculations for display.
+
+### 4.3 Application state
+
+Use React context plus reducers. Do not add a global state-library dependency.
+
+Long-lived application state:
+
+```text
+scenes
+heroes
+activeSceneId
+route
+persistenceStatus
+globalError
+```
+
+Per-Table state:
+
+```text
+selectedTokenId
+selectedChestId
+camera
+activeTool
+pointerInteraction
+commandDrawer
+attackDraft
+swapDraft
+rulerDraft
+wallDraft
+cinematic
+message
+```
+
+Transient state is not persisted unless it represents actual game state.
+
+### 4.4 Command result interface
+
+Every mutating application command returns:
+
+```text
+Success:
+{ ok: true, value, revision }
+
+Failure:
+{
+  ok: false,
+  code,
+  message,
+  recovery,
+  retryable
+}
+```
+
+Errors must explain:
+
+- What failed.
+- Why, when known.
+- Whether user input was preserved.
+- What the user can do next.
+
+### 4.5 Randomness
+
+All dice and initiative functions accept an injected random source.
+
+Production uses cryptographically suitable browser randomness or `Math.random` where appropriate.
+
+Tests use deterministic sequences.
+
+---
+
+## 5. Data contracts
+
+### 5.1 Application envelope
+
+```text
+schemaVersion: 1
+revision
+savedAt
+scenes[]
+heroes[]
+lastActiveSceneId | null
+pendingArtworkDeletes[]
+checksum
+```
+
+Rules:
+
+- State is saved as one validated LocalStorage envelope.
+- The previous valid envelope is retained as a backup.
+- Each successful save increments `revision`.
+- Startup selects the newest valid envelope.
+- If the primary envelope is corrupt, load the backup and report recovery.
+- If both are invalid, start empty and preserve the corrupt strings for manual diagnosis rather than overwriting them immediately.
+
+### 5.2 Scene
+
+```text
+id
+name
+kind: "play" | "battle"
+gridSize
+artworkKey | null
+blankCanvas
+mapView: { scale, x, y }
+wallsVisible
+walls[]
+chests[]
+tokens[]
+encounter | null
+createdAt
+updatedAt
+lastOpenedAt
+schemaVersion
+```
+
+Scene kind and encounter phase are separate:
+
+- `kind: "play"` means the scene never uses initiative or combat resources.
+- `kind: "battle"` means the scene supports Setup, active Battle, and completion.
+- A Battle scene with `encounter: null` is in Setup.
+- An active or complete encounter exists only on a Battle scene.
+
+### 5.3 Hero
+
+```text
+id
+name
+classId
+level
+raceId
+subraceId | null
+alignment
+background
+languages[]
+baseAbilities: {
+  str,
+  dex,
+  con,
+  int,
+  wis,
+  cha
+}
+saveProficiencies[]
+skillProficiencies[]
+inventory[]
+loadout: {
+  mainHand,
+  offHand
+}
+armorId | null
+shieldId | null
+enchantments: {
+  itemId: bonus
+}
+wornItemIds[]
+createdAt
+updatedAt
+schemaVersion
+```
+
+### 5.4 Token
+
+```text
+id
+heroId | null
+name
+color
+position: {
+  xPercent,
+  yPercent
+}
+hp
+maxHp
+ac
+baseSpeed
+strength
+dexterity
+level
+initiativeBonus
+size
+inventory[]
+loadout
+armorId | null
+shieldId | null
+enchantments
+wornItemIds[]
+conditions[]
+```
+
+Rules:
+
+- Manual tokens store editable AC.
+- Hero-derived tokens receive a copied derived AC.
+- Changing Dexterity, armor, shield, or magic state recomputes AC when the token uses derived equipment.
+- Hero-derived setup statistics are read-only.
+- Hero-derived token inventory and equipment remain editable per battle.
+- Later Hero edits do not modify existing tokens.
+
+### 5.5 Inventory entry
+
+```text
+itemId
+quantity
+```
+
+Rules:
+
+- Quantity is a positive integer.
+- Duplicate entries merge.
+- Unknown items are rejected during active use and retained in recovery diagnostics if encountered during normalization.
+- Quantity zero removes the entry.
+- Removing an equipped item clears or normalizes affected equipment.
+- Ammunition increments and decrements by bundle size in catalog workflows but consumes one unit per attack.
+
+### 5.6 Wall
+
+```text
+id
+type: "full" | "half"
+points: [
+  { xPercent, yPercent }
+]
+```
+
+### 5.7 Chest
+
+```text
+id
+position: {
+  xPercent,
+  yPercent
+}
+inventory[]
+```
+
+### 5.8 Encounter
+
+```text
+version: 1
+status: "active" | "complete"
+initiativeOrder[]
+initiatives: {
+  tokenId: total
+}
+activeIndex
+round
+resources
+battleItems[]
+ammoSpentByToken
+winnerTokenId | null
+log
+```
+
+### 5.9 Turn resources
+
+```text
+movementBase
+movementSpent
+actionSpent
+actionType
+bonusActionSpent
+bonusActionType
+dashed
+swapped
+swapChoice
+mainWeaponAttacked
+mainAttackWeaponId
+offHandAttackAvailable
+offHandWeaponId
+offHandAttackHand
+```
+
+### 5.10 Physical battle item
+
+```text
+id
+itemId
+state: "ground" | "embedded"
+position | null
+carrierTokenId | null
+sourceTokenId
+```
+
+### 5.11 Transient camera
+
+```text
+x
+y
+zoom
+```
+
+Camera resets whenever a scene is opened and is never persisted.
+
+---
+
+## 6. Persistence and artwork recovery
+
+### 6.1 Normal state saves
+
+1. Validate the proposed application envelope.
+2. Serialize it.
+3. Write the current valid primary envelope to the backup key.
+4. Write the new envelope to the primary key.
+5. Read and validate the new primary value.
+6. Report `Saved` only after verification succeeds.
+7. Retain the userâ€™s draft and show `Not saved` if writing fails.
+
+### 6.2 Autosave honesty
+
+Text fields and range controls may update local drafts immediately, but the interface must distinguish:
+
+- Editing.
+- Saving.
+- Saved.
+- Not saved.
+
+A failed save does not erase the draft. Retry uses the preserved draft.
+
+### 6.3 Artwork upload and replacement
+
+LocalStorage and IndexedDB cannot form one atomic transaction. Use staged asset keys:
+
+1. Validate and decode the new image.
+2. Generate a new unique `artworkKey`.
+3. Store the blob under the staged key in IndexedDB.
+4. Read it back to confirm success.
+5. Update the Scene envelope to reference the new key.
+6. Only after the Scene save succeeds, schedule deletion of the previous artwork key.
+7. If Scene saving fails, retain the old reference and delete the staged orphan.
+8. If old-artwork deletion fails, add its key to `pendingArtworkDeletes`.
+9. Retry pending deletions during later successful startups.
+
+### 6.4 Artwork removal
+
+1. Save the Scene with `artworkKey: null` and the selected blank-canvas state.
+2. Add the prior key to `pendingArtworkDeletes`.
+3. Delete the artwork from IndexedDB.
+4. Remove the pending entry after confirmed deletion.
+5. Failure leaves the Scene correctly blank while cleanup retries later.
+
+### 6.5 Scene deletion
+
+1. Remove the Scene from the application envelope.
+2. Add its artwork key to `pendingArtworkDeletes`.
+3. Save and verify the envelope.
+4. Delete artwork afterward.
+5. Failed artwork cleanup cannot resurrect the Scene.
+6. Cleanup is retried at startup.
+7. If removing the Scene envelope fails, the UI continues showing the Scene and reports failure.
+
+### 6.6 Corrupt or incompatible Nightforge encounters
+
+- Invalid encounter data reopens the Battle scene in Setup.
+- Scene, token, chest, and wall data remain available.
+- Original Roll30 encounter versions are never recognized or imported.
+- An explicitly empty hand remains empty.
+- No normalizer silently equips a weapon except during creation of a new blank default when the product rules explicitly require it.
+
+---
+
+## 7. Nightforge interaction mapping
+
+### 7.1 Command deck
+
+- Brand returns to Library.
+- Library opens Library.
+- Heroes opens Heroes.
+- Scene opens the active Scene workbench.
+- Scene is honestly disabled when no Scene is active.
+- Enter the Table opens the active Sceneâ€™s Table.
+- Enter the Table is disabled with an explanation when no Scene exists.
+- Fresh page load always opens Library.
+- `lastActiveSceneId` may restore context but never bypass Library.
+
+### 7.2 Library
+
+Existing elements become functional:
+
+| Nightforge element | Functional behavior |
+|---|---|
+| Featured stage | Most recently opened Scene |
+| Stage artwork | Actual artwork with existing Nightforge treatment |
+| Scene count | Actual repository count |
+| Forge a Scene | Opens existing Forge drawer |
+| Forge Scene action | Creates, saves, selects, and opens Scene |
+| Open | Opens exact Scene ID |
+| Settings glyph | Opens exact Scene in Scene workbench |
+| Delete glyph | Opens Nightforge confirmation |
+| Party roster | Opens Heroes |
+
+Empty state:
+
+- Keep the masthead and Forge action.
+- Remove fake scenes.
+- Use the stage area to explain the first Forge action.
+- Do not seed dummy data in production.
+
+Deletion:
+
+- Confirm exact Scene name.
+- Do not remove the visible Scene until envelope persistence succeeds.
+- Select a safe remaining active Scene or clear active selection.
+
+### 7.3 Scene workbench
+
+- Name edits the active Scene.
+- Play/Battle updates `scene.kind`.
+- Changing Battle to Play:
+  - Clears active or complete encounter state after confirmation.
+  - Clears physical battle items.
+  - Preserves tokens, positions, artwork, walls, chests, and inventory.
+- Upload Artwork uses staged IndexedDB replacement.
+- Use White Canvas clears the artwork reference through the recovery workflow.
+- Grid-size changes apply only to Battle scenes.
+- Preview uses actual artwork and actual grid size.
+- Back returns to Library or Table according to entry context.
+- The existing Scene Settings Table icon continues navigating directly here.
+
+### 7.4 Heroes roster
+
+- Portrait rail displays persisted Heroes.
+- Portrait selection uses Hero ID.
+- New Hero creates and selects a real Hero.
+- Retire Hero requires confirmation.
+- Hero deletion does not delete previously created tokens.
+- Empty Heroes state uses the existing Nightforge codex language.
+
+### 7.5 Identity chapter
+
+Keep the existing top composition.
+
+Within the existing chapter scroll flow, provide:
+
+- Name.
+- Class.
+- Level.
+- Race.
+- Conditional subrace.
+- Read-only derived size.
+- Alignment.
+- Background.
+- Languages.
+
+No separate original-style character form is introduced.
+
+### 7.6 Abilities chapter
+
+The existing six dials become real point-buy controls.
+
+Continue beneath the dials using the same Nightforge sheet rhythm:
+
+- Six saving throws.
+- Eighteen skills.
+- Proficiency state.
+- Live modifiers.
+- Class guidance.
+- Wizard spellcasting scaffold.
+
+No original Roll30 panel is copied.
+
+### 7.7 Gear chapter
+
+- Existing inventory rows render actual inventory.
+- Search filters owned inventory.
+- Add Item opens a Nightforge drawer.
+- Selecting a loot row opens a Nightforge item/equipment drawer.
+- Quantity, enchantment, Wear/Worn, and remove actions become functional.
+- Loadout, armor, and shield controls live in the conditional item/equipment drawer and a continuation of the Gear chapter.
+- No original item-picker markup or loadout panel is transferred.
+
+### 7.8 Table tools entry
+
+Preserve the existing top-right HUD:
+
+- Scene Settings glyph continues opening Scene settings.
+- Library glyph continues opening Library.
+- Convert the existing `5 ft` status element into a semantic button without changing its idle pixels.
+- Clicking the `5 ft` element opens Table Tools.
+- Its accessible name and title become `Table tools â€” 5 ft grid`.
+- Keyboard focus uses Nightforgeâ€™s existing focus treatment.
+
+Table Tools contains:
+
+- Zoom in.
+- Zoom out.
+- Reset camera.
+- Adjust artwork.
+- Artwork scale down.
+- Artwork scale up.
+- Reset artwork transform.
+- Draw full wall.
+- Draw half-wall.
+- Finish/cancel wall.
+- Toggle wall visibility.
+- Ruler.
+- Exit current tool.
+
+Play scenes omit battle-only tools while preserving relevant camera and artwork controls.
+
+### 7.9 Encounter dock
+
+During Battle Setup:
+
+- Blank Token selector.
+- Hero selector.
+- Add to Map.
+- Place Chest.
+- Actual token roster.
+- Actual token count.
+- Selection.
+
+During Play:
+
+- Add tokens.
+- Free positioning.
+- No Battle start.
+- No initiative resources.
+- Chest creation is unavailable because chests are a Battle feature.
+
+During active Battle:
+
+- Roster remains available.
+- Token/chest creation is disabled.
+- Setup editing controls are disabled.
+- Selection remains available.
+
+### 7.10 Inspector dock
+
+#### Setup
+
+- Manual-token name.
+- HP.
+- Max HP.
+- AC.
+- Speed.
+- Strength.
+- Dexterity.
+- Level.
+- Initiative bonus.
+- Size.
+- Inventory.
+- Main hand.
+- Off hand.
+- Armor.
+- Shield.
+- Enchantments.
+- Worn items.
+- Remove Token.
+
+Hero-derived values display as read-only Nightforge tiles for:
+
+- HP.
+- Max HP.
+- AC.
+- Speed.
+- Strength.
+- Dexterity.
+- Level.
+- Initiative.
+- Size.
+
+Per-battle inventory and equipment remain configurable.
+
+#### Active Battle
+
+- Live vitals.
+- Health meter.
+- Numeric stat adjustment.
+- All 15 conditions.
+- Inventory.
+- Equipment.
+- Embedded weapons.
+- Retrieval eligibility.
+- Disabled explanations.
+- Remove Token disabled during active Battle.
+
+Additional content continues inside the existing dock scroll area and does not enlarge the dock.
+
+### 7.11 Phase capsule
+
+For Battle scenes:
+
+- Setup is active when `encounter` is null.
+- Battle begins only after pressing Battle.
+- Battle requires at least two tokens.
+- Starting Battle snaps tokens, rolls initiative, clears old physical battle items, and creates fresh resources.
+- Pressing Setup during an active encounter opens a Nightforge confirmation.
+- Confirming abandon:
+  - Clears encounter state and physical items.
+  - Preserves current token HP and positions.
+  - Returns to editable Setup.
+- Cancelling leaves the encounter untouched.
+- In complete state, Battle becomes Restart Battle through a conditional Nightforge state.
+
+For Play scenes:
+
+- The phase capsule shows the Play state without offering Battle lifecycle controls.
+
+### 7.12 Combat commands
+
+The existing Action and Bonus resource pips become pixel-identical buttons.
+
+Action opens a Nightforge Combat Commands drawer:
+
+- Attack.
+- Dash.
+- Swap.
+- End Turn.
+
+Bonus opens a Nightforge Bonus Commands drawer:
+
+- Off-hand attack.
+- Open adjacent chest.
+- Retrieve eligible weapon.
+- Honest unavailable reasons.
+
+End Turn remains accessible even after Action is spent.
+
+Escape closes the current drawer without spending resources.
+
+### 7.13 Map interactions
+
+- Empty-map pointer drag pans.
+- Wheel zooms around the pointer.
+- Adjust Artwork changes empty-map drag semantics only while active.
+- Token pointer drag moves or previews movement.
+- Chest pointer drag works only in Setup.
+- Wall tool captures wall points.
+- Ruler tool captures a measurement.
+- Attack mode changes eligible token clicks into target selection.
+- Physical items and chests become clickable only when contextually legal.
+- HUD, docks, drawers, and overlays stop pointer propagation so they never pan or target the map accidentally.
+
+---
+
+## 8. Character and catalog behavior
+
+### 8.1 Classes
+
+Implement:
+
+| Class | Hit die | Saves | Spellcasting |
+|---|---:|---|---|
+| Fighter | d10 | STR, CON | None |
+| Wizard | d6 | INT, WIS | Placeholder |
+
+Wizard:
+
+- Spell save DC: `8 + proficiency + INT modifier`.
+- Spell attack: `proficiency + INT modifier`.
+- Unlimited placeholder slots.
+- Unlimited placeholder spells.
+- No actual casting.
+
+### 8.2 Races
+
+Implement all nine:
+
+- Dwarf.
+- Elf.
+- Halfling.
+- Human.
+- Dragonborn.
+- Gnome.
+- Half-Elf.
+- Half-Orc.
+- Tiefling.
+
+Subraces:
+
+- Hill Dwarf.
+- High Elf.
+- Lightfoot Halfling.
+- Rock Gnome.
+
+Apply only implemented numeric traits:
+
+- Ability bonuses.
+- Speed.
+- Size.
+- Granted languages.
+
+Do not implement Darkvision, resistances, Breath Weapon, or other deferred traits.
+
+### 8.3 Point buy and derivation
+
+- Six base scores.
+- Minimum 8.
+- Maximum 15 before racial bonuses.
+- Standard 27-point cost curve.
+- Prevent overspending.
+- New Hero starts at six 8s with 27 points remaining.
+- Race and subrace bonuses apply afterward.
+- Display base score, final score, modifier, and remaining budget.
+
+HP:
+
+- Level 1: class hit die plus Constitution modifier.
+- Additional Fighter levels: `6 + CON`.
+- Additional Wizard levels: `4 + CON`.
+
+Derived:
+
+- Initiative from Dexterity.
+- Race speed.
+- Race size.
+- Armor Class.
+- Heavy-armor speed penalty.
+- Wizard spell values.
+
+### 8.4 Skills and saves
+
+- Eighteen SRD skills.
+- Six saving throws.
+- Modifier plus proficiency bonus when proficient.
+- Fighter defaults to STR and CON saves.
+- Fighter skill count displays selected out of two.
+- Going over the recommended Fighter skill count warns but does not block.
+- No in-combat skill or save roller.
+
+### 8.5 Catalog inventory
+
+Regenerate and verify:
+
+- 36 weapons.
+- Four ammunition types.
+- 13 armor entries including Shield.
+- 183 mundane gear entries.
+- 113 inert non-battle magic items.
+- Six implemented worn magic accessories.
+
+Filters:
+
+- Text search.
+- Item type.
+- Weapon or armor class.
+- Gear category.
+- Magic rarity.
+- Weapon property.
+- Damage type.
+- Range band.
+- Name Aâ€“Z.
+- Cost low-to-high.
+- Cost high-to-low.
+
+### 8.6 Intentional ranged ranges
+
+Use Roll30â€™s battle-map ranges:
+
+| Weapon | Normal | Long |
+|---|---:|---:|
+| Blowgun | 25 | 50 |
+| Sling | 30 | 60 |
+| Hand Crossbow | 40 | 80 |
+| Shortbow | 40 | 80 |
+| Light Crossbow | 60 | 120 |
+| Heavy Crossbow | 80 | 160 |
+| Longbow | 80 | 160 |
+
+Thrown ranges remain source-authentic.
+
+### 8.7 Equipment
+
+- Only owned equipment may be equipped.
+- Equipping the same weapon twice requires quantity two.
+- Off hand requires two Light melee weapons.
+- Two-Handed requires empty off hand.
+- Shield requires a free off hand.
+- Shield is incompatible with dual wielding and true Two-Handed weapons.
+- Versatile uses the larger die only with no shield and no off-hand weapon.
+- Removing inventory normalizes equipment.
+- Attack selection lists equipped weapons only.
+
+### 8.8 Implemented magic bonuses
+
+Enchantments:
+
+- Weapon `+1` to `+3`: attack and damage.
+- Armor/shield `+1` to `+3`: AC.
+- Bonus remains keyed by item ID.
+- Ammunition enchantment is excluded.
+
+Worn items:
+
+- Bracers of Archery: +2 ranged damage.
+- Bracers of Defense: +2 AC while unarmored and shieldless.
+- Cloak of Protection: +1 AC and calculated save bonus.
+- Ring of Protection: +1 AC and calculated save bonus.
+- Ioun Stone of Mastery: +1 attack.
+- Ioun Stone of Protection: +1 AC.
+
+No attunement cap.
+
+---
+
+## 9. Table and combat behavior
+
+### 9.1 Camera and artwork
+
+Camera:
+
+- Default `{ x: 0, y: 0, zoom: 1 }`.
+- Zoom clamp `0.35â€“3`.
+- Cursor-anchored wheel zoom.
+- Center-anchored controls.
+- Reset returns to default.
+- Camera is transient.
+
+Artwork:
+
+- Independent `mapView`.
+- Scale clamp `0.2â€“5`.
+- Unbounded X/Y offsets.
+- Persisted per Scene.
+- Drag delta divided by camera zoom.
+- Grid, tokens, walls, and chests remain unaffected by artwork transform.
+
+### 9.2 Positioning
+
+Play:
+
+- Free token drag.
+- No turn resources.
+- No combat overlays.
+- No arrival restriction.
+
+Battle Setup:
+
+- Snap to cell centers.
+- Prevent token/token, token/chest, and chest/chest collisions.
+- Preserve exact pointer centering.
+- Snap all tokens when Battle starts.
+
+### 9.3 Walls and pathfinding
+
+- Full and half walls are persisted percentage polylines.
+- Escape finishes the current wall run.
+- Hidden walls still function.
+- Both wall types block movement.
+- Full walls block ranged and thrown line of sight.
+- Half-walls impose disadvantage.
+- Melee ignores wall line of sight.
+- New clean-room 8-directional A* routes around walls and occupied cells.
+- Search is capped at 4,000 cells.
+- An unreachable destination does not move.
+- Route cost is charged by traversed cells.
+
+### 9.4 Ruler
+
+- Four-connected grid traversal.
+- Count crossed squares.
+- Exclude origin.
+- Multiply by 5 feet.
+- Render line and midpoint label in world space.
+- Clear when tool exits.
+- Do not persist.
+
+### 9.5 Initiative
+
+Starting requires two or more tokens.
+
+- Roll d20 plus initiative bonus.
+- Sort descending.
+- Ties retain pre-roll token-list order for deterministic stability.
+- Round starts at 1.
+- First token becomes active.
+- First token receives fresh resources.
+- Conditions are cleared at new Battle start.
+- Old physical battle items are cleared.
+
+### 9.6 Movement
+
+- One cell costs 5 feet.
+- Movement is splittable.
+- Movement may happen before and after Attack.
+- Token stays at origin during preview.
+- Start cell is white.
+- Reachable route is green.
+- Over-budget route is red.
+- Dropping beyond allowance stops at farthest reachable green cell.
+- Occupied final cell steps backward along the route.
+- Invalid route leaves token at origin.
+- Wall detours charge complete routed distance.
+- Immobilized tokens have no movement.
+- Valid movement uses Nightforge arrival motion.
+
+### 9.7 Dash
+
+- Spends Action.
+- Adds one complete Speed value to maximum movement.
+- Preserves already spent movement.
+- Does not move automatically.
+- Leaves Bonus Action available.
+- Prevents Attack and Swap.
+- Unavailable after Attack, Swap, or prior Dash.
+
+### 9.8 Attack Action
+
+- Spends Action.
+- Does not spend movement.
+- Does not end turn.
+- Prevents Dash.
+- Prevents later Swap.
+- May unlock off-hand Bonus Action.
+- Remaining movement remains usable.
+
+### 9.9 Swap
+
+Once per turn.
+
+Unavailable after:
+
+- Attack.
+- Dash.
+- Prior Swap.
+
+Branches:
+
+- Swap then Attack: disadvantage, no movement, no Dash.
+- Swap then Move: no Attack, no Dash, remaining movement usable.
+- Move then Swap: no Attack, no Dash.
+- Turn still ends manually.
+
+### 9.10 End Turn
+
+- Only normal initiative-advance path.
+- Skip defeated tokens.
+- Increment round on wrap.
+- Create fresh resources from the next tokenâ€™s Speed.
+- Discard unused movement.
+- Close transient command states.
+- Do not auto-advance after attacks, movement, Dash, Swap, retrieval, or looting.
+
+### 9.11 Dual wielding
+
+Requires:
+
+- Two equipped melee weapons.
+- Both Light.
+- Neither Two-Handed.
+
+After main Attack:
+
+- Other weapon becomes off-hand attack weapon.
+- Bonus becomes available.
+- Positive ability modifier omitted from off-hand damage.
+- Negative modifier retained.
+- Attack and proficiency modifiers still apply.
+- Swap attack does not unlock off-hand.
+- Bonus attack does not end turn.
+
+### 9.12 Attack calculation
+
+```text
+d20 + ability modifier + proficiency bonus + magic attack bonus
+```
+
+Ability:
+
+- Melee: Strength.
+- Ranged: Dexterity.
+- Finesse: better of Strength or Dexterity.
+- Thrown melee: normal melee ability.
+- Finesse thrown: better ability.
+
+Rules:
+
+- Natural 1 always misses.
+- Natural 20 always hits.
+- Natural 20 doubles dice only.
+- Total meeting AC hits.
+- Ability modifier added once to damage.
+- Fixed damage supported.
+- Final damage cannot be negative.
+
+### 9.13 Advantage and disadvantage
+
+- Normal: one d20.
+- Advantage: two, keep high.
+- Disadvantage: two, keep low.
+- Opposing sources cancel.
+- Multiple sources do not create more dice.
+- Damage remains normal.
+
+Sources include:
+
+- Long range.
+- Long throw.
+- Heavy weapon used by Small creature.
+- Lance used at 5 feet.
+- Attack after Swap.
+- Half-wall shot.
+- Attacker conditions.
+- Target conditions.
+
+### 9.14 Range display
+
+Use one SVG rather than per-cell React nodes.
+
+- Stair-stepped polygon per range tier.
+- Grid pattern clipped to valid cells.
+- Aligned to actual board grid.
+- Centered on attacker cell.
+
+Colors:
+
+| Attack | Tier |
+|---|---|
+| Melee | Green |
+| Reach | Green to 10 ft |
+| Ranged normal | Green |
+| Ranged long | Yellow |
+| Thrown melee | Green |
+| Thrown normal | Yellow |
+| Thrown long | Red |
+
+Full-wall and out-of-range targets cannot be selected and do not spend Action.
+
+### 9.15 Conditions
+
+Implement all 15:
+
+- Blinded.
+- Charmed.
+- Deafened.
+- Frightened.
+- Grappled.
+- Incapacitated.
+- Invisible.
+- Paralyzed.
+- Petrified.
+- Poisoned.
+- Prone.
+- Restrained.
+- Stunned.
+- Unconscious.
+- Exhaustion.
+
+Effects:
+
+- Attacker roll bias.
+- Target melee/ranged roll bias.
+- Incapacitation.
+- Immobilization.
+- Automatic melee critical against Paralyzed or Unconscious targets.
+- Normal advantage/disadvantage cancellation.
+- Manual Nightforge toggles.
+- Nightforge token badges.
+- No automatic application.
+
+### 9.16 Chests
+
+Setup:
+
+- Add.
+- Drag.
+- Block occupied cell.
+- Fill using complete catalog.
+- Change quantities.
+- Delete.
+
+Battle:
+
+- Eligible when adjacent and Bonus Action available.
+- Opening spends Bonus Action.
+- Take one unit at a time.
+- Contents deplete.
+- Empty state persists.
+- Chest blocks movement.
+- Restart does not refill.
+
+### 9.17 Thrown weapons
+
+Lodging:
+
+- Dagger.
+- Dart.
+- Handaxe.
+- Javelin.
+- Spear.
+- Trident.
+
+Non-lodging:
+
+- Light Hammer.
+
+Behavior:
+
+- Infer throw from target distance.
+- Remove one inventory copy.
+- Clear thrown hand.
+- Shift remaining off-hand weapon into main hand when necessary.
+- Lodging hit embeds.
+- Non-lodging hit lands nearby.
+- Miss lands nearby.
+- Landing avoids occupied and invalid cells.
+- Physical items persist only in versioned active encounters.
+
+### 9.18 Retrieval
+
+Embedded living target:
+
+- Carrier or adjacent actor.
+- Bonus Action.
+- `d20 + STR modifier + DEX modifier`.
+- DC 15.
+- Failure spends Bonus and leaves item embedded.
+
+Ground:
+
+- Same or adjacent square.
+- Bonus Action.
+- No roll.
+
+Defeated carrier:
+
+- Adjacent.
+- Free.
+- No roll.
+
+Recovery:
+
+- Equip into legal empty hand without Swap penalty.
+- Otherwise add to inventory.
+- Stored weapon requires later Swap.
+
+### 9.19 Ammunition
+
+- Arrow bundle 20.
+- Bolt bundle 20.
+- Sling Bullet bundle 20.
+- Blowgun Needle bundle 50.
+- Matching ammunition required.
+- One unit consumed per shot.
+- Expenditure tracked per token.
+- On completion, recover floor of 50% fired.
+- Completion recovery occurs once.
+
+### 9.20 Cinematics
+
+Attack:
+
+1. Spin one or two d20s.
+2. Reveal natural roll.
+3. Reveal modifiers.
+4. Compare with AC.
+5. Show hit, miss, or critical.
+6. Roll damage when hit.
+7. Display damage modifier.
+8. Apply HP.
+9. Display floating damage and token impact.
+
+Retrieval:
+
+1. Spin d20.
+2. Show STR and DEX contributions.
+3. Compare with DC 15.
+4. Show success or failure.
+5. Update item only after result.
+
+Rules:
+
+- Rejected die is visibly de-emphasized.
+- Successful hits use a newly authored Nightforge-compatible impact sound.
+- Misses do not play hit sound.
+- Input locks during resolution.
+- Reduced motion shortens or replaces animation without removing information.
+
+### 9.21 Completion and restart
+
+Complete when one or zero living tokens remain.
+
+- Report winner or no survivor.
+- Disable ordinary combat.
+- Recover ammunition once.
+- Preserve final encounter for reload.
+
+Restart:
+
+- Restore all tokens to Max HP.
+- Roll new initiative.
+- Reset rounds and resources.
+- Clear conditions and physical battle items.
+- Preserve positions, Scene tools, walls, and depleted chests.
+- Begin a fresh active encounter.
+
+---
+
+## 10. Implementation sequence
+
+### Phase 0 â€” Plan and baseline
+
+- Write this plan file.
+- Initialize Git.
+- Commit and tag baseline.
+- Record hashes.
+- Capture screenshots.
+- Build parity register.
+- Add purity verifier.
+
+Gate:
+
+- Untouched Nightforge builds.
+- Baseline screenshots are reproducible.
+- Original Roll30 remains unchanged.
+
+### Phase 1 â€” Application and repository foundation
+
+- Add reducers and application commands.
+- Add Scene, Hero, Artwork, and Session repositories.
+- Implement fresh storage and backup envelope.
+- Implement explicit save statuses and recovery.
+- Add tests and verification scripts.
+
+Gate:
+
+- Repository failure and recovery tests pass.
+- Existing views remain pixel-identical with fixtures.
+
+### Phase 2 â€” Library and routing
+
+- Replace placeholders with repository data.
+- Implement Forge, open, settings, delete, active context, and empty state.
+- Connect command deck.
+
+Gate:
+
+- Scene lifecycle survives reload.
+- Startup always shows Library.
+
+### Phase 3 â€” Scene workbench
+
+- Connect name, type, artwork, blank canvas, grid, preview, and return context.
+- Implement staged artwork replacement and cleanup.
+
+Gate:
+
+- Every artwork failure branch preserves valid prior data.
+- Play/Battle changes behave correctly.
+
+### Phase 4 â€” Hero domain and UI
+
+- Classes.
+- Races.
+- Point buy.
+- Derived values.
+- Hero CRUD.
+- Identity and Abilities chapters.
+- Skills and saves.
+- Wizard scaffold.
+
+Gate:
+
+- Every Hero derivation and lifecycle test passes.
+
+### Phase 5 â€” Catalogs and Gear
+
+- Generate clean-room catalogs.
+- Inventory operations.
+- Filters and sorting.
+- Equipment.
+- Magic bonuses.
+- Gear chapter drawers and continuations.
+
+Gate:
+
+- Catalog fidelity and every equipment legality branch pass.
+
+### Phase 6 â€” Play Table and tools
+
+- Camera.
+- Artwork adjustment.
+- Play tokens.
+- Walls.
+- Ruler.
+- Tool drawer through pixel-identical 5-foot control.
+
+Gate:
+
+- Alignment remains correct across zoom and viewport sizes.
+- Scene Settings button behavior remains unchanged.
+
+### Phase 7 â€” Battle Setup
+
+- Manual tokens.
+- Hero-token snapshots.
+- Read-only derived fields.
+- Inventory and loadout.
+- Chests.
+- Collision and snapping.
+- Phase transition.
+
+Gate:
+
+- Complete Setup persists and reloads.
+
+### Phase 8 â€” Initiative and movement
+
+- Initiative.
+- Turn track.
+- Movement currency.
+- Wall-aware pathfinding.
+- Dash.
+- Swap.
+- End Turn.
+
+Gate:
+
+- All resource branches and route branches pass.
+
+### Phase 9 â€” Attacks and conditions
+
+- Attack selection.
+- Range SVG.
+- Line of sight.
+- Rolls.
+- Damage.
+- Conditions.
+- Action and Bonus drawers.
+- Cinematics.
+
+Gate:
+
+- Normal, advantage, disadvantage, critical, blocked, and condition scenarios pass.
+
+### Phase 10 â€” Chests, physical weapons, ammunition, completion
+
+- Battle looting.
+- Thrown items.
+- Retrieval.
+- Ammunition.
+- Winner.
+- Restart.
+- Active encounter restoration.
+
+Gate:
+
+- Full encounter passes from Setup through reload, completion, and restart.
+
+### Phase 11 â€” Hardening
+
+- Empty/loading/error/success states.
+- Focus and keyboard behavior.
+- Reduced motion.
+- Long names.
+- Large inventories.
+- Large token lists.
+- Corrupt data.
+- Storage quota failures.
+- Responsive verification.
+
+Gate:
+
+- Full verification command passes.
+- No unresolved parity-register entry remains.
+
+### Phase 12 â€” Preview and release
+
+- Create separate Nightforge GitHub repository.
+- Publish preview under a separate Pages path.
+- Conduct owner acceptance walkthrough.
+- Fix Nightforge-native defects.
+- Prepare reviewed replacement PR for `aomarco/Roll30`.
+- Tag original production for rollback.
+- Replace production only after explicit approval.
+- Deploy with `/Roll30/` base.
+- Confirm original browser-save keys remain untouched.
+
+---
+
+## 11. Test and acceptance program
+
+### 11.1 Clean-room purity
+
+Fail if:
+
+- Runtime imports reference original Roll30.
+- Original CSS or JSX fingerprints appear.
+- Frozen Nightforge stylesheet hashes change.
+- Original storage keys appear.
+- Original component/class-name families appear.
+- Runtime reads outside the Nightforge project.
+- `noop`, placeholder collections, empty handlers, TODO, or FIXME remain.
+- A visible enabled control lacks behavior.
+- An unavailable feature appears enabled.
+
+### 11.2 Domain parity
+
+Write independent tests covering every behavior represented by original Roll30â€™s 106 tests.
+
+Add Nightforge-specific tests for:
+
+- Envelope recovery.
+- Save status.
+- Artwork staging.
+- Orphan cleanup.
+- Stable IDs.
+- Scene type versus encounter phase.
+- Active-scene routing.
+- Manual-token AC.
+- Hero-derived read-only state.
+- Abandon encounter.
+- Prevent Battle start with fewer than two tokens.
+- Exact completion-ammunition recovery once.
+- No original storage access.
+
+### 11.3 End-to-end scenarios
+
+1. Fresh first launch.
+2. Forge Play Scene.
+3. Forge Battle Scene.
+4. Open, rename, settings, and delete.
+5. Upload, replace, remove, and fail artwork operations.
+6. Create Fighter.
+7. Create Wizard.
+8. Exercise all races and subraces.
+9. Complete point buy.
+10. Configure skills and saves.
+11. Search and filter every item kind.
+12. Configure legal and illegal equipment.
+13. Apply enchantments and worn items.
+14. Import Hero token.
+15. Create manual tokens.
+16. Add, fill, move, and delete chest.
+17. Pan, zoom, reset, and adjust artwork.
+18. Draw full and half walls.
+19. Hide walls.
+20. Measure with ruler.
+21. Start Battle.
+22. Split movement.
+23. Move after Attack.
+24. Dash.
+25. Exercise all Swap branches.
+26. Attack melee, Reach, ranged, long, and thrown.
+27. Attack with advantage and disadvantage.
+28. Verify Natural 1 and Natural 20.
+29. Dual-wield.
+30. Toggle all conditions.
+31. Verify full-wall block and half-wall disadvantage.
+32. Loot and deplete chest.
+33. Throw and embed weapon.
+34. Miss and land weapon.
+35. Fail and succeed retrieval.
+36. Recover from defeated carrier.
+37. Consume and recover ammunition.
+38. Reload mid-Setup.
+39. Reload mid-Battle.
+40. Abandon Battle to Setup.
+41. Complete encounter.
+42. Reload completed encounter.
+43. Restart.
+44. Force LocalStorage failure.
+45. Force IndexedDB failure.
+46. Corrupt the primary envelope and recover backup.
+47. Confirm original Roll30 saves remain untouched.
+
+### 11.4 Visual baseline
+
+Use a pinned Playwright Chromium version.
+
+Before screenshots:
+
+- Wait for `document.fonts.ready`.
+- Wait for application idle state.
+- Disable test-time animations through Playwrightâ€™s screenshot option, not by editing Nightforge CSS.
+- Use deterministic fixture IDs, timestamps, artwork, and random results.
+
+Capture at:
+
+- 1920Ã—1080.
+- 1600Ã—900.
+- 1440Ã—900.
+- 1280Ã—800.
+- 1180Ã—820.
+- 1024Ã—768.
+
+Also test browser zoom at:
+
+- 100%.
+- 125%.
+- 150%.
+
+Baseline states:
+
+- Library.
+- Forge.
+- Heroes Identity.
+- Heroes Abilities.
+- Heroes Gear.
+- Scene Play.
+- Scene Battle.
+- Table Setup.
+- Table Battle.
+- Selected token.
+- Nothing selected.
+
+Acceptance:
+
+- Frozen stylesheet hashes must match exactly.
+- Local Windows baseline comparison permits zero changed pixels in existing idle compositions.
+- CI comparison on a pinned Linux renderer permits at most `0.1%` differing pixels because platform rasterization can differ.
+- Any CI difference must still be manually overlaid and approved.
+- No baseline may change solely to make a failing implementation test pass.
+
+### 11.5 New-state visual review
+
+Review every new state with:
+
+- Squint test.
+- Alignment-line inspection.
+- Within-group versus between-group spacing.
+- Typography consistency.
+- Nightforge color semantics.
+- Hover, focus, active, disabled, empty, loading, error, and success states.
+- Longest realistic content.
+- Smallest supported viewport.
+- Reduced motion.
+- Non-color status cues.
+
+New states must use existing Nightforge variables and primitives. No new aesthetic language may be introduced.
+
+### 11.6 Accessibility
+
+- Every interactive element keyboard reachable.
+- Visible focus throughout.
+- Dialog focus trap.
+- Focus restored to invoker after close.
+- Escape closes only the topmost transient state.
+- Destructive confirmation identifies exact target.
+- Status is not communicated by color alone.
+- Disabled controls explain why.
+- Text does not clip at 150% zoom.
+- Motion respects reduced-motion preferences.
+- Table pointer areas do not intercept dock controls.
+
+### 11.7 Performance
+
+- Range display uses bounded SVG.
+- Pointer movement avoids global persistence writes.
+- Scene autosave is debounced.
+- Final input value always flushes on blur and navigation.
+- Catalog filtering remains responsive with the complete catalog.
+- A* search capped at 4,000 cells.
+- Images never enter LocalStorage.
+- No uncontrolled document-level pointer listener remains after interaction.
+- Production bundle and asset paths are verified.
+
+### 11.8 Final completion gate
+
+Do not declare completion until:
+
+- Every parity-register row passes.
+- All domain tests pass.
+- All repository tests pass.
+- All integration tests pass.
+- All end-to-end scenarios pass.
+- All visual baselines pass.
+- Purity verification passes.
+- Production build passes.
+- Git diff check passes.
+- Full encounter walkthrough passes.
+- Fresh-storage behavior is confirmed.
+- Original Roll30 data remains untouched.
+- Separate preview is approved.
+- Rollback tag exists before production replacement.
+
+---
+
+## 12. Final assumptions
+
+- Nightforge remains desktop-first.
+- Nightforgeâ€™s current UI and UX remain authoritative.
+- Existing idle compositions remain visually unchanged.
+- Conditional Nightforge-native functional states are permitted.
+- Original Roll30 is a read-only behavioral oracle.
+- No original implementation code is copied.
+- Catalogs are regenerated from SRD reference data.
+- Nightforge begins with no imported characters, Scenes, artwork, or battles.
+- Original Roll30 browser saves remain untouched.
+- Only currently implemented Roll30 behavior is reconstructed.
+- Production is replaced only after explicit preview approval.
