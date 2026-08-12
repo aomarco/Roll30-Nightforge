@@ -1,4 +1,5 @@
 import { createApplicationCommands } from "./commands.js";
+import { createBrowserArtworkDecoder } from "./artwork.js";
 import { createArtworkRepository, createIndexedDbArtworkAdapter } from "../storage/artworkRepository.js";
 import { createHeroRepository, createSceneRepository } from "../storage/entityRepositories.js";
 import { createSessionRepository } from "../storage/sessionRepository.js";
@@ -30,6 +31,8 @@ export function createBrowserRuntime(browser, dispatch) {
     createIndexedDbArtworkAdapter(browser.indexedDB),
   );
   const commands = createApplicationCommands({
+    artworkDecoder: createBrowserArtworkDecoder(browser),
+    artworkRepository,
     sceneRepository,
     heroRepository,
     sessionRepository,
@@ -45,4 +48,3 @@ export function createBrowserRuntime(browser, dispatch) {
     stateRepository,
   };
 }
-

@@ -123,7 +123,9 @@ export default function TableScreen({ scene = null, mode = "setup", go = noop, s
         )}
         <button
           className="glyph"
-          onClick={() => go({ page: "settings" })}
+          onClick={() =>
+            go({ page: "settings", returnTo: { page: "board", mode } })
+          }
           title="Scene settings"
         >
           <SlidersHorizontal size={17} />

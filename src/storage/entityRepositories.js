@@ -218,7 +218,104 @@ export const createSceneRepository = (stateRepository, options = {}) => {
       : saved;
   };
 
-  return { ...repository, createActive, open, remove, setActive };
+  const updateArtwork = (id, artworkKey, blankCanvas) => {
+    const loaded = stateRepository.load();
+    if (!loaded.ok) return loaded;
+    const index = loaded.value.scenes.findIndex((scene) => scene.id === id);
+    if (index < 0) {
+      return failure("scenes-not-found", `No Scene exists with id ${id}.`, {
+        recovery: "Refresh the Scene collection and choose an existing Scene.",
+        retryable: false,
+      });
+    }
+
+    const previousArtworkKey = loaded.value.scenes[index].artworkKey;
+    const now = options.clock?.() || new Date().toISOString();
+    const scene = normalizeSceneRecord(
+      {
+        ...loaded.value.scenes[index],
+        artworkKey,
+        blankCanvas,
+        updatedAt: now,
+      },
+      { now },
+    );
+    const scenes = [...loaded.value.scenes];
+    scenes[index] = scene;
+    const pendingArtworkDeletes =
+      previousArtworkKey && previousArtworkKey !== scene.artworkKey
+        ? [...new Set([...loaded.value.pendingArtworkDeletes, previousArtworkKey])]
+        : loaded.value.pendingArtworkDeletes;
+    const saved = stateRepository.save({
+      ...loaded.value,
+      scenes,
+      pendingArtworkDeletes,
+    });
+    return saved.ok
+      ? success(scene, {
+          envelope: saved.value,
+          revision: saved.revision,
+          previousArtworkKey,
+        })
+      : saved;
+  };
+
+  const pendingArtworkDeletes = () => {
+    const loaded = stateRepository.load();
+    return loaded.ok
+      ? success([...loaded.value.pendingArtworkDeletes], { envelope: loaded.value })
+      : loaded;
+  };
+
+  const acknowledgeArtworkDelete = (artworkKey) => {
+    const loaded = stateRepository.load();
+    if (!loaded.ok) return loaded;
+    if (!loaded.value.pendingArtworkDeletes.includes(artworkKey)) {
+      return success(artworkKey, {
+        envelope: loaded.value,
+        revision: loaded.value.revision,
+      });
+    }
+    const saved = stateRepository.save({
+      ...loaded.value,
+      pendingArtworkDeletes: loaded.value.pendingArtworkDeletes.filter(
+        (key) => key !== artworkKey,
+      ),
+    });
+    return saved.ok
+      ? success(artworkKey, { envelope: saved.value, revision: saved.revision })
+      : saved;
+  };
+
+  const scheduleArtworkDelete = (artworkKey) => {
+    const loaded = stateRepository.load();
+    if (!loaded.ok) return loaded;
+    if (!artworkKey || loaded.value.pendingArtworkDeletes.includes(artworkKey)) {
+      return success(artworkKey, {
+        envelope: loaded.value,
+        revision: loaded.value.revision,
+      });
+    }
+    const saved = stateRepository.save({
+      ...loaded.value,
+      pendingArtworkDeletes: [...loaded.value.pendingArtworkDeletes, artworkKey],
+    });
+    return saved.ok
+      ? success(artworkKey, { envelope: saved.value, revision: saved.revision })
+      : saved;
+  };
+
+  return {
+    ...repository,
+    acknowledgeArtworkDelete,
+    createActive,
+    open,
+    pendingArtworkDeletes,
+    remove,
+    scheduleArtworkDelete,
+    setActive,
+    updateArtwork,
+  };
 };
 
 export const createHeroRepository = (stateRepository, options = {}) =>

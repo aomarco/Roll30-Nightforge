@@ -874,3 +874,212 @@ Every Phase 2 plan requirement now has direct evidence:
 - Production build: passed.
 
 Phase 2 is complete and ready for Phase 3.
+
+
+NIGHTFORGE - PHASE 3 COMPLETION AND PATCH NOTES
+================================================
+
+Date completed: 12 August 2026
+Phase: 3 - Scene workbench
+Previous completed phase: Phase 2 - Library and routing
+
+
+28. PHASE 3 RESULT
+------------------
+
+Phase 3 is complete.
+
+The existing Nightforge Scene workbench is now connected to fresh Nightforge
+state and artwork repositories. The visible workbench composition, controls,
+typography, spacing, and permanent styles remain the Nightforge design. No
+Roll30 UI, UX, layout, stylesheet, component, or browser-save data was imported.
+
+
+29. FUNCTIONALITY CONNECTED
+---------------------------
+
+- Scene name edits update the live preview and persist to the active Scene.
+- Name edits use a 450 ms debounce and flush on blur or navigation.
+- Save failures retain the local draft and expose an actionable Not saved state.
+- Play and Battle controls persist the Scene kind.
+- Battle-to-Play changes require confirmation when an encounter exists.
+- Confirmed Battle-to-Play changes clear the encounter and its physical battle
+  items while preserving tokens, positions, inventory, artwork, walls, chests,
+  and the Scene record.
+- Play-to-Battle changes preserve the Scene and open the Battle workbench state.
+- Battle grid-size changes update the live preview and persist to the Scene.
+- The grid control remains absent from Play Scenes.
+- The preview uses the active Scene name, kind, grid size, blank-canvas state,
+  and stored artwork blob.
+- Upload Artwork validates and decodes an actual image before persistence.
+- Use White Canvas clears the artwork reference through the recovery workflow.
+- The workbench Back control returns to Library when entered from Library.
+- The workbench Back control returns to the exact Table mode when entered from
+  the Table Scene Settings glyph.
+- The command-deck Scene action opens with Library return context.
+- The existing Table Scene Settings glyph continues to open the active Scene
+  directly without changing its visible placement or styling.
+
+
+30. ARTWORK TRANSACTION AND RECOVERY ORDER
+------------------------------------------
+
+Artwork replacement now follows this verified sequence:
+
+1. Confirm that the file is a non-empty image.
+2. Decode the image and verify usable dimensions.
+3. Generate a fresh Nightforge artwork key.
+4. Store the blob under the staged key in IndexedDB.
+5. Read the staged blob back and verify that it exists.
+6. Save the Scene envelope with the new artwork reference.
+7. Add the previous key to the durable pending-deletion set as part of that
+   same Scene save.
+8. Delete the prior artwork blob only after the new Scene reference is saved.
+9. Remove the pending key only after blob deletion is confirmed.
+
+Failure behavior:
+
+- Decode failure leaves the prior Scene and artwork untouched.
+- Staged-write failure leaves the prior Scene and artwork untouched.
+- Staged-read failure deletes the staged orphan and keeps prior valid data.
+- Missing staged readback is treated as verification failure.
+- Scene-envelope save failure deletes the staged orphan and retains the prior
+  Scene reference.
+- Old-artwork deletion failure keeps the new valid Scene reference and a
+  durable pending cleanup key.
+- Cleanup-acknowledgement failure leaves the pending key retryable even when
+  the blob has already been removed.
+- Startup retries every pending deletion.
+- Startup also reconciles and removes unreferenced staged orphan blobs.
+- A failed cleanup never restores an old Scene reference or resurrects a
+  deleted Scene.
+
+White Canvas uses the same persistence-first safety model:
+
+1. Save artworkKey as null and blankCanvas as true.
+2. Durably schedule the previous key for deletion.
+3. Delete the blob.
+4. Acknowledge cleanup only after confirmed deletion.
+
+
+31. FILES ADDED
+---------------
+
+- src/application/artwork.js
+  Browser image validation and decoding boundary.
+
+- src/phase3.test.js
+  Phase 3 repository, command, transition, artwork, and recovery tests.
+
+- scripts/phase3-render-smoke.mjs
+  Render verification for Battle, Play, blank canvas, errors, grid preview,
+  and Table/Library return states.
+
+- scripts/verify-phase3.mjs
+  Static Phase 3 integration, purity, and frozen-visual verifier.
+
+
+32. FILES UPDATED
+-----------------
+
+- src/App.jsx
+  Connects the Scene workbench to application commands and preserves entry
+  context. Flushes final draft values before leaving the workbench.
+
+- src/screens/SceneScreen.jsx
+  Connects the existing controls to real Scene and artwork behavior without
+  replacing the Nightforge workbench composition.
+
+- src/screens/TableScreen.jsx
+  Carries the current Table mode into Scene Settings return context.
+
+- src/application/commands.js
+  Adds staged artwork replacement, White Canvas, cleanup retry, orphan
+  reconciliation, and Scene-workbench persistence orchestration.
+
+- src/application/browserRuntime.js
+  Supplies the browser artwork decoder and artwork repository to commands.
+
+- src/storage/entityRepositories.js
+  Adds atomic Scene artwork-reference updates and durable cleanup scheduling
+  and acknowledgement operations.
+
+- package.json
+  Adds Phase 3 render and structural verification to the full gate.
+
+
+33. VERIFICATION EVIDENCE
+-------------------------
+
+Full command:
+
+    npm run verify
+
+Result: Pass.
+
+- Node test suite: 49 passed, 0 failed.
+- Phase 2 render smoke: Pass.
+- Phase 3 render smoke: Pass.
+- Phase 1 verifier: Pass.
+- Phase 2 verifier: Pass.
+- Phase 3 verifier: Pass.
+- Production Vite build: Pass.
+- Permanent Nightforge visual hashes: unchanged.
+- Runtime references to the original Roll30 project: none.
+- Original Roll30 storage access from Nightforge runtime: none.
+- Nightforge live development server: HTTP 200 at the time of completion.
+
+Phase 3 test coverage includes:
+
+- Successful artwork stage, verification, commit, and cleanup.
+- Invalid/decode-failed artwork.
+- Staged write failure.
+- Staged read failure.
+- Missing staged readback.
+- Scene-envelope save failure after staging.
+- Previous-artwork deletion failure.
+- Pending cleanup retry at startup.
+- Unreferenced orphan reconciliation.
+- Cleanup acknowledgement failure and later retry.
+- Successful and failed White Canvas operations.
+- Battle-to-Play destructive-state clearing and asset preservation.
+- Play-to-Battle, name, and grid persistence.
+- Browser image-type and decoded-dimension validation.
+
+
+34. UI AND DATA BOUNDARY AUDIT
+------------------------------
+
+- No permanent Nightforge stylesheet changed.
+- The Nightforge glyph component hash is unchanged.
+- No Roll30 source file was read into or imported by Nightforge runtime code.
+- No Roll30 UI, UX, layout, CSS, JSX, or component family was copied.
+- No Roll30 characters, games, Scenes, artwork, battles, or browser saves were
+  imported.
+- Nightforge continues using only its isolated LocalStorage, SessionStorage,
+  and IndexedDB identifiers.
+- New visual states are conditional functional states within the existing
+  Nightforge workbench rather than a redesign.
+
+
+35. PHASE 3 COMPLETION STATEMENT
+--------------------------------
+
+Every Phase 3 plan requirement has direct implementation and verification
+evidence:
+
+- Name: connected, debounced, flushed, persisted, and failure-safe.
+- Type: connected with correct Play/Battle transitions and confirmation.
+- Artwork: decoded, staged, verified, committed, displayed, and recoverable.
+- Blank canvas: persisted with cleanup-safe removal ordering.
+- Grid: Battle-only, previewed at the actual size, and persisted.
+- Preview: connected to the active Scene and real stored artwork.
+- Return context: Library and exact Table-mode paths verified.
+- Artwork replacement and cleanup: every defined failure branch preserves the
+  last valid Scene data and remains safely retryable.
+- Play/Battle behavior: encounter clearing and Scene asset preservation tested.
+- Nightforge interface preservation: frozen permanent visual hashes verified.
+- Clean-room and fresh-data constraints: statically verified.
+- Production build: passed.
+
+Phase 3 is complete and ready for Phase 4.

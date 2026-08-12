@@ -35,7 +35,9 @@ export function CommandDeck({ route, go, activeScene }) {
                 "deck-tab" + (route.page === id ? " on" : "") +
                 (disabled ? " nf-state-disabled" : "")
               }
-              onClick={() => go({ page: id })}
+              onClick={() =>
+                go(id === "settings" ? { page: id, returnTo: { page: "home" } } : { page: id })
+              }
               disabled={disabled}
               title={disabled ? "Choose or Forge a Scene from Library first" : undefined}
             >
@@ -64,13 +66,20 @@ export default function App({ browser = window, runtimeFactory = createBrowserRu
   const runtimeRef = useRef(null);
   if (!runtimeRef.current) runtimeRef.current = runtimeFactory(browser, dispatch);
   const runtime = runtimeRef.current;
+  const workbenchFlushRef = useRef(null);
 
   useEffect(() => {
     runtime.commands.initialize();
   }, [runtime]);
 
   const activeScene = state.scenes.find((scene) => scene.id === state.activeSceneId) || null;
-  const go = (route) => runtime.commands.navigate(route, state.activeSceneId);
+  const go = (route) => {
+    if (state.route.page === "settings" && route.page !== "settings") {
+      const flushed = workbenchFlushRef.current?.();
+      if (flushed && !flushed.ok) return flushed;
+    }
+    return runtime.commands.navigate(route, state.activeSceneId);
+  };
   const openScene = (scene, page) =>
     runtime.commands.openScene(
       scene.id,
@@ -95,7 +104,22 @@ export default function App({ browser = window, runtimeFactory = createBrowserRu
 
   let screen;
   if (state.route.page === "characters") screen = <HeroesScreen go={go} />;
-  else if (state.route.page === "settings") screen = <SceneScreen scene={activeScene} go={go} />;
+  else if (state.route.page === "settings") {
+    screen = (
+      <SceneScreen
+        scene={activeScene}
+        go={go}
+        returnTo={state.route.returnTo || { page: "home" }}
+        persistence={state.persistence}
+        artworkRepository={runtime.artworkRepository}
+        onUpdate={runtime.commands.updateScene}
+        onReplaceArtwork={runtime.commands.replaceSceneArtwork}
+        onUseWhiteCanvas={runtime.commands.useWhiteCanvas}
+        flushRef={workbenchFlushRef}
+        confirmChange={(message) => browser.confirm(message)}
+      />
+    );
+  }
   else {
     screen = (
       <LibraryScreen
@@ -106,7 +130,12 @@ export default function App({ browser = window, runtimeFactory = createBrowserRu
         go={go}
         onForge={forgeScene}
         onOpen={(scene) => openScene(scene, "board")}
-        onSettings={(scene) => openScene(scene, "settings")}
+        onSettings={(scene) =>
+          runtime.commands.openScene(scene.id, {
+            page: "settings",
+            returnTo: { page: "home" },
+          })
+        }
         onDelete={(scene) => runtime.commands.removeScene(scene.id)}
       />
     );
@@ -119,4 +148,3 @@ export default function App({ browser = window, runtimeFactory = createBrowserRu
     </div>
   );
 }
-
