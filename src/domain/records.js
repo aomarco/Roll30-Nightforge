@@ -9,6 +9,8 @@ import {
   SKILLS,
   subraceById,
 } from "./heroes.js";
+import { ITEM_BY_ID } from "./catalog.js";
+import { normalizeEquipment, normalizeInventoryEntries } from "./items.js";
 
 const finiteNumber = (value, fallback) => {
   const number = Number(value);
@@ -22,19 +24,6 @@ const cleanIdList = (value) =>
   Array.isArray(value)
     ? [...new Set(value.filter((item) => typeof item === "string" && item.trim()))]
     : [];
-
-const cleanInventory = (value) => {
-  if (!Array.isArray(value)) return [];
-  const quantities = new Map();
-  for (const entry of value) {
-    if (!entry || typeof entry.itemId !== "string" || !entry.itemId.trim()) continue;
-    const quantity = Math.floor(finiteNumber(entry.quantity, 0));
-    if (quantity <= 0) continue;
-    const itemId = entry.itemId.trim();
-    quantities.set(itemId, (quantities.get(itemId) || 0) + quantity);
-  }
-  return [...quantities].map(([itemId, quantity]) => ({ itemId, quantity }));
-};
 
 const cleanLoadout = (value) => ({
   mainHand: nullableId(value?.mainHand),
@@ -104,8 +93,10 @@ export function createHeroRecord(
     ...grantedLanguages(selectedRace.id, selectedSubrace?.id),
     ...suppliedLanguages,
   ])];
+  const inventoryResult = normalizeInventoryEntries(input.inventory, ITEM_BY_ID);
+  const priorUnknownItems = cleanIdList(input.recoveryDiagnostics?.unknownInventoryItemIds);
 
-  return {
+  const hero = {
     id: heroId,
     name:
       typeof input.name === "string" && input.name.trim()
@@ -125,16 +116,23 @@ export function createHeroRecord(
     skillProficiencies: cleanIdList(input.skillProficiencies).filter((skill) =>
       SKILLS.some((entry) => entry.id === skill),
     ),
-    inventory: cleanInventory(input.inventory),
+    inventory: inventoryResult.inventory,
     loadout: cleanLoadout(input.loadout),
     armorId: nullableId(input.armorId),
     shieldId: nullableId(input.shieldId),
     enchantments: cleanEnchantments(input.enchantments),
     wornItemIds: cleanIdList(input.wornItemIds),
+    recoveryDiagnostics: {
+      unknownInventoryItemIds: [...new Set([
+        ...priorUnknownItems,
+        ...inventoryResult.unknownItemIds,
+      ])],
+    },
     createdAt: input.createdAt || now,
     updatedAt: input.updatedAt || now,
     schemaVersion: 1,
   };
+  return { ...hero, ...normalizeEquipment(hero, hero.inventory, ITEM_BY_ID) };
 }
 
 export const normalizeSceneRecord = (record, options = {}) =>

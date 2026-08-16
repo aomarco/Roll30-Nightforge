@@ -15,7 +15,9 @@
     "test:phase3:render": "node scripts/phase3-render-smoke.mjs",
     "verify:phase4": "node scripts/verify-phase4.mjs",
     "test:phase4:render": "node scripts/phase4-render-smoke.mjs",
-    "verify": "npm test && npm run test:phase2:render && npm run test:phase3:render && npm run test:phase4:render && npm run verify:phase1 && npm run verify:phase2 && npm run verify:phase3 && npm run verify:phase4 && npm run build"
+    "verify:phase5": "node scripts/verify-phase5.mjs",
+    "test:phase5:render": "node scripts/phase5-render-smoke.mjs",
+    "verify": "npm test && npm run test:phase2:render && npm run test:phase3:render && npm run test:phase4:render && npm run test:phase5:render && npm run verify:phase1 && npm run verify:phase2 && npm run verify:phase3 && npm run verify:phase4 && npm run verify:phase5 && npm run build"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",

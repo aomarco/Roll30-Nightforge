@@ -1380,6 +1380,347 @@ Every Phase 4 plan requirement has direct evidence:
 Phase 4 is complete and ready for Phase 5.
 
 
+===============================================================================
+NIGHTFORGE - PHASE 5 COMPLETION AND PATCH NOTES
+===============================================================================
+
+Date completed: 16 August 2026 (Australia/Sydney)
+Phase: 5 - Catalogs and Gear
+Previous completed phase: Phase 4 - Hero domain and UI
+
+
+48. PHASE 5 RESULT
+------------------
+
+Phase 5 is complete.
+
+Nightforge now has independently generated equipment and non-battle magic-item
+catalogs, persisted Hero inventory, legal equipment loadouts, enchantments, six
+implemented worn magic effects, and a functional Gear chapter. The existing
+Nightforge chapter, loot-row, stepper, button, drawer, typography, spacing, and
+color language remain the interface foundation.
+
+No Roll30 UI, UX, layout, CSS, React component, catalog module, runtime code,
+character, game, Scene, browser save, or other user data was copied or imported.
+The original Roll30 project remained a read-only behavioral and source-corpus
+reference. Its already-dirty working tree was not modified by Phase 5.
+
+
+49. CLEAN-ROOM CATALOG GENERATION
+---------------------------------
+
+The catalog generator reads only the local public SRD corpus and the documented
+magic-item classification index supplied with that corpus:
+
+- 5e-SRD-Equipment.json
+- 5e-SRD-Magic-Items.json
+- MAGIC_ITEM_FILE_SYSTEM.txt
+
+The generator independently:
+
+- Excludes Net because its special restraint mechanics remain outside the
+  current feature boundary.
+- Separates the four ammunition entries from mundane adventuring gear.
+- Derives the unique 113-item NON BATTLE set from the classification index and
+  joins those names to the public SRD magic records.
+- Extracts the six explicitly implemented worn accessories from the SRD magic
+  records.
+- Normalizes costs to copper for deterministic sorting.
+- Records source names, categories, properties, damage, weight, and range data.
+- Applies only the seven intentional Nightforge battle-map range overrides.
+- Leaves thrown ranges source-authentic.
+- Refuses generation if any required source record or exact count is missing.
+
+Exact generated counts:
+
+- 36 weapons.
+- 4 ammunition types.
+- 13 armour entries, including Shield.
+- 183 mundane gear entries.
+- 113 inert non-battle magic items.
+- 6 implemented worn magic items.
+- 355 unique item IDs in the combined catalog.
+
+A source manifest records SHA-256 identities for all three inputs and the
+generated runtime module. The Phase 5 verifier rejects any unexplained change
+to the generated artifact.
+
+
+50. CATALOG SEARCH, FILTERS, AND SORTING
+----------------------------------------
+
+The Add item drawer exposes backed controls for:
+
+- Text search.
+- Item type.
+- Weapon class.
+- Armour class.
+- Gear category.
+- Magic rarity.
+- Weapon property.
+- Damage type.
+- Range band.
+- Name A-Z.
+- Cost low-to-high.
+- Cost high-to-low.
+
+Unpriced magic items remain after priced records in either cost direction.
+The result count is live, the result area scrolls inside the Nightforge drawer,
+owned quantities are shown, and an empty filtered result has an honest state.
+
+Intentional ranged values:
+
+- Blowgun: 25/50 feet.
+- Sling: 30/60 feet.
+- Hand Crossbow: 40/80 feet.
+- Shortbow: 40/80 feet.
+- Light Crossbow: 60/120 feet.
+- Heavy Crossbow: 80/160 feet.
+- Longbow: 80/160 feet.
+
+
+51. INVENTORY CONTRACT AND RECOVERY
+-----------------------------------
+
+Implemented inventory behavior:
+
+- Every stack is stored as itemId plus a positive integer quantity.
+- Duplicate item IDs merge during normalization.
+- Quantity zero removes the stack.
+- Active operations reject unknown item IDs.
+- Normalization removes unknown entries from active inventory and retains their
+  IDs in recoveryDiagnostics.unknownInventoryItemIds.
+- Removing an item normalizes main hand, off hand, armour, shield,
+  enchantments, and worn effects.
+- Ammunition uses its SRD bundle size in catalog and Gear quantity workflows.
+- A separate non-catalog workflow supports individual-unit changes for the
+  later combat ammunition phase.
+- Inventory, loadout, enchantments, and worn state survive repository reload.
+
+The Gear header displays both unique-stack and total-unit summaries. Its search
+field filters only the Hero's owned inventory.
+
+
+52. EQUIPMENT LEGALITY
+----------------------
+
+The independently written equipment domain enforces:
+
+- Only owned weapons can occupy either hand.
+- Only owned body armour can occupy the armour slot.
+- Only an owned Shield can occupy the shield slot.
+- Equipping the same weapon in both hands requires quantity two.
+- An off-hand weapon requires an owned main-hand weapon.
+- Both dual-wielded weapons must be Light melee weapons.
+- A true Two-Handed weapon requires an empty off hand.
+- A true Two-Handed weapon cannot be used with a shield.
+- A shield requires a free off hand.
+- Persisted illegal combinations normalize to a safe legal state.
+- Versatile uses its larger damage die only when both the off hand and shield
+  slots are empty.
+- The attack-selection helper returns equipped weapons only.
+
+Illegal actions return a stable failure and leave the persisted Hero unchanged.
+The Gear continuation shows the current main hand, off hand, armour, and shield
+through the existing Nightforge field language and explains rejected changes.
+
+
+53. ENCHANTMENTS AND WORN MAGIC
+-------------------------------
+
+Implemented enchantments:
+
+- Owned weapons accept +1 through +3 to attack and damage.
+- Owned armour and Shield accept +1 through +3 to Armour Class.
+- Bonuses remain keyed by stable item ID.
+- Values clamp at +3 and are removed at +0.
+- Ammunition, mundane gear, inert magic items, and unowned equipment are
+  rejected.
+
+Implemented worn effects:
+
+- Bracers of Archery: +2 ranged weapon damage.
+- Bracers of Defense: +2 AC while unarmoured and shieldless.
+- Cloak of Protection: +1 AC and +1 calculated saving throws.
+- Ring of Protection: +1 AC and +1 calculated saving throws.
+- Ioun Stone of Mastery: +1 attacks, including the Wizard attack scaffold.
+- Ioun Stone of Protection: +1 AC.
+
+Every effect requires ownership and the Worn state. Effects stack, and no
+attunement cap is imposed. Removing the item removes its active effect.
+
+
+54. NIGHTFORGE GEAR INTERFACE
+-----------------------------
+
+The previously disabled Gear chapter now uses real Hero inventory while
+preserving the established Nightforge composition:
+
+- Existing loot rows render owned inventory.
+- Existing steppers control quantity and enchantment.
+- Existing Wear/Worn treatment controls the six implemented accessories.
+- Existing Remove glyph removes the complete stack.
+- Add item opens a Nightforge drawer.
+- Selecting an owned loot row opens a conditional item/equipment drawer.
+- Weapon, body-armour, Shield, wearable, and inert-item states receive only the
+  controls applicable to that item.
+- Loadout controls continue below the existing loot list.
+- Drawers close from their close button, backdrop, and Escape.
+- Gear drawers are portalled at document level in the browser.
+- Empty inventory and empty catalog search have explicit Nightforge states.
+
+All new conditional styling is confined to functional-states.css and every new
+selector begins with the nf-state namespace. No permanent Nightforge stylesheet
+or glyph source changed.
+
+
+55. FILES ADDED
+---------------
+
+- scripts/generate-phase5-catalogs.mjs
+  Deterministic clean-room catalog generator with exact-count gates.
+
+- scripts/phase5-catalog-manifest.json
+  Source and generated-artifact SHA-256 evidence.
+
+- src/domain/catalog.generated.js
+  Static runtime catalog generated from the documented SRD inputs.
+
+- src/domain/catalog.js
+  Combined index, facets, subtitles, cost handling, range bands, filters, and
+  sorting.
+
+- src/domain/items.js
+  Inventory normalization and operations, equipment legality, loadout repair,
+  enchantments, worn effects, effective damage dice, and attack selection.
+
+- src/screens/GearChapter.jsx
+  Functional Nightforge Gear chapter, catalog drawer, item drawer, and loadout
+  continuation.
+
+- src/phase5.test.js
+  Catalog, inventory, equipment, magic, derivation, and reload tests.
+
+- scripts/phase5-render-smoke.mjs
+  Server-render verification for the Gear chapter and drawer states.
+
+- scripts/verify-phase5.mjs
+  Exact counts, generated-source integrity, visual hashes, scoped CSS,
+  integration, clean-room, storage isolation, and text-encoding verifier.
+
+
+56. FILES UPDATED
+-----------------
+
+- src/domain/records.js
+  Catalog-aware inventory normalization, recovery diagnostics, and legal
+  equipment normalization.
+
+- src/domain/heroes.js
+  Real equipment lookup and implemented worn AC, save, attack, and ranged
+  damage contributions.
+
+- src/screens/HeroesScreen.jsx
+  Enables the existing Gear chapter and connects the functional continuation.
+
+- src/styles/functional-states.css
+  Adds only nf-state-scoped functional drawer, catalog, loadout, empty, and
+  responsive states.
+
+- src/phase4.test.js
+  Supplies owned equipment to the Phase 4 derivation fixture now that Phase 5
+  enforces the ownership invariant.
+
+- scripts/phase4-render-smoke.mjs and scripts/verify-phase4.mjs
+  Recognize the later-phase Gear integration without weakening Phase 4 checks.
+
+- package.json
+  Adds Phase 5 render and structural verification to the complete gate.
+
+
+57. VERIFICATION EVIDENCE
+-------------------------
+
+Full command:
+
+    npm run verify
+
+Result: Pass.
+
+- Node test suite: 95 passed, 0 failed.
+- Phase 2 render smoke: Pass.
+- Phase 3 render smoke: Pass.
+- Phase 4 render smoke: Pass.
+- Phase 5 render smoke: Pass.
+- Phase 1 verifier: Pass.
+- Phase 2 verifier: Pass.
+- Phase 3 verifier: Pass.
+- Phase 4 verifier: Pass.
+- Phase 5 verifier: Pass.
+- Production Vite build: Pass.
+- Permanent Nightforge visual hashes: unchanged.
+- Protected heroes.css hash: unchanged.
+- Functional-state CSS selectors: fully nf-state scoped.
+- Runtime references to original Roll30 files: none.
+- Original Roll30 save identifiers used by runtime: none.
+- Generated catalog SHA-256: matches the recorded source manifest.
+- Nightforge live development server: HTTP 200 at completion.
+
+The in-app browser control surface was unavailable in this session. Interactive
+state coverage was therefore performed with the Phase 5 render suite, pure
+domain event tests, repository reload tests, production compilation, and the
+running-server HTTP check. No claim of screenshot or automated browser-click
+comparison is made.
+
+
+58. UI AND DATA BOUNDARY AUDIT
+------------------------------
+
+- No Roll30 UI, UX, layout, JSX, CSS, component, catalog module, or runtime
+  implementation was copied.
+- No Roll30 characters, games, Scenes, artwork, battles, browser saves, or
+  inventory records were imported or migrated.
+- Catalog records were regenerated from documented SRD inputs, not copied from
+  the original generated catalog modules.
+- The original application was not imported or referenced by Nightforge
+  runtime or tests.
+- Nightforge continues using only its isolated storage identifiers.
+- All permanent Nightforge visual files remain byte-identical to baseline.
+- The Gear implementation reuses Nightforge's own existing Gear landmarks and
+  visual primitives.
+- No Phase 6 Table, Phase 7 Setup, or later combat behavior was pulled forward.
+
+
+59. PHASE 5 COMPLETION STATEMENT
+--------------------------------
+
+Every Phase 5 plan requirement has direct implementation and verification
+evidence:
+
+- Exact catalogs: generated, counted, hashed, and tested.
+- Filters and sorting: every specified field and direction tested.
+- Ranges: all seven intentional overrides and source-authentic thrown examples
+  tested.
+- Inventory: stack normalization, unknown recovery, zero removal, bundle steps,
+  individual-unit boundary, persistence, and removal repair tested.
+- Equipment: every ownership, quantity, Light, melee, Two-Handed, shield,
+  Versatile, normalization, and equipped-attack branch tested.
+- Enchantments: eligible types, ownership, clamping, attack, damage, and AC
+  contributions tested.
+- Worn magic: all six effects, conditions, stacking, ownership, removal, saves,
+  AC, attack, ranged damage, and no-cap behavior tested.
+- Gear chapter: owned rows, inventory search, Add item, full catalog filters,
+  quantity, enchantment, Wear/Worn, removal, item drawers, loadout continuation,
+  empty states, and document-level drawer boundary implemented and rendered.
+- Nightforge appearance: permanent visual hashes unchanged and new states
+  conditionally scoped.
+- Clean-room and fresh-data constraints: verified with no original runtime
+  imports, paths, storage use, or data migration.
+- Production build and complete Phase 1-5 verification gate: passed.
+
+Phase 5 is complete and ready for Phase 6.
+
+
 PHASE 4 POST-COMPLETION PATCH - TEXT ENCODING
 ==============================================
 

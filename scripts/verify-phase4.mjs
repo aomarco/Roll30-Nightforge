@@ -60,7 +60,7 @@ for (const behavior of [
 ]) {
   if (!heroes.includes(behavior)) failures.push(`Heroes screen is missing ${behavior}.`);
 }
-if (!heroes.includes('disabled title="Gear becomes functional in Phase 5"')) failures.push("Unavailable Gear chapter is not honestly disabled.");
+if (!heroes.includes("GearChapter")) failures.push("The later Phase 5 Gear integration is missing from the Heroes screen.");
 if (/CHARACTERS|ABILITIES = \[|INVENTORY|const noop/.test(heroes)) failures.push("Heroes screen still contains prototype fixture data or handlers.");
 if (!commands.includes("const updateHero")) failures.push("Hero transition policy is not enforced by application commands.");
 if (!records.includes("normalizeBaseAbilities")) failures.push("Hero records do not enforce point-buy normalization.");

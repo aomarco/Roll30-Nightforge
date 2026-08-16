@@ -1,3 +1,6 @@
+import { ITEM_BY_ID } from "./catalog.js";
+import { wornMagicBonuses } from "./items.js";
+
 export const ABILITY_KEYS = Object.freeze(["str", "dex", "con", "int", "wis", "cha"]);
 
 export const ABILITIES = Object.freeze([
@@ -220,7 +223,7 @@ export function computeArmorClass({
   return armorClass + Number(acBonus || 0);
 }
 
-export function deriveHero(hero, { equipmentById = {}, acBonus = 0 } = {}) {
+export function deriveHero(hero, { equipmentById = ITEM_BY_ID, acBonus = 0 } = {}) {
   const selectedClass = classById(hero?.classId);
   const race = raceById(hero?.raceId);
   const selectedSubrace = subraceById(race.id, hero?.subraceId);
@@ -241,6 +244,7 @@ export function deriveHero(hero, { equipmentById = {}, acBonus = 0 } = {}) {
   const spellAbilityModifier = selectedClass.spellcasting
     ? abilityModifier(finalAbilities[selectedClass.spellcasting.ability])
     : null;
+  const magicBonuses = wornMagicBonuses(hero, equipmentById);
 
   return {
     class: selectedClass,
@@ -262,18 +266,22 @@ export function deriveHero(hero, { equipmentById = {}, acBonus = 0 } = {}) {
       shield,
       armorBonus: hero?.enchantments?.[hero?.armorId] || 0,
       shieldBonus: hero?.enchantments?.[hero?.shieldId] || 0,
-      acBonus,
+      acBonus: Number(acBonus || 0) + magicBonuses.ac,
     }),
     initiative: abilityModifier(finalAbilities.dex),
     baseSpeed: race.speed,
     speed,
     size: race.size,
+    saveBonus: magicBonuses.save,
+    attackBonus: magicBonuses.attack,
+    rangedDamageBonus: magicBonuses.rangedDamage,
+    magicBonuses,
     languages: [...new Set([...grantedLanguages(race.id, selectedSubrace?.id), ...(hero?.languages || [])])],
     spellcasting: selectedClass.spellcasting
       ? {
           ability: selectedClass.spellcasting.ability,
           saveDc: 8 + proficiency + spellAbilityModifier,
-          attackBonus: proficiency + spellAbilityModifier,
+          attackBonus: proficiency + spellAbilityModifier + magicBonuses.attack,
           slots: selectedClass.spellcasting.slots,
           spells: selectedClass.spellcasting.spells,
         }
@@ -283,7 +291,8 @@ export function deriveHero(hero, { equipmentById = {}, acBonus = 0 } = {}) {
 
 export const saveModifier = (hero, derived, ability) =>
   derived.abilityModifiers[ability] +
-  (hero.saveProficiencies?.includes(ability) ? derived.proficiency : 0);
+  (hero.saveProficiencies?.includes(ability) ? derived.proficiency : 0) +
+  Number(derived.saveBonus || 0);
 
 export const skillModifier = (hero, derived, skill) =>
   derived.abilityModifiers[skill.ability] +

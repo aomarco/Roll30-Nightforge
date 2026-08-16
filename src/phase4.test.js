@@ -253,6 +253,10 @@ test("initiative, speed, size, armour AC, shield AC, and heavy penalty derive co
     {
       raceId: "halfling",
       baseAbilities: { str: 10, dex: 14 },
+      inventory: [
+        { itemId: "chain-mail", quantity: 1 },
+        { itemId: "shield", quantity: 1 },
+      ],
       armorId: "chain-mail",
       shieldId: "shield",
       enchantments: { "chain-mail": 1, shield: 2 },

@@ -1,0 +1,19 @@
+{
+  "sources": {
+    "5e-SRD-Equipment.json": "AA5E99E4DAD50143467568A3DE653D53D1D39C2C2AA6AC74B172F457F6315AC1",
+    "5e-SRD-Magic-Items.json": "9A6F928CBF36B268B02E09DC116995EFCE8A74380DF0450E197117886B64993D",
+    "MAGIC_ITEM_FILE_SYSTEM.txt": "B2605F268DC010FB9A19FFB95084F90C48A771ECEC7601AF654CA06545F0EB09"
+  },
+  "generated": {
+    "file": "src/domain/catalog.generated.js",
+    "sha256": "BC027A14CE45BCCC0D9FC6EABF4A5D77BB6D2E7378214793C9A55AFDBF43B358"
+  },
+  "counts": {
+    "weapons": 36,
+    "ammunition": 4,
+    "armor": 13,
+    "gear": 183,
+    "inertMagicItems": 113,
+    "wornMagicItems": 6
+  }
+}

@@ -31,6 +31,7 @@ import {
   skillModifier,
   subraceById,
 } from "../domain/heroes.js";
+import GearChapter from "./GearChapter.jsx";
 
 const okay = () => ({ ok: true });
 const CLASS_ICONS = { fighter: Sword, wizard: Wand2 };
@@ -334,7 +335,7 @@ export default function HeroesScreen({
             <nav className="chapters">
               <button className={"chapter" + (chapter === "identity" ? " on" : "")} onClick={() => setChapter("identity")}>Identity</button>
               <button className={"chapter" + (chapter === "abilities" ? " on" : "")} onClick={() => setChapter("abilities")}>Abilities</button>
-              <button className="chapter nf-state-disabled" disabled title="Gear becomes functional in Phase 5">Gear</button>
+              <button className={"chapter" + (chapter === "gear" ? " on" : "")} onClick={() => setChapter("gear")}>Gear</button>
             </nav>
 
             {chapter === "identity" && (
@@ -494,6 +495,9 @@ export default function HeroesScreen({
                   )}
                 </div>
               </section>
+            )}
+            {chapter === "gear" && (
+              <GearChapter key={activeHero.id} hero={activeHero} apply={apply} busy={busy} />
             )}
           </>
         )}

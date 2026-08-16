@@ -89,7 +89,7 @@ try {
   assert.match(identity, /Lawful Good/);
   assert.match(identity, /Soldier/);
   assert.match(identity, /Dwarvish · granted/);
-  assert.match(identity, /Gear becomes functional in Phase 5/);
+  assert.match(identity, />Gear</);
   assert.doesNotMatch(identity, /Longsword|Plate Armor|Potion of Healing/);
 
   const fighterAbilities = renderToStaticMarkup(
@@ -167,7 +167,7 @@ try {
     assert.doesNotMatch(markup, /[\u00c2\u00c3\ufffd]|\u00e2[^\s]/u);
   }
 
-  console.log("Phase 4 render smoke passed for empty, Identity, Fighter guidance, Wizard scaffold, retirement, disabled Gear, and error states.");
+  console.log("Phase 4 render smoke passed for empty, Identity, Fighter guidance, Wizard scaffold, retirement, later-phase Gear integration, and error states.");
 } finally {
   await vite.close();
 }
