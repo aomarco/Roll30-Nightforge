@@ -179,8 +179,9 @@ export const updateToken = (tokens, tokenId, patch) =>
 export const removeToken = (tokens, tokenId) =>
   normalizeTableTokens(tokens).filter((token) => token.id !== tokenId);
 
-export function createManualToken({ id, ordinal = 0, position, name } = {}) {
+export function createManualToken({ id, ordinal = 0, position, name, ...input } = {}) {
   return normalizeTableToken({
+    ...input,
     id,
     name: name || `Token ${ordinal + 1}`,
     position,
@@ -381,6 +382,29 @@ export const createTurnResources = (token) => ({
   offHandAttackHand: null,
 });
 
+export function normalizeTurnResources(resources, token) {
+  const defaults = createTurnResources(token);
+  const movementBase = Math.max(defaults.movementBase, Math.floor(finite(resources?.movementBase, defaults.movementBase)));
+  const movementSpent = Math.max(0, Math.min(movementBase, Math.floor(finite(resources?.movementSpent))));
+  const swapChoice = ["attack", "movement"].includes(resources?.swapChoice) ? resources.swapChoice : null;
+  return {
+    movementBase,
+    movementSpent,
+    actionSpent: Boolean(resources?.actionSpent),
+    actionType: typeof resources?.actionType === "string" && resources.actionType.trim() ? resources.actionType.trim() : null,
+    bonusActionSpent: Boolean(resources?.bonusActionSpent),
+    bonusActionType: typeof resources?.bonusActionType === "string" && resources.bonusActionType.trim() ? resources.bonusActionType.trim() : null,
+    dashed: Boolean(resources?.dashed),
+    swapped: Boolean(resources?.swapped),
+    swapChoice,
+    mainWeaponAttacked: Boolean(resources?.mainWeaponAttacked),
+    mainAttackWeaponId: typeof resources?.mainAttackWeaponId === "string" ? resources.mainAttackWeaponId : null,
+    offHandAttackAvailable: Boolean(resources?.offHandAttackAvailable),
+    offHandWeaponId: typeof resources?.offHandWeaponId === "string" ? resources.offHandWeaponId : null,
+    offHandAttackHand: ["mainHand", "offHand"].includes(resources?.offHandAttackHand) ? resources.offHandAttackHand : null,
+  };
+}
+
 export function normalizeEncounter(encounter, tokens = []) {
   if (!encounter || !["active", "complete"].includes(encounter.status)) return null;
   const tokenIds = new Set(normalizeTableTokens(tokens).map((token) => token.id));
@@ -391,14 +415,19 @@ export function normalizeEncounter(encounter, tokens = []) {
     tokenId,
     Math.floor(finite(encounter.initiatives?.[tokenId])),
   ]));
+  const activeIndex = Math.max(0, Math.min(Math.max(0, initiativeOrder.length - 1), Math.floor(finite(encounter.activeIndex))));
+  const activeToken = normalizeTableTokens(tokens).find((token) => token.id === initiativeOrder[activeIndex]);
+  const resourceInput = activeToken
+    ? encounter.resources?.[activeToken.id] || encounter.resources
+    : null;
   return {
     version: 1,
     status: encounter.status,
     initiativeOrder,
     initiatives,
-    activeIndex: Math.max(0, Math.min(Math.max(0, initiativeOrder.length - 1), Math.floor(finite(encounter.activeIndex)))),
+    activeIndex,
     round: Math.max(1, Math.floor(finite(encounter.round, 1))),
-    resources: encounter.resources && typeof encounter.resources === "object" ? encounter.resources : {},
+    resources: activeToken ? { [activeToken.id]: normalizeTurnResources(resourceInput, activeToken) } : {},
     battleItems: Array.isArray(encounter.battleItems) ? encounter.battleItems : [],
     ammoSpentByToken: encounter.ammoSpentByToken && typeof encounter.ammoSpentByToken === "object" ? encounter.ammoSpentByToken : {},
     winnerTokenId: tokenIds.has(encounter.winnerTokenId) ? encounter.winnerTokenId : null,

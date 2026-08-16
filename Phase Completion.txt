@@ -2423,3 +2423,328 @@ Every Phase 7 requirement has direct implementation and verification evidence:
   import, encoding integrity, full regressions, and production build: proven.
 
 Phase 7 is complete and ready for Phase 8.
+
+
+================================================
+NIGHTFORGE FUNCTIONALITY PORT - PHASE 8 COMPLETE
+================================================
+
+Date: 17 August 2026
+Phase: 8 - Initiative and movement
+Previous completed phase: Phase 7 - Battle Setup
+
+
+88. PHASE 8 RESULT
+------------------
+
+Phase 8 is complete.
+
+Active Battles now have a persisted turn engine and a clean-room movement
+system connected to the existing Nightforge Table. Initiative order drives the
+active token, each turn owns explicit movement and command resources, and the
+active token can preview and complete wall-aware movement without leaving its
+origin during preview. Dash, weapon Swap, and manual End Turn are available
+through a Nightforge-native command drawer.
+
+No original Roll30 UI, UX, layout, component, source code, save data, character,
+game, or map was copied or imported. The implementation is independently
+written from the documented behavior contract and stays within Nightforge's
+existing Table composition.
+
+
+89. INITIATIVE AND ACTIVE-TURN CONTEXT
+--------------------------------------
+
+The Phase 7 encounter start remains the only initial initiative roll:
+
+- Starting Battle still requires two or more tokens.
+- Each token rolls d20 plus its persisted initiative bonus.
+- Totals sort descending.
+- Ties retain original token-list order.
+- Round begins at 1.
+- Active index begins at 0.
+- Conditions and old physical battle items begin cleared.
+- Only the first active token receives fresh turn resources.
+
+Phase 8 now consumes that persisted order rather than token-list display order.
+Every move and command validates the active token from the encounter record.
+Inactive, missing, defeated, immobilized, and incapacitated branches return
+stable error codes with honest recovery guidance.
+
+
+90. TURN RESOURCES
+------------------
+
+The active turn resource record now normalizes and persists:
+
+- Base movement allowance.
+- Movement already spent.
+- Action spent state and Action type.
+- Bonus Action spent state and type.
+- Dash state.
+- weapon-Swap state.
+- Swap branch choice: attack, movement, or undecided.
+- Deferred main/off-hand attack fields required by Phase 9.
+
+Movement maximum never normalizes below the token's Speed. Spent movement is
+bounded to the active maximum. Repository reload tests prove that active index,
+movement spent, Dash state, Swap state, loadout, and token position survive a
+fresh repository instance.
+
+
+91. CLEAN-ROOM WALL-AWARE PATHFINDING
+-------------------------------------
+
+`src/domain/combat.js` supplies a newly written eight-directional A* router:
+
+- One traversed cell costs exactly 5 feet, including a diagonal cell.
+- Search is capped at 4,000 visited cells.
+- Routes stay inside the actual Table grid.
+- Other tokens and chests block cells.
+- Diagonal corner cutting through blocked cells is rejected.
+- Both full walls and half-walls block crossed movement edges.
+- Hidden persisted walls remain mechanically active.
+- Multi-segment wall polylines are honored.
+- Route cost uses every traversed cell, including detours.
+- An occupied requested destination traces a route to the target, then steps
+  backward to the last legal empty cell.
+- An unreachable or search-capped route leaves the token at its origin.
+
+The route implementation operates only on normalized Nightforge Scene records
+and percentage geometry. It has no dependency on the original Roll30 runtime.
+
+
+92. MOVEMENT INTERACTION AND FEEDBACK
+-------------------------------------
+
+During an active Battle, only the active initiative token can begin movement.
+Pointer handling preserves the exact grab offset and uses the current world and
+grid measurements.
+
+While dragging:
+
+- The persisted and rendered token remains at its origin.
+- The origin cell is marked white.
+- The reachable route is green.
+- The over-budget remainder is red and dashed.
+- The accepted landing cell and accepted feet are shown.
+- A non-colour status message reports a legal, over-budget, or invalid route.
+
+On release:
+
+- A legal route persists the accepted landing position and complete cost.
+- A drop beyond allowance moves only to the farthest reachable green cell.
+- An occupied destination steps backward along the route.
+- An invalid route does not persist a token move.
+- Successful movement receives a conditional Nightforge arrival treatment.
+- Movement may be split into multiple moves.
+- Remaining movement stays usable before and after a normal Attack state.
+- No move advances initiative automatically.
+
+
+93. DASH
+--------
+
+Dash is a real turn command:
+
+- Spends Action and records Action type `dash`.
+- Adds one complete current Speed value to movement maximum.
+- Preserves movement already spent.
+- Does not move the token automatically.
+- Leaves Bonus Action available.
+- Does not end the turn.
+- Prevents Attack and weapon Swap.
+- Is unavailable after Attack, Swap, prior Dash, defeat, or incapacitation.
+
+Every unavailable branch has a specific visible explanation in the Combat
+Commands drawer.
+
+
+94. WEAPON SWAP BRANCHES
+------------------------
+
+Weapon Swap is available once per turn through a complete owned-weapon main and
+off-hand draft. The Phase 5 equipment functions validate ownership, quantity,
+Light/off-hand rules, Two-Handed conflicts, and shield conflicts before the
+loadout can be committed.
+
+All three ordering branches are implemented and tested:
+
+- Swap then Attack keeps Attack available for Phase 9, establishes the future
+  disadvantage branch, and blocks movement after that attack choice.
+- Swap then Move selects the movement branch, blocks Attack and Dash, and keeps
+  unused movement available.
+- Move then Swap immediately selects the movement branch, blocks Attack and
+  Dash, and keeps unused movement available.
+
+Swap never spends movement, moves the token, or ends the turn. It is unavailable
+after Attack, Dash, a prior Swap, defeat, or incapacitation.
+
+
+95. MANUAL END TURN
+-------------------
+
+End Turn is the only normal initiative-advance path:
+
+- Movement, Dash, and Swap never auto-advance.
+- The next defeated token is skipped.
+- A wrap increments the round exactly once.
+- The next living token receives fresh resources from its Speed.
+- All unused movement and prior-turn Action/Bonus/Swap state are discarded.
+- The selected token follows the new active token after a successful save.
+- Movement preview, pointer interaction, and command drawer close.
+- A no-living-token state reports that completion belongs to Phase 10.
+
+The End Turn control is located independently in the drawer footer and remains
+enabled after Action has been spent.
+
+
+96. NIGHTFORGE COMMAND UI
+-------------------------
+
+The existing Action resource pip is now a semantic button that opens Combat
+Commands without changing the turn-track layout. The drawer shows actual
+movement, Action, Bonus, and Swap state.
+
+- Attack is visibly disabled and labeled for Phase 9.
+- Dash is enabled only when its exact resource branch permits it.
+- Swap exposes the legal owned-weapon draft.
+- End Turn stays available regardless of Action-spent state.
+- The Bonus resource is a semantic disabled button until Phase 9.
+- Disabled commands expose their actual reason instead of appearing functional.
+- Escape and the veil close transient command state without persistence.
+
+All Phase 8 visuals are conditional `.nf-state-` selectors in
+`src/styles/functional-states.css`. The permanent Nightforge stylesheets,
+`src/ui/Glyphs.jsx`, two-dock composition, HUD landmarks, phase capsule, turn
+track, typography, colour system, and Scene Settings behavior remain unchanged.
+
+
+97. PERSISTENCE AND FAILURE SAFETY
+----------------------------------
+
+Movement, Dash, Swap, and End Turn produce explicit Scene patches and use the
+existing Nightforge application update command. No command writes directly to
+global or original Roll30 storage.
+
+- Successful mid-turn state survives repository reconstruction.
+- Token position and weapon loadout survive reload.
+- Active initiative and round survive reload.
+- A failed command write preserves the complete last valid Scene.
+- Failed commands show actionable Nightforge error feedback.
+- Preview state, camera state, and arrival state remain transient.
+
+
+98. FILES ADDED
+---------------
+
+- `src/domain/combat.js`
+  Active-turn context, conditions, movement currency, wall geometry,
+  eight-directional A*, Dash, Attack availability, Swap, and End Turn.
+
+- `src/screens/CombatCommandsDrawer.jsx`
+  Nightforge-native real-resource command drawer and legal weapon-Swap draft.
+
+- `src/phase8.test.js`
+  Twenty-eight focused resource, geometry, route, movement, Dash, Swap, End
+  Turn, reload, and failed-write tests.
+
+- `scripts/phase8-render-smoke.mjs`
+  Server-rendered matrices for route colours, origin retention, initiative,
+  resources, command reasons, Swap draft, End Turn reachability, and errors.
+
+- `scripts/verify-phase8.mjs`
+  Phase contract, integration, scoped-CSS, frozen-visual, clean-room,
+  save-identifier, encoding, and complete-gate verification.
+
+
+99. FILES UPDATED
+-----------------
+
+- `src/domain/table.js`
+  Adds active-resource normalization and forwards complete manual-token input.
+
+- `src/screens/TableScreen.jsx`
+  Connects active-token movement preview/commit, route feedback, real movement
+  currency, semantic resource commands, Dash, Swap, and End Turn.
+
+- `src/styles/functional-states.css`
+  Adds only scoped movement-route, arrival, command-pip, resource-grid, and
+  command-drawer states.
+
+- `package.json`
+  Adds the Phase 8 render and structural gates to `npm run verify`.
+
+
+100. VERIFICATION EVIDENCE
+--------------------------
+
+Complete command executed:
+
+    npm run verify
+
+Result: PASS.
+
+- Node test suite: 159 passed, 0 failed, 0 skipped.
+- Phase 8 focused suite: 28 passed.
+- Phase 2 through Phase 8 render smoke suites: Pass.
+- Phase 1 through Phase 8 structural verifiers: Pass.
+- Frozen permanent Nightforge visual hashes: Pass.
+- Functional CSS scope audit: Pass.
+- Original Roll30 runtime path/import scan: Pass.
+- Original Roll30 save-identifier scan: Pass.
+- Runtime malformed UTF-8/mojibake scan: Pass.
+- Repository reload and injected write-failure coverage: Pass.
+- Production Vite build: Pass; 1,816 modules transformed.
+- `git diff --check`: Pass.
+- Live development server: HTTP 200 at `http://127.0.0.1:5310/`.
+- Entry HTML byte inspection: valid UTF-8 title and description.
+
+The in-app browser control surface was unavailable in this session. Interactive
+coverage is therefore evidenced by the pure pointer/grid model, domain command
+tests, repository reload/failure injection, server-rendered state matrices,
+production compilation, and running-server response. No automated browser
+click-through or screenshot comparison is claimed.
+
+
+101. PHASE BOUNDARY AUDIT
+-------------------------
+
+Phase 8 implements initiative consumption, turn resources, movement routing,
+Dash, weapon Swap, and End Turn. Later behavior remains correctly deferred:
+
+- Attack selection, range SVG, line of sight, attack rolls, damage, condition
+  controls/effects, Bonus attacks, and combat cinematics remain Phase 9.
+- The Attack command is disabled rather than falsely functional.
+- The Bonus command is disabled rather than falsely functional.
+- Battle chest looting, thrown physical weapons, retrieval, ammunition,
+  winner resolution, restart, and completed-encounter restoration remain
+  Phase 10.
+- Broad responsive, reduced-motion, corrupt-data, and accessibility hardening
+  remain Phase 11.
+
+
+102. PHASE 8 COMPLETION STATEMENT
+---------------------------------
+
+Every Phase 8 requirement has direct implementation and verification evidence:
+
+- Persisted initiative order, stable active context, round, and fresh resources:
+  proven.
+- Five-foot splittable movement and before/after-Attack compatibility: proven.
+- Origin-retained preview with white, green, and red route states: proven.
+- Over-budget truncation, occupied-goal stepback, and invalid-route retention:
+  proven.
+- Clean-room eight-directional A*, token/chest blocking, full/half hidden-wall
+  blocking, complete detour cost, and 4,000-cell cap: proven.
+- Immobilized movement rejection and conditional arrival feedback: proven.
+- Every Dash success and unavailable branch: proven.
+- Full legal weapon-Swap draft and every Swap ordering branch: proven.
+- Manual-only End Turn, defeated-token skipping, round wrap, resource refresh,
+  unused-resource discard, and transient-state closure: proven.
+- Honest semantic Action/Bonus controls and End Turn after Action spent: proven.
+- Reload survival and failed-write preservation: proven.
+- Nightforge UI protection, clean-room isolation, no data import, original-save
+  isolation, encoding integrity, full regressions, and production build: proven.
+
+Phase 8 is complete and ready for Phase 9.

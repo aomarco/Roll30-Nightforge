@@ -28,6 +28,18 @@ import {
 
 import { getItem } from "../domain/catalog.js";
 import {
+  activateDash,
+  attackActionAvailability,
+  dashAvailability,
+  endTurn,
+  movementMaximum,
+  movementRemaining,
+  moveActiveToken,
+  performWeaponSwap,
+  planActiveMovement,
+  swapAvailability,
+} from "../domain/combat.js";
+import {
   adjustArtworkBy,
   applySetupTokenEquipment,
   canOccupySetupPosition,
@@ -59,6 +71,7 @@ import {
 } from "../domain/table.js";
 import { Pip } from "../ui/Glyphs.jsx";
 import BattleSetupInspector from "./BattleSetupInspector.jsx";
+import CombatCommandsDrawer from "./CombatCommandsDrawer.jsx";
 
 const CONDITIONS = [
   "Blinded", "Charmed", "Frightened", "Grappled", "Poisoned",
@@ -160,6 +173,28 @@ function WallAndRulerLayer({ walls, wallsVisible, wallDraft, wallHover, rulerDra
   );
 }
 
+function MovementRouteLayer({ preview }) {
+  if (!preview?.route?.length) return null;
+  const reachable = preview.route.slice(0, (preview.reachableIndex || 0) + 1);
+  const over = preview.route.slice(preview.reachableIndex || 0);
+  const points = (route) => route.map((point) => `${point.xPercent},${point.yPercent}`).join(" ");
+  const start = preview.route[0];
+  const landing = preview.route[preview.landingIndex || 0] || start;
+  return (
+    <>
+      <svg className="nf-state-table-movement-route" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        {reachable.length > 1 && <polyline className="nf-state-table-movement-reachable" points={points(reachable)} fill="none" vectorEffect="non-scaling-stroke" />}
+        {over.length > 1 && <polyline className="nf-state-table-movement-over" points={points(over)} fill="none" vectorEffect="non-scaling-stroke" />}
+        <circle className="nf-state-table-movement-start" cx={start.xPercent} cy={start.yPercent} r="0.75" vectorEffect="non-scaling-stroke" />
+        {preview.landingIndex > 0 && <circle className="nf-state-table-movement-stop" cx={landing.xPercent} cy={landing.yPercent} r="0.75" vectorEffect="non-scaling-stroke" />}
+      </svg>
+      <span className={`nf-state-table-movement-label tag numeral${preview.overBudget ? " nf-state-table-movement-label-over" : ""}`} style={{ left: `${landing.xPercent}%`, top: `${landing.yPercent}%` }}>
+        {preview.costFeet} ft{preview.overBudget ? " · limit" : ""}
+      </span>
+    </>
+  );
+}
+
 function TableToolsDrawer({
   isPlay,
   camera,
@@ -256,6 +291,10 @@ export default function TableScreen({
   initialSelectedId = undefined,
   initialSelectedChestId = null,
   initialAbandonOpen = false,
+  initialCommandOpen = false,
+  initialMovementPreview = null,
+  initialSwapOpen = false,
+  initialSwapDraft = null,
   suppliedArtworkUrl = null,
 }) {
   const isPlay = scene?.kind === "play" || mode === "play";
@@ -263,6 +302,7 @@ export default function TableScreen({
   const isSetup = !isPlay && !isBattle;
   const mapRef = useRef(null);
   const worldRef = useRef(null);
+  const arrivalTimerRef = useRef(null);
   const [camera, setCamera] = useState(() => normalizeCamera(initialCamera));
   const [mapView, setMapView] = useState(() => normalizeMapView(scene?.mapView));
   const [selectedId, setSelectedId] = useState(() => initialSelectedId === undefined ? scene?.tokens?.[0]?.id || null : initialSelectedId);
@@ -277,6 +317,9 @@ export default function TableScreen({
   const [wallHover, setWallHover] = useState(null);
   const [rulerDraft, setRulerDraft] = useState(initialRulerDraft);
   const [abandonOpen, setAbandonOpen] = useState(initialAbandonOpen);
+  const [commandOpen, setCommandOpen] = useState(initialCommandOpen);
+  const [movementPreview, setMovementPreview] = useState(initialMovementPreview);
+  const [arrivalId, setArrivalId] = useState(null);
   const [localError, setLocalError] = useState(null);
   const { url: artworkUrl, error: artworkError } = useArtworkUrl(scene, artworkRepository, suppliedArtworkUrl);
   const busy = persistence.status === "saving";
@@ -297,6 +340,10 @@ export default function TableScreen({
     ? rulerDistanceFeet(rulerDraft.start, rulerDraft.end, { width: worldRef.current.offsetWidth, height: worldRef.current.offsetHeight, gridSize: scene?.gridSize })
     : 0;
 
+  useEffect(() => () => {
+    if (arrivalTimerRef.current) clearTimeout(arrivalTimerRef.current);
+  }, []);
+
   useEffect(() => {
     setCamera({ ...DEFAULT_CAMERA });
     setMapView(normalizeMapView(scene?.mapView));
@@ -312,12 +359,21 @@ export default function TableScreen({
     setWallHover(null);
     setRulerDraft(null);
     setAbandonOpen(false);
+    setCommandOpen(false);
+    setMovementPreview(null);
+    setArrivalId(null);
     setLocalError(null);
   }, [scene?.id]);
 
   useEffect(() => {
     if (!interaction || interaction.kind !== "artwork") setMapView(normalizeMapView(scene?.mapView));
   }, [scene?.mapView?.scale, scene?.mapView?.x, scene?.mapView?.y]);
+
+  useEffect(() => {
+    setCommandOpen(false);
+    setMovementPreview(null);
+    setInteraction((current) => current?.kind === "movement" ? null : current);
+  }, [activeId]);
 
   const savePatch = (patch) => {
     if (!scene?.id) return { ok: false, message: "No active Scene is available." };
@@ -356,6 +412,10 @@ export default function TableScreen({
   useEffect(() => {
     const onKeyDown = (event) => {
       if (event.key !== "Escape") return;
+      if (commandOpen) {
+        setCommandOpen(false);
+        return;
+      }
       if (abandonOpen) {
         setAbandonOpen(false);
         return;
@@ -369,7 +429,7 @@ export default function TableScreen({
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [abandonOpen, activeTool, drawerOpen, wallDraft, walls]);
+  }, [abandonOpen, activeTool, commandOpen, drawerOpen, wallDraft, walls]);
 
   const localPoint = (event) => {
     const rect = worldRef.current?.getBoundingClientRect();
@@ -420,14 +480,16 @@ export default function TableScreen({
   };
 
   const onTokenPointerDown = (event, token) => {
-    if ((!isPlay && !isSetup) || activeTool || event.button !== 0) return;
+    if (activeTool || event.button !== 0) return;
+    const canDrag = isPlay || isSetup || (isBattle && token.id === active?.id);
+    if (!canDrag) return;
     event.stopPropagation();
     setSelectedId(token.id);
     setSelectedChestId(null);
     const pointer = localPoint(event);
     capturePointer(event.pointerId);
     setInteraction({
-      kind: "token",
+      kind: isBattle ? "movement" : "token",
       pointerId: event.pointerId,
       tokenId: token.id,
       offset: {
@@ -496,6 +558,13 @@ export default function TableScreen({
       });
       setChestPreview({ id: interaction.chestId, position, blocked });
     }
+    if (interaction.kind === "movement") {
+      const destination = {
+        xPercent: point.xPercent + interaction.offset.xPercent,
+        yPercent: point.yPercent + interaction.offset.yPercent,
+      };
+      setMovementPreview(planActiveMovement(scene, interaction.tokenId, destination, setupViewport()));
+    }
   };
 
   const onMapPointerUp = (event) => {
@@ -531,6 +600,23 @@ export default function TableScreen({
       else savePatch({ chests: updateChest(chests, interaction.chestId, { position }) });
       setChestPreview(null);
     }
+    if (interaction.kind === "movement") {
+      const destination = {
+        xPercent: point.xPercent + interaction.offset.xPercent,
+        yPercent: point.yPercent + interaction.offset.yPercent,
+      };
+      const moved = moveActiveToken(scene, interaction.tokenId, destination, setupViewport());
+      if (!moved.ok) setLocalError(moved);
+      else {
+        const saved = savePatch(moved.value);
+        if (saved.ok) {
+          setArrivalId(interaction.tokenId);
+          if (arrivalTimerRef.current) clearTimeout(arrivalTimerRef.current);
+          arrivalTimerRef.current = setTimeout(() => setArrivalId(null), 520);
+        }
+      }
+      setMovementPreview(null);
+    }
     setInteraction(null);
     try { mapRef.current?.releasePointerCapture?.(event.pointerId); } catch { /* pointer capture is optional */ }
   };
@@ -541,6 +627,7 @@ export default function TableScreen({
     if (interaction.kind === "token") setTokenPreview(null);
     if (interaction.kind === "chest") setChestPreview(null);
     if (interaction.kind === "ruler") setRulerDraft(null);
+    if (interaction.kind === "movement") setMovementPreview(null);
     setInteraction(null);
     try { mapRef.current?.releasePointerCapture?.(event.pointerId); } catch { /* pointer capture is optional */ }
   };
@@ -705,6 +792,45 @@ export default function TableScreen({
     return result;
   };
 
+  const useDash = () => {
+    const dashed = activateDash(scene);
+    if (!dashed.ok) {
+      setLocalError(dashed);
+      return dashed;
+    }
+    const result = savePatch(dashed.value);
+    if (result.ok) setCommandOpen(false);
+    return result;
+  };
+
+  const useWeaponSwap = (loadout) => {
+    const swapped = performWeaponSwap(scene, loadout);
+    if (!swapped.ok) {
+      setLocalError(swapped);
+      return swapped;
+    }
+    const result = savePatch(swapped.value);
+    if (result.ok) setCommandOpen(false);
+    return result;
+  };
+
+  const finishTurn = () => {
+    const ended = endTurn(scene);
+    if (!ended.ok) {
+      setLocalError(ended);
+      return ended;
+    }
+    const result = savePatch(ended.value);
+    if (result.ok) {
+      setSelectedId(ended.activeTokenId);
+      setSelectedChestId(null);
+      setCommandOpen(false);
+      setMovementPreview(null);
+      setInteraction(null);
+    }
+    return result;
+  };
+
   const toolLabel = activeTool === "artwork"
     ? "Drag the Table to adjust artwork"
     : activeTool === "wall-full"
@@ -718,6 +844,12 @@ export default function TableScreen({
     ? (scene?.encounter?.initiativeOrder || []).map((tokenId) => tableTokens.find((token) => token.id === tokenId)).filter(Boolean)
     : tableTokens;
   const activeResources = active ? scene?.encounter?.resources?.[active.id] : null;
+  const routePreview = movementPreview?.ok ? movementPreview.value : movementPreview;
+  const dashState = isBattle ? dashAvailability(scene) : { ok: false, message: "Battle is not active." };
+  const swapState = isBattle ? swapAvailability(scene) : { ok: false, message: "Battle is not active." };
+  const attackState = isBattle ? attackActionAvailability(scene) : { ok: false, message: "Battle is not active." };
+  const movementMax = active && activeResources ? movementMaximum(activeResources, active) : 0;
+  const movementLeft = active && activeResources ? movementRemaining(activeResources, active) : 0;
 
   return (
     <div className={`table nf-state-table-root${busy ? " nf-state-busy" : ""}`}>
@@ -745,6 +877,7 @@ export default function TableScreen({
             {!isPlay && <div className="map-grid nf-state-table-infinite-grid" aria-hidden="true" />}
             <div className="map-fog" aria-hidden="true" />
             <WallAndRulerLayer walls={walls} wallsVisible={wallsVisible} wallDraft={wallDraft} wallHover={wallHover} rulerDraft={rulerDraft} rulerFeet={rulerFeet} />
+            {isBattle && <MovementRouteLayer preview={routePreview} />}
             {!isPlay && visibleChests.map((chest) => (
               <button
                 key={chest.id}
@@ -761,7 +894,7 @@ export default function TableScreen({
             {visibleTokens.map((token) => (
               <button
                 key={token.id}
-                className={`piece${selectedId === token.id ? " on" : ""}${isBattle && token.id === active?.id ? " acting" : ""}${tokenPreview?.id === token.id && tokenPreview.blocked ? " blocked" : ""}`}
+                className={`piece${selectedId === token.id ? " on" : ""}${isBattle && token.id === active?.id ? " acting" : ""}${tokenPreview?.id === token.id && tokenPreview.blocked ? " blocked" : ""}${arrivalId === token.id ? " nf-state-table-arriving" : ""}`}
                 style={{ left: `${token.position.xPercent}%`, top: `${token.position.yPercent}%`, "--piece": token.color }}
                 onPointerDown={(event) => onTokenPointerDown(event, token)}
                 onClick={(event) => { event.stopPropagation(); setSelectedId(token.id); setSelectedChestId(null); }}
@@ -796,6 +929,7 @@ export default function TableScreen({
       </div>
 
       {toolLabel && <div className="nf-state-table-tool-status glass grained" role="status"><span className="tag tag-jade">{toolLabel}</span><button className="glyph" onClick={exitTool} title="Exit current tool" aria-label="Exit current tool"><X size={15} /></button></div>}
+      {movementPreview && <div className="nf-state-table-tool-status glass grained" role="status"><span className={`tag ${movementPreview.ok ? routePreview?.overBudget ? "tag-foe" : "tag-jade" : "tag-foe"}`}>{movementPreview.ok ? routePreview.overBudget ? `${routePreview.costFeet} ft reachable · ${routePreview.requestedFeet - routePreview.costFeet} ft over` : `${routePreview.costFeet} ft route · release to move` : movementPreview.message}</span></div>}
       {visibleError && !drawerOpen && <div className="nf-state-table-error glass" role="alert"><strong>Table change not saved</strong><span>{errorText(visibleError)}</span></div>}
 
       <aside className="dock dock-left glass grained">
@@ -842,9 +976,10 @@ export default function TableScreen({
         </> : selectedChest ? <><header className="dock-head"><span className="sigil sigil-lg nf-state-table-chest-sigil"><Package size={18} /></span><div><span className="kicker">Selected chest</span><h2>Battle chest</h2></div></header><div className="dock-body"><section className="unit"><div className="unit-top"><span className="unit-label">Contents</span><span className="tag">Locked in Battle</span></div><div className="nf-state-table-chest-owned">{selectedChest.inventory.map((entry) => <span key={entry.itemId}><strong>{getItem(entry.itemId)?.name || entry.itemId}</strong><em className="numeral">×{entry.quantity}</em></span>)}{!selectedChest.inventory.length && <p className="note">This chest is empty.</p>}</div><p className="note">Chest movement and inventory editing are disabled after Battle begins.</p></section></div></> : <div className="void-state"><span className="void-orb"><CircleDot size={26} /></span><h3>Nothing selected</h3><p>Pick a token on the map or in the cast list to inspect it.</p></div>}
       </aside>
 
-      {isBattle && active && <div className="track glass grained"><div className="track-round"><span className="kicker kicker-brass">Round</span><strong className="numeral">{scene.encounter.round}</strong></div><div className="track-div" /><ol className="track-order">{orderedTokens.map((token, index) => <li key={token.id} className={index === scene.encounter.activeIndex ? "now" : ""}><span className="track-face" style={{ background: token.color }}>{initials(token.name)}</span><span className="track-name">{token.name}</span><span className="track-init numeral">{scene.encounter.initiatives[token.id]}</span></li>)}</ol><div className="track-div" /><div className="track-res"><div className="res-move"><span className="kicker"><Wind size={11} style={{ verticalAlign: -1, marginRight: 5 }} />Movement</span><strong className="numeral">{activeResources?.movementBase || active.baseSpeed} / {active.baseSpeed} ft</strong><div className="meter" style={{ marginTop: 6 }}><i style={{ width: "100%" }} /></div></div><div className="res-pips"><span className="pip-key" title="Action behavior arrives in Phase 8"><Swords size={13} /><em>Action</em></span><span className="pip-key" title="Bonus behavior arrives in Phase 9"><ShieldHalf size={13} /><em>Bonus</em></span></div></div></div>}
+      {isBattle && active && <div className="track glass grained"><div className="track-round"><span className="kicker kicker-brass">Round</span><strong className="numeral">{scene.encounter.round}</strong></div><div className="track-div" /><ol className="track-order">{orderedTokens.map((token, index) => <li key={token.id} className={index === scene.encounter.activeIndex ? "now" : ""}><span className="track-face" style={{ background: token.color }}>{initials(token.name)}</span><span className="track-name">{token.name}</span><span className="track-init numeral">{scene.encounter.initiatives[token.id]}</span></li>)}</ol><div className="track-div" /><div className="track-res"><div className="res-move"><span className="kicker"><Wind size={11} style={{ verticalAlign: -1, marginRight: 5 }} />Movement</span><strong className="numeral">{movementLeft} / {movementMax} ft</strong><div className="meter" style={{ marginTop: 6 }}><i style={{ width: `${movementMax ? movementLeft / movementMax * 100 : 0}%` }} /></div></div><div className="res-pips"><button className={`pip-key nf-state-command-pip${activeResources?.actionSpent ? " spent" : ""}`} title="Open Combat Commands" aria-label="Open Combat Commands" onClick={() => setCommandOpen(true)}><Swords size={13} /><em>{activeResources?.actionSpent ? activeResources.actionType || "Spent" : "Action"}</em></button><button className={`pip-key nf-state-command-pip${activeResources?.bonusActionSpent ? " spent" : ""}`} title="Bonus Commands arrive in Phase 9" aria-label="Bonus Commands — Phase 9" disabled><ShieldHalf size={13} /><em>{activeResources?.bonusActionSpent ? "Spent" : "Bonus"}</em></button></div></div></div>}
 
       {drawerOpen && <TableToolsDrawer isPlay={isPlay} camera={camera} mapView={mapView} activeTool={activeTool} wallDraft={wallDraft} wallsVisible={wallsVisible} canAdjustArtwork={canAdjustArtwork} busy={busy} error={visibleError} close={() => setDrawerOpen(false)} zoomBy={zoomBy} resetCamera={() => setCamera({ ...DEFAULT_CAMERA })} chooseTool={chooseTool} scaleArtwork={scaleArtwork} resetArtwork={resetArtwork} finishWall={finishWall} cancelWall={cancelWall} toggleWalls={() => savePatch({ wallsVisible: !wallsVisible })} exitTool={exitTool} />}
+      {commandOpen && isBattle && active && <CombatCommandsDrawer token={active} resources={activeResources} dashState={dashState} swapState={swapState} attackState={attackState} busy={busy} error={visibleError} close={() => setCommandOpen(false)} dash={useDash} swap={useWeaponSwap} end={finishTurn} initialSwapOpen={initialSwapOpen} initialSwapDraft={initialSwapDraft} />}
       {abandonOpen && <PortalLayer><div className="veil" onClick={() => setAbandonOpen(false)} /><aside className="drawer" role="dialog" aria-modal="true" aria-labelledby="abandon-battle-title"><div className="drawer-top"><div><span className="kicker">Return to Setup</span><h2 id="abandon-battle-title">Abandon this encounter?</h2></div><button className="glyph" onClick={() => setAbandonOpen(false)} aria-label="Close"><X size={17} /></button></div><div className="drawer-body">{visibleError && <div className="nf-state-inline-error" role="alert"><strong>Battle not abandoned</strong><span>{errorText(visibleError)}</span></div>}<p className="prose">Return <strong>{scene?.name}</strong> to editable Battle Setup?</p><p className="note">Current token HP and positions are preserved. Initiative, turn resources, and physical battle items are cleared.</p></div><div className="drawer-foot"><button className="btn btn-line" onClick={() => setAbandonOpen(false)} autoFocus>Continue Battle</button><button className="btn btn-hazard" onClick={abandonBattle} disabled={busy}><Hammer size={15} /> Abandon Battle</button></div></aside></PortalLayer>}
     </div>
   );
