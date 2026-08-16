@@ -1744,3 +1744,312 @@ Regression protection:
 - A complete runtime scan reports zero malformed text occurrences.
 - `npm run verify` passes with 72 tests, all render suites, all phase verifiers,
   unchanged permanent visual hashes, and a successful production build.
+
+
+NIGHTFORGE - PHASE 6 COMPLETION AND PATCH NOTES
+================================================
+
+Date: 16 August 2026
+Phase: 6 - Play Table and tools
+Previous completed phase: Phase 5 - Catalogs and Gear
+
+
+60. PHASE 6 RESULT
+------------------
+
+Phase 6 is complete.
+
+Nightforge now has an independently implemented Table interaction layer for
+camera movement, artwork alignment, free Play tokens, Battle wall drafting,
+wall visibility, and a transient ruler. The existing top-right 5 ft status
+control is now the semantic entry point for Table Tools without changing its
+idle composition. Scene Settings and Library retain their existing behavior.
+
+This work followed the required clean-room boundary. The original Roll30 was
+used only as a conceptual and documentation reference. No Roll30 UI, UX,
+layout, CSS, JSX, components, runtime code, characters, games, artwork, browser
+saves, or other user data were copied or imported.
+
+
+61. CAMERA
+----------
+
+Implemented the required transient camera contract:
+
+- Exact default: `{ x: 0, y: 0, zoom: 1 }`.
+- Exact zoom clamp: 0.35 through 3.
+- Pointer-drag panning in screen-space pixels.
+- Cursor-anchored wheel zoom that preserves the world point under the cursor.
+- Viewport-center-anchored zoom-in and zoom-out drawer controls.
+- Exact reset to the default camera.
+- Camera reset when a different Scene is opened.
+- No camera field in Scene normalization, repository records, or persisted
+  application state.
+
+Pure coordinate tests prove that screen/world transforms remain inverse and
+that the camera anchor remains stable at both zoom limits.
+
+
+62. ARTWORK ADJUSTMENT
+----------------------
+
+Implemented an independent persisted Scene `mapView`:
+
+- Exact scale clamp: 0.2 through 5.
+- Unbounded X and Y offsets.
+- Artwork drag delta divided by camera zoom.
+- Scale down, scale up, and reset actions in Table Tools.
+- Saved artwork is loaded through Nightforge's ArtworkRepository and displayed
+  through a temporary browser object URL with cleanup on replacement/unmount.
+- Failed artwork reads and failed Scene writes report actionable visible errors
+  without replacing the last valid Scene data.
+- Pointer cancellation restores the last persisted artwork transform instead
+  of leaving an unsaved preview on screen.
+
+The artwork layer alone receives `mapView`. The grid, wall, ruler, and token
+layers remain in Table world space and are therefore unaffected by artwork
+translation or scale.
+
+
+63. PLAY TOKENS
+---------------
+
+Play Scenes now use their real persisted `scene.tokens` collection rather than
+the old all-mode prototype token fixture:
+
+- Empty Play Scenes render an actual empty state.
+- Add to map creates a stable clean-room blank-token record.
+- Each Play token has a stable ID, normalized name, type, colour, position,
+  combat-shaped numeric fields, inventory, equipment, and conditions.
+- Tokens drag freely without snapping or arrival restrictions.
+- Pointer grab offset is preserved, so the token does not jump beneath the
+  pointer when dragging begins.
+- A completed drag persists percentage coordinates through the Scene command.
+- Pointer cancellation removes the unsaved token preview.
+- The selected token shows its current percentage position.
+- Remove token persists the collection and safely selects the next token.
+- Play omits HP overlays, initiative, movement currency, action resources,
+  conditions, and other combat-only controls.
+
+The deferred Battle prototype fixtures remain isolated to Battle/Setup until
+Phase 7 replaces them with real Battle Setup records.
+
+
+64. WALLS
+---------
+
+Implemented persisted percentage-polyline wall records for Battle Scenes:
+
+- Full-wall drafting.
+- Half-wall drafting.
+- Unlimited point placement in world percentages.
+- Pointer preview from the last point to the current hover position.
+- Explicit Finish wall and Cancel wall actions.
+- Escape finishes a valid current wall run.
+- Invalid one-point runs are discarded rather than persisted.
+- Full and half walls use distinct Nightforge-native conditional rendering.
+- Wall visibility is persisted separately from wall data.
+- Hiding walls affects rendering only; the normalized wall records remain
+  available for Phase 8 movement and Phase 9 line-of-sight behavior.
+- A failed persistence write retains the draft so the user can retry.
+
+Movement blocking, pathfinding, and line-of-sight consequences intentionally
+remain assigned to Phases 8 and 9. Phase 6 establishes and persists the wall
+geometry they will consume.
+
+
+65. RULER
+---------
+
+Implemented the required transient ruler:
+
+- Pointer drag captures origin and destination in world percentages.
+- Four-connected square traversal is calculated from the current grid size.
+- The origin square is excluded.
+- Crossed squares are multiplied by 5 feet.
+- The ruler line and distance label render in Table world space.
+- The label is positioned at the measurement midpoint.
+- Exiting or changing away from the ruler clears the measurement.
+- Ruler state is never written into a Scene or repository envelope.
+
+
+66. TABLE TOOLS AND NIGHTFORGE UI BOUNDARY
+------------------------------------------
+
+The existing top-right HUD composition is preserved:
+
+- The existing 5 ft pill is now a semantic button.
+- Exact accessible name and title: `Table tools — 5 ft grid`.
+- The semantic button retains the existing Nightforge tag classes and baseline
+  dimensions; its only new styling is scoped interaction-state styling.
+- Scene Settings still invokes the exact Table return context:
+  `go({ page: "settings", returnTo: { page: "board", mode } })`.
+- Library still opens the Library.
+
+Table Tools contains:
+
+- Zoom out.
+- Zoom in.
+- Reset camera.
+- Adjust artwork.
+- Artwork scale down.
+- Artwork scale up.
+- Reset artwork transform.
+- Draw full wall on Battle Scenes.
+- Draw half-wall on Battle Scenes.
+- Finish/cancel wall controls while drafting.
+- Toggle wall visibility on Battle Scenes.
+- Ruler on Battle Scenes.
+- Exit current tool.
+
+Play Scenes intentionally expose only camera and artwork controls. They omit
+the Battle-only geometry controls while retaining the same Nightforge drawer,
+HUD, docks, typography, colours, and visual landmarks.
+
+All new visual rules live in `src/styles/functional-states.css` and every new
+selector begins with `.nf-state-`. The six permanent Nightforge stylesheets and
+`src/ui/Glyphs.jsx` remain byte-identical to their frozen baseline hashes.
+
+
+67. PERSISTENCE AND FAILURE SAFETY
+----------------------------------
+
+Scene normalization now validates and persists:
+
+- `mapView`.
+- Play token records and percentage positions.
+- Full and half wall records and percentage points.
+- `wallsVisible`.
+
+The camera, ruler draft, wall draft, hover point, active tool, pointer gesture,
+drawer state, selection, and unsaved previews remain transient.
+
+Repository tests prove that completed Table operations survive a fresh
+repository instance. Failure injection proves that a rejected Table write does
+not overwrite or mutate the last valid Scene. The UI surfaces the command's
+message and recovery guidance while preserving retryable local state where
+appropriate.
+
+
+68. FILES ADDED
+---------------
+
+- `src/domain/table.js`
+  Pure camera, coordinate, artwork, token, wall, and ruler behavior.
+
+- `src/phase6.test.js`
+  Fifteen focused domain, alignment, persistence, reload, and failure tests.
+
+- `scripts/phase6-render-smoke.mjs`
+  Server-render coverage for empty/populated Play, transformed artwork, Play
+  and Battle drawers, persisted walls, ruler drafts, and failure states.
+
+- `scripts/verify-phase6.mjs`
+  Structural, clean-room, encoding, integration, persistence-boundary, scoped
+  CSS, and frozen-visual verification.
+
+
+69. FILES UPDATED
+-----------------
+
+- `src/screens/TableScreen.jsx`
+  Connects the existing Nightforge Table to all Phase 6 behavior.
+
+- `src/domain/records.js`
+  Normalizes the new persisted Scene Table fields and excludes camera state.
+
+- `src/App.jsx`
+  Supplies the Table with Scene update commands, artwork access, and explicit
+  persistence state.
+
+- `src/styles/functional-states.css`
+  Adds only conditionally scoped Table world, tool, geometry, and feedback
+  states.
+
+- `src/phase3.test.js` and `src/phase4.test.js`
+  Update older snapshots to assert the now-normalized Scene token/wall records.
+
+- `scripts/phase2-render-smoke.mjs`
+  Recognizes the later-phase semantic 5 ft Table Tools entry.
+
+- `package.json`
+  Adds Phase 6 render and structural checks to the complete verification gate.
+
+
+70. VERIFICATION EVIDENCE
+-------------------------
+
+Complete command executed:
+
+    npm run verify
+
+Result: PASS.
+
+- Node test suite: 110 passed, 0 failed, 0 skipped.
+- Phase 6 focused tests: 15 passed.
+- Phase 2 render smoke: Pass.
+- Phase 3 render smoke: Pass.
+- Phase 4 render smoke: Pass.
+- Phase 5 render smoke: Pass.
+- Phase 6 render smoke: Pass.
+- Phase 1 structural verifier: Pass.
+- Phase 2 structural verifier: Pass.
+- Phase 3 structural verifier: Pass.
+- Phase 4 structural verifier: Pass.
+- Phase 5 structural verifier: Pass.
+- Phase 6 structural verifier: Pass.
+- Frozen permanent Nightforge visual hashes: Pass.
+- Runtime clean-room path/import scan: Pass.
+- Original Roll30 storage-identifier scan: Pass.
+- Runtime malformed UTF-8/mojibake scan: Pass.
+- Functional CSS scope audit: Pass.
+- Production Vite build: Pass; 1,813 modules transformed.
+- `git diff --check`: Pass.
+- Live development server: HTTP 200 at `http://127.0.0.1:5310/`.
+
+The in-app browser control surface was unavailable in this session. Interactive
+state coverage was therefore established with pure gesture mathematics,
+repository round trips and failure injection, server-rendered state matrices,
+the production build, and the live-server HTTP check. No claim of automated
+browser clicking or screenshot comparison is made.
+
+
+71. PHASE BOUNDARY AUDIT
+------------------------
+
+- No original Roll30 UI, UX, layout, code, runtime module, or data was copied.
+- No Roll30 characters, games, maps, artwork, browser saves, or encounter state
+  was imported.
+- Nightforge continues to use only its isolated persistence identifiers.
+- Camera and ruler are transient.
+- Artwork transform, Play tokens, walls, and visibility are persisted.
+- Play has no combat economy or overlays.
+- Battle Setup snapshots, detailed token editing, loadouts, chests, collision,
+  snapping, and encounter transition remain Phase 7.
+- Initiative, movement currency, pathfinding, Dash, swap, and End Turn remain
+  Phase 8.
+- Attacks, line of sight, rolls, damage, conditions, action drawers, and
+  cinematics remain Phase 9.
+- Permanent Nightforge visual source remains byte-identical to baseline.
+
+
+72. PHASE 6 COMPLETION STATEMENT
+--------------------------------
+
+Every Phase 6 requirement has direct implementation and verification evidence:
+
+- Camera defaults, clamping, anchors, panning, reset, and transience: proven.
+- Independent artwork movement, scaling, clamping, persistence, and isolation:
+  proven.
+- Real free-drag Play tokens without combat restrictions or overlays: proven.
+- Persisted full/half percentage walls, Escape finish, cancellation, and
+  visibility: proven.
+- Four-connected, origin-excluding, 5-foot ruler with world-space rendering and
+  transient cleanup: proven.
+- Pixel-preserving semantic 5 ft entry and complete Table Tools drawer: proven.
+- Alignment across zoom levels and viewport sizes: proven by coordinate matrix.
+- Exact Scene Settings Table return behavior: statically and render verified.
+- Failure safety, reload persistence, clean-room isolation, UI preservation,
+  encoding integrity, full regressions, and production compilation: proven.
+
+Phase 6 is complete and ready for Phase 7.

@@ -103,6 +103,9 @@ export default function App({ browser = window, runtimeFactory = createBrowserRu
         mode={state.route.mode || tableModeForScene(activeScene)}
         go={go}
         setMode={(mode) => go({ page: "board", mode })}
+        onUpdate={runtime.commands.updateScene}
+        artworkRepository={runtime.artworkRepository}
+        persistence={state.persistence}
       />
     );
   }

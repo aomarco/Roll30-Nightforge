@@ -392,9 +392,7 @@ test("retiring a Hero does not modify pre-existing Hero-token snapshots", () => 
   }).value;
   app.commands.removeHero(hero.id);
   assert.equal(app.heroRepository.list().value.length, 0);
-  assert.deepEqual(app.sceneRepository.get(scene.id).value.tokens, [
-    { id: "token-1", heroId: hero.id, name: hero.name, hp: 10 },
-  ]);
+  assert.deepEqual(app.sceneRepository.get(scene.id).value.tokens, scene.tokens);
 });
 
 test("failed Hero creation and retirement preserve the last visible valid roster", () => {

@@ -11,6 +11,7 @@ import {
 } from "./heroes.js";
 import { ITEM_BY_ID } from "./catalog.js";
 import { normalizeEquipment, normalizeInventoryEntries } from "./items.js";
+import { normalizeMapView, normalizeTableTokens, normalizeWalls } from "./table.js";
 
 const finiteNumber = (value, fallback) => {
   const number = Number(value);
@@ -60,15 +61,11 @@ export function createSceneRecord(
     gridSize: Math.max(24, Math.min(80, finiteNumber(input.gridSize, 44))),
     artworkKey: nullableId(input.artworkKey),
     blankCanvas: Boolean(input.blankCanvas),
-    mapView: {
-      scale: finiteNumber(input.mapView?.scale, 1),
-      x: finiteNumber(input.mapView?.x, 0),
-      y: finiteNumber(input.mapView?.y, 0),
-    },
+    mapView: normalizeMapView(input.mapView),
     wallsVisible: input.wallsVisible !== false,
-    walls: Array.isArray(input.walls) ? input.walls : [],
+    walls: normalizeWalls(input.walls),
     chests: Array.isArray(input.chests) ? input.chests : [],
-    tokens: Array.isArray(input.tokens) ? input.tokens : [],
+    tokens: normalizeTableTokens(input.tokens),
     encounter: input.kind === "play" ? null : input.encounter || null,
     createdAt: input.createdAt || now,
     updatedAt: input.updatedAt || now,

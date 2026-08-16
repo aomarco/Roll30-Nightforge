@@ -122,7 +122,7 @@ try {
   assert.match(playTable, /Moonlit Parley/);
   assert.match(playTable, /Free play/);
   assert.doesNotMatch(playTable, />Setup<|>Battle</);
-  assert.doesNotMatch(playTable, /5 ft/);
+  assert.match(playTable, /Table tools — 5 ft grid/);
 
   console.log("Phase 2 render smoke passed for populated, empty, guarded, settings, and Play Table states.");
 } finally {

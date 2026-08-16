@@ -235,14 +235,14 @@ test("white canvas save failure does not delete or detach the prior artwork", as
 
 test("Battle to Play clears encounter physical items but preserves Scene assets", () => {
   const app = harness();
-  app.sceneRepository.create({
+  const original = app.sceneRepository.create({
     kind: "battle",
     artworkKey: "art-map",
     tokens: [{ id: "token-1", inventory: [{ itemId: "dagger", quantity: 1 }] }],
-    walls: [{ id: "wall-1" }],
+    walls: [{ id: "wall-1", type: "full", points: [{ xPercent: 10, yPercent: 10 }, { xPercent: 90, yPercent: 90 }] }],
     chests: [{ id: "chest-1" }],
     encounter: { status: "active", battleItems: [{ id: "thrown-1" }] },
-  });
+  }).value;
 
   const changed = app.commands.updateScene("scene-1", { kind: "play" });
 
@@ -250,8 +250,8 @@ test("Battle to Play clears encounter physical items but preserves Scene assets"
   assert.equal(changed.value.kind, "play");
   assert.equal(changed.value.encounter, null);
   assert.equal(changed.value.artworkKey, "art-map");
-  assert.deepEqual(changed.value.tokens, [{ id: "token-1", inventory: [{ itemId: "dagger", quantity: 1 }] }]);
-  assert.deepEqual(changed.value.walls, [{ id: "wall-1" }]);
+  assert.deepEqual(changed.value.tokens, original.tokens);
+  assert.deepEqual(changed.value.walls, original.walls);
   assert.deepEqual(changed.value.chests, [{ id: "chest-1" }]);
 });
 
