@@ -11,7 +11,13 @@ import {
 } from "./heroes.js";
 import { ITEM_BY_ID } from "./catalog.js";
 import { normalizeEquipment, normalizeInventoryEntries } from "./items.js";
-import { normalizeMapView, normalizeTableTokens, normalizeWalls } from "./table.js";
+import {
+  normalizeChests,
+  normalizeEncounter,
+  normalizeMapView,
+  normalizeTableTokens,
+  normalizeWalls,
+} from "./table.js";
 
 const finiteNumber = (value, fallback) => {
   const number = Number(value);
@@ -50,6 +56,8 @@ export function createSceneRecord(
 ) {
   const sceneId = nullableId(input.id) || nullableId(id);
   if (!sceneId) throw new TypeError("A Scene requires a stable id.");
+  const kind = input.kind === "play" ? "play" : "battle";
+  const tokens = normalizeTableTokens(input.tokens);
 
   return {
     id: sceneId,
@@ -57,16 +65,16 @@ export function createSceneRecord(
       typeof input.name === "string" && input.name.trim()
         ? input.name.trim()
         : "Untitled scene",
-    kind: input.kind === "play" ? "play" : "battle",
+    kind,
     gridSize: Math.max(24, Math.min(80, finiteNumber(input.gridSize, 44))),
     artworkKey: nullableId(input.artworkKey),
     blankCanvas: Boolean(input.blankCanvas),
     mapView: normalizeMapView(input.mapView),
     wallsVisible: input.wallsVisible !== false,
     walls: normalizeWalls(input.walls),
-    chests: Array.isArray(input.chests) ? input.chests : [],
-    tokens: normalizeTableTokens(input.tokens),
-    encounter: input.kind === "play" ? null : input.encounter || null,
+    chests: normalizeChests(input.chests),
+    tokens,
+    encounter: kind === "play" ? null : normalizeEncounter(input.encounter, tokens),
     createdAt: input.createdAt || now,
     updatedAt: input.updatedAt || now,
     lastOpenedAt: input.lastOpenedAt || null,

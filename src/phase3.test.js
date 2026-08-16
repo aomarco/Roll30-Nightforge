@@ -252,7 +252,7 @@ test("Battle to Play clears encounter physical items but preserves Scene assets"
   assert.equal(changed.value.artworkKey, "art-map");
   assert.deepEqual(changed.value.tokens, original.tokens);
   assert.deepEqual(changed.value.walls, original.walls);
-  assert.deepEqual(changed.value.chests, [{ id: "chest-1" }]);
+  assert.deepEqual(changed.value.chests, original.chests);
 });
 
 test("Scene identity, Battle grid size, and Play to Battle changes persist", () => {

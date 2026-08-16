@@ -100,6 +100,7 @@ export default function App({ browser = window, runtimeFactory = createBrowserRu
     return (
       <TableScreen
         scene={activeScene}
+        heroes={state.heroes}
         mode={state.route.mode || tableModeForScene(activeScene)}
         go={go}
         setMode={(mode) => go({ page: "board", mode })}

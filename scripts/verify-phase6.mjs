@@ -29,8 +29,9 @@ for (const behavior of [
 ]) {
   if (!table.includes(behavior)) failures.push(`Table screen is missing ${behavior}.`);
 }
-if (!table.includes("isPlay ? playTokens : BATTLE_PROTOTYPE_TOKENS")) failures.push("Play Table does not select persisted Scene tokens independently from deferred Battle fixtures.");
+if (!table.includes("normalizeTableTokens(scene?.tokens)")) failures.push("The Table does not select persisted Scene tokens.");
 if (table.includes("const TOKENS =")) failures.push("The original all-mode Table fixture remains active.");
+if (table.includes("BATTLE_PROTOTYPE_TOKENS")) failures.push("A deferred Battle fixture remains after real Scene-token integration.");
 
 const app = await read("src/App.jsx");
 for (const integration of ["onUpdate={runtime.commands.updateScene}", "artworkRepository={runtime.artworkRepository}", "persistence={state.persistence}"]) {

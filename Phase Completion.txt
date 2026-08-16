@@ -2053,3 +2053,373 @@ Every Phase 6 requirement has direct implementation and verification evidence:
   encoding integrity, full regressions, and production compilation: proven.
 
 Phase 6 is complete and ready for Phase 7.
+
+
+NIGHTFORGE - PHASE 7 COMPLETION AND PATCH NOTES
+================================================
+
+Date: 16 August 2026
+Phase: 7 - Battle Setup
+Previous completed phase: Phase 6 - Play Table and tools
+
+
+73. PHASE 7 RESULT
+------------------
+
+Phase 7 is complete.
+
+Battle Scenes now use real persisted Scene tokens and chests from Setup through
+the initial Battle transition. The deferred Thorin, Elara, and Goblin Table
+fixtures have been removed. Setup supports editable manual tokens, independent
+Hero snapshots, per-battle inventory and legal equipment, complete-catalog
+chests, exact grid snapping, collision prevention, and a persisted encounter
+start/abandon lifecycle.
+
+The work remains inside the existing Nightforge Table composition. The two
+docks, phase capsule, world, HUD, turn-track landmark, drawers, typography,
+colours, and protected visual source remain Nightforge's own design.
+
+
+74. MANUAL BATTLE TOKENS
+------------------------
+
+The Battle Setup token selector now creates real manual token records:
+
+- Stable generated token ID.
+- Editable name.
+- Editable HP and maximum HP.
+- Editable AC.
+- Editable speed.
+- Editable Strength and Dexterity.
+- Editable level, clamped from 1 through 20.
+- Editable initiative bonus.
+- Editable Small, Medium, or Large size.
+- Normalized inventory, loadout, armour, shield, enchantments, worn magic, and
+  conditions fields.
+- Deterministic Nightforge colour assignment.
+- Persisted percentage position.
+- Remove Token during Setup.
+
+Manual AC remains explicitly editable even when the manual token equips armour
+or a shield, as required by the token contract.
+
+
+75. HERO-TOKEN SNAPSHOTS
+------------------------
+
+The Setup selector is connected to the real Nightforge Hero repository roster.
+Selecting a Hero and pressing Add to Map creates an independent snapshot:
+
+- Hero stable ID is retained only as source identity.
+- Name is copied.
+- Derived HP and maximum HP are copied.
+- Derived AC is copied.
+- Derived speed is copied after armour penalties.
+- Final Strength and Dexterity are copied after ancestry bonuses.
+- Level, initiative bonus, and size are copied.
+- Inventory is copied into a new normalized array.
+- Main hand, off hand, armour, shield, enchantments, and worn magic are copied.
+- Conditions begin empty.
+
+The nine derived Setup fields render as read-only Nightforge tiles. Mutating or
+retiring the original Hero does not change an existing Scene token. Tests also
+prove the snapshot inventory is a separate value rather than a shared array.
+
+
+76. PER-BATTLE INVENTORY AND LOADOUT
+------------------------------------
+
+Both manual and Hero-derived Setup tokens use Nightforge's existing clean-room
+Gear chapter inside the current inspector dock scroll area:
+
+- Complete item catalog.
+- Inventory search.
+- Add and remove item quantities.
+- Ammunition bundle quantities.
+- Main-hand and off-hand selection.
+- Armour and shield selection.
+- Two-Handed, shield, quantity, Light, and dual-wield legality.
+- Weapon, armour, and shield enchantments from +0 through +3.
+- All six implemented worn-magic effects.
+- No attunement cap.
+
+Hero-derived token equipment is editable only for that Battle snapshot. Armour,
+shield, enchantment, worn-magic, and Dexterity state recompute the snapshot's
+derived AC. Manual tokens retain their explicitly entered AC.
+
+
+77. BATTLE CHESTS
+-----------------
+
+Battle Setup now implements the full chest lifecycle:
+
+- Place Chest creates a stable persisted chest record.
+- New chests choose the nearest deterministic empty grid cell.
+- Chests render as selectable Nightforge-native world objects.
+- Chest dragging is available only during Setup.
+- Dragging preserves the exact pointer grab offset before snapping.
+- Selected chest position is shown in the existing inspector dock.
+- Open chest inventory uses a Nightforge drawer.
+- The drawer searches the complete 355-entry clean-room catalog.
+- Quantity controls support normal items and ammunition bundle sizes.
+- Owned chest contents and total quantity are visible.
+- Remove Chest persists deletion.
+- Empty contents remain a valid persisted state.
+- During Battle, chests remain selectable but movement and inventory editing are
+  visibly locked for the later Battle-looting phase.
+
+
+78. GRID SNAPPING AND COLLISIONS
+--------------------------------
+
+Battle Setup has a new pure coordinate model based on actual world width,
+height, and Scene grid size:
+
+- Pointer/world percentages convert to bounded grid row and column values.
+- Every accepted position converts back to the exact cell centre.
+- Token dragging snaps during Setup only.
+- Chest dragging snaps during Setup only.
+- Free Play dragging remains unsnapped.
+- A moving entity may retain its own cell.
+- Token/token collisions are blocked.
+- Token/chest collisions are blocked.
+- Chest/chest collisions are blocked.
+- Blocked previews receive conditional Nightforge error feedback.
+- Blocked drops retain the last valid persisted position and provide recovery
+  guidance.
+- Automatic placement searches cells deterministically by Manhattan distance.
+- A full Table returns an actionable failure rather than overlapping entities.
+
+Alignment tests cover 320×240, 880×528, 1366×768, and 2560×1440 viewports with
+40, 44, and 80 pixel grids. Phase 6 camera transforms remain separate, so the
+same percentage cell stays aligned across camera zoom levels.
+
+
+79. BATTLE TRANSITION
+---------------------
+
+The phase capsule is now driven by persisted Scene encounter state:
+
+- A Battle Scene with `encounter: null` is in Setup.
+- Pressing Battle is the only way to begin the encounter.
+- At least two tokens are required.
+- Every chest is normalized to a unique grid cell.
+- Every token is snapped to a unique grid cell before start.
+- All token conditions are cleared for the new Battle.
+- Old physical battle items and ammunition-spend state begin empty.
+- Each token rolls d20 plus its copied initiative bonus.
+- Initiative uses an injectable random source.
+- Descending totals determine the order.
+- Ties retain original token-list order.
+- Round begins at 1 and active index begins at 0.
+- The first token receives a fresh turn-resource record.
+- The complete tokens, chests, and encounter patch is saved atomically before
+  the UI enters Battle.
+- A failed save leaves Setup and its last valid data intact.
+
+This transition seeds the encounter contract required by Phase 8. Phase 8 still
+owns turn advancement, movement currency, pathfinding, Dash, Swap, and End Turn.
+
+
+80. ACTIVE-BATTLE LOCKING AND ABANDONMENT
+-----------------------------------------
+
+While an encounter is active:
+
+- The actual persisted token roster remains visible and selectable.
+- The actual initiative order and totals replace prototype values.
+- Token creation is disabled.
+- Chest creation is unavailable.
+- Token dragging is disabled.
+- Chest dragging is disabled.
+- Setup stat editing is unavailable.
+- Remove Token is visibly disabled with an explanation.
+- Deferred condition/stat controls are visibly disabled rather than fake.
+- Chests remain selectable with read-only contents.
+
+Pressing Setup opens a Nightforge confirmation drawer. Confirming abandonment:
+
+- Clears encounter state.
+- Clears encounter-owned physical battle items and resources with it.
+- Preserves current token HP.
+- Preserves token positions.
+- Preserves per-battle inventory and equipment.
+- Preserves chest positions and contents.
+- Returns to editable Setup only after a successful save.
+
+Cancelling, clicking outside, or pressing Escape closes the confirmation without
+changing encounter state.
+
+
+81. PERSISTENCE AND NORMALIZATION
+---------------------------------
+
+Scene normalization now validates:
+
+- Manual and Hero-derived token records.
+- Chest IDs, positions, and normalized inventory.
+- Encounter status.
+- Initiative order against current token IDs.
+- Initiative totals.
+- Active index and round.
+- Turn-resource container.
+- Physical battle items.
+- Ammunition-spend state.
+- Winner reference.
+- Encounter log.
+
+Stale encounter token references and duplicate initiative IDs are removed during
+normalization. Complete editable Setup data survives a fresh repository
+instance before Battle begins. The transitioned active encounter also survives
+a fresh repository instance. Injected storage failure proves that an attempted
+Phase 7 write never replaces the last valid Setup.
+
+
+82. NIGHTFORGE UI AND CLEAN-ROOM BOUNDARY
+-----------------------------------------
+
+- No original Roll30 UI, UX, layout, CSS, JSX, component, or runtime code was
+  copied.
+- No Roll30 character, game, map, Scene, artwork, encounter, or browser-save
+  data was imported.
+- Hero-token snapshots use only Heroes created in Nightforge's isolated store.
+- Chest and token records are newly created Nightforge records.
+- All new visuals are conditional selectors in
+  `src/styles/functional-states.css`.
+- Every added selector begins with `.nf-state-`.
+- The six permanent Nightforge stylesheets remain byte-identical to baseline.
+- `src/ui/Glyphs.jsx` remains byte-identical to baseline.
+- Scene Settings retains its exact Table return context.
+- The Phase 6 5 ft Table Tools entry remains unchanged.
+
+
+83. FILES ADDED
+---------------
+
+- `src/screens/BattleSetupInspector.jsx`
+  Manual-token editor, Hero snapshot tiles, per-battle Gear continuation, chest
+  inspector, and complete-catalog chest drawer.
+
+- `src/phase7.test.js`
+  Twenty-one focused token, snapshot, Gear, chest, snapping, collision,
+  encounter, persistence, abandonment, and failure tests.
+
+- `scripts/phase7-render-smoke.mjs`
+  Render matrices for manual Setup, Hero Setup, chests, active Battle, locked
+  controls, abandonment confirmation, and failure feedback.
+
+- `scripts/verify-phase7.mjs`
+  Structural, integration, frozen-visual, scoped-CSS, clean-room, original-save,
+  and malformed-encoding verification.
+
+
+84. FILES UPDATED
+-----------------
+
+- `src/domain/table.js`
+  Adds all Phase 7 token, snapshot, chest, grid, collision, resource, encounter,
+  and transition behavior.
+
+- `src/domain/records.js`
+  Connects normalized chests and encounter state to Scene persistence.
+
+- `src/screens/TableScreen.jsx`
+  Replaces all deferred Battle fixtures with actual Scene state and connects
+  Setup interactions, phase transition, active locking, and abandonment.
+
+- `src/App.jsx`
+  Supplies the real Nightforge Hero roster to Battle Setup.
+
+- `src/styles/functional-states.css`
+  Adds only scoped conditional chest, snapshot, compact Gear, collision, and
+  drawer states.
+
+- `src/phase3.test.js`
+  Recognizes normalized chest records in the older Battle-to-Play preservation
+  test.
+
+- `scripts/verify-phase6.mjs`
+  Recognizes Phase 7's stricter all-mode persisted-token integration and rejects
+  any remaining deferred Battle fixture.
+
+- `package.json`
+  Adds Phase 7 render/structural scripts to the complete verification gate.
+
+
+85. VERIFICATION EVIDENCE
+-------------------------
+
+Complete command executed:
+
+    npm run verify
+
+Result: PASS.
+
+- Node test suite: 131 passed, 0 failed, 0 skipped.
+- Phase 7 focused suite: 21 passed.
+- Phase 2 render smoke: Pass.
+- Phase 3 render smoke: Pass.
+- Phase 4 render smoke: Pass.
+- Phase 5 render smoke: Pass.
+- Phase 6 render smoke: Pass.
+- Phase 7 render smoke: Pass.
+- Phase 1 structural verifier: Pass.
+- Phase 2 structural verifier: Pass.
+- Phase 3 structural verifier: Pass.
+- Phase 4 structural verifier: Pass.
+- Phase 5 structural verifier: Pass.
+- Phase 6 structural verifier: Pass.
+- Phase 7 structural verifier: Pass.
+- Frozen permanent Nightforge visual hashes: Pass.
+- Functional CSS scope audit: Pass.
+- Original Roll30 runtime path/import scan: Pass.
+- Original Roll30 save-identifier scan: Pass.
+- Runtime malformed UTF-8/mojibake scan: Pass.
+- Production Vite build: Pass; 1,814 modules transformed.
+- `git diff --check`: Pass.
+- Live development server: HTTP 200 at `http://127.0.0.1:5310/`.
+
+The in-app browser control surface was unavailable in this session. Interactive
+coverage was established through pure pointer/grid behavior, complete domain
+event tests, repository reload and failure injection, server-rendered state
+matrices, production compilation, and the running-server HTTP check. No claim
+of automated browser clicking or screenshot comparison is made.
+
+
+86. PHASE BOUNDARY AUDIT
+------------------------
+
+Phase 7 implements Battle Setup and the atomic transition into an initial
+encounter. Later behavior remains correctly deferred:
+
+- Turn progression, movement spending, wall-aware routing, Dash, Swap, and End
+  Turn remain Phase 8.
+- Attack selection, range overlays, line of sight, rolls, damage, condition
+  effects, Action/Bonus drawers, and cinematics remain Phase 9.
+- Battle looting, thrown-item persistence, retrieval, ammunition consumption,
+  victory, and restart remain Phase 10.
+- Responsive extremes and broader accessibility hardening remain Phase 11.
+- No later-phase control is presented as falsely functional.
+
+
+87. PHASE 7 COMPLETION STATEMENT
+--------------------------------
+
+Every Phase 7 requirement has direct implementation and verification evidence:
+
+- Manual tokens and every editable Setup field: proven.
+- Independent Hero snapshots and read-only derived fields: proven.
+- Per-battle inventory, loadout, enchantments, and worn magic: proven.
+- Hero-derived AC recomputation and manual editable AC: proven.
+- Chest add, fill, quantity, drag, block, select, lock, and delete: proven.
+- Token/token, token/chest, and chest/chest collision prevention: proven.
+- Exact grid-centre snapping and deterministic placement across viewports:
+  proven.
+- Two-token start gate, deterministic initiative, state clearing, first-turn
+  resources, atomic persistence, and Battle routing: proven.
+- Abandon confirmation and HP/position/equipment/chest preservation: proven.
+- Complete editable Setup and active encounter reload: proven.
+- Failure preservation, Nightforge UI protection, clean-room isolation, no data
+  import, encoding integrity, full regressions, and production build: proven.
+
+Phase 7 is complete and ready for Phase 8.
