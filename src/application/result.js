@@ -29,3 +29,8 @@ export const fromThrown = (
     cause: error instanceof Error ? error.message : String(error),
   });
 
+export const isQuotaExceededError = (error) =>
+  error?.name === "QuotaExceededError" ||
+  error?.code === 22 ||
+  error?.code === 1014 ||
+  /quota|storage.*full|disk.*full/i.test(error instanceof Error ? error.message : String(error || ""));

@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { Footprints, Gauge, RefreshCw, Swords, X } from "lucide-react";
 
 import { ITEM_BY_ID, itemSubtitle } from "../domain/catalog.js";
 import { movementMaximum, movementRemaining, validateSwapLoadout } from "../domain/combat.js";
+import { useDialogA11y } from "../ui/useDialogA11y.js";
 
 const errorText = (error) => error ? `${error.message} ${error.recovery || "Retry the command."}` : "";
 
@@ -37,12 +38,7 @@ export default function CombatCommandsDrawer({
   const validation = validateSwapLoadout(token, draft);
   const maximum = movementMaximum(resources, token);
   const remaining = movementRemaining(resources, token);
-
-  useEffect(() => {
-    const onKeyDown = (event) => { if (event.key === "Escape") close(); };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [close]);
+  const dialogRef = useDialogA11y({ onClose: close });
 
   const toggleSwap = () => {
     setDraft({ ...token.loadout });
@@ -58,7 +54,7 @@ export default function CombatCommandsDrawer({
   return (
     <PortalLayer>
       <div className="veil" onClick={close} />
-      <aside className="drawer nf-state-combat-drawer" role="dialog" aria-modal="true" aria-labelledby="combat-commands-title">
+      <aside ref={dialogRef} className="drawer nf-state-combat-drawer" role="dialog" aria-modal="true" aria-labelledby="combat-commands-title" tabIndex={-1}>
         <div className="drawer-top"><div><span className="kicker kicker-brass">Round command</span><h2 id="combat-commands-title">{token.name}&apos;s turn</h2></div><button className="glyph" onClick={close} aria-label="Close"><X size={17} /></button></div>
         <div className="drawer-body">
           {error && <div className="nf-state-inline-error" role="alert"><strong>Command not completed</strong><span>{errorText(error)}</span></div>}

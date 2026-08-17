@@ -6,8 +6,11 @@ was deleted and replaced. **Only the conceptual functionality survived** — the
 same actions exist, but almost none of them look, sit, or are named the way
 they used to.
 
-Still a design prototype: dummy data, no-op handlers, no game engine, no
-persistence. Nothing here can lose data because there is none.
+Nightforge is now a functional, clean-room implementation. Scenes, Heroes,
+artwork references, Table setup, encounters, equipment, attacks, conditions,
+loot, ammunition, completion, and restart behavior persist through dedicated
+Nightforge repositories. It does **not** import characters, games, maps, saves,
+source, UI, UX, or layout from original Roll30.
 
 ## Run it
 
@@ -15,6 +18,31 @@ persistence. Nothing here can lose data because there is none.
 npm install
 npm run dev
 ```
+
+The development server prints the local URL. Production output is created with
+`npm run build`.
+
+## Verification
+
+```bash
+npm run verify
+```
+
+The complete gate runs **229 domain/repository/integration tests**, every render
+smoke suite, all phase purity verifiers, **15 pinned-Chromium browser journeys**,
+21 deterministic visual baselines, dependency audit, and the production build.
+
+Useful focused commands:
+
+| Command | Coverage |
+|---|---|
+| `npm run test:phase11` | Corrupt data, quota failures, long content, and large collections |
+| `npm run test:phase11:render` | Loading, empty, success, error, recovery, and extreme-content markup |
+| `npm run test:phase11:browser` | Keyboard dialogs, responsive layouts, zoom, large lists, storage isolation, and screenshots |
+| `npm run verify:phase11` | Phase 11 purity, accessibility, performance, parity, and baseline contracts |
+
+The [parity register](./PARITY_REGISTER.md) maps all 47 planned acceptance
+journeys to their authoritative evidence.
 
 ## The design language
 
@@ -49,8 +77,12 @@ over the page, a film grain so the flat darks never read as plastic.
 
 ```
 src/
-  main.jsx              shell + command deck + routing
-  ui/Glyphs.jsx         brand die, faction pips
+  App.jsx               application shell, command deck, and routing
+  application/          commands, state, browser runtime
+  domain/               clean-room rules and records
+  storage/              isolated state, session, and artwork repositories
+  ui/Glyphs.jsx         protected brand die and faction pips
+  ui/useDialogA11y.js   shared modal focus and keyboard contract
   screens/
     LibraryScreen.jsx   stage, ledger, forge drawer
     HeroesScreen.jsx    portrait rail, letterhead, chaptered sheet
@@ -60,6 +92,7 @@ src/
     core.css            tokens, reset, primitives
     shell.css           deck, viewport, drawers
     library.css  heroes.css  scene.css  table.css
+    functional-states.css  behavior-only responsive and state hardening
 ```
 
 `core.css` holds every token and shared primitive (buttons, fields, tags,
@@ -68,7 +101,8 @@ screen — no primitive is redefined twice.
 
 ## Capability parity
 
-Every control from the old build still exists. A few were renamed or relocated:
+All required conceptual behaviors have been independently implemented inside
+the Nightforge design. The Nightforge labels for several concepts are:
 
 - *Manage heroes* → **Party roster** (Library masthead)
 - *Forge scene* form → **The Forge** slide-over

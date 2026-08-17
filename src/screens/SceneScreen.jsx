@@ -22,7 +22,7 @@ function useArtworkUrl(scene, artworkRepository) {
     let active = true;
     let objectUrl = null;
     setState({ url: null, error: null });
-    if (!scene?.artworkKey || !artworkRepository) return () => {};
+    if (!scene?.artworkKey || !artworkRepository) return undefined;
 
     const load = async () => {
       const result = await artworkRepository.get(scene.artworkKey);
@@ -198,7 +198,7 @@ export default function SceneScreen({
         : "Changes save automatically to this browser.";
 
   return (
-    <div className="workbench">
+    <div className="workbench nf-state-scene-root">
       {/* ------------------------------------------------- live preview */}
       <section className="rig">
         <div className="rig-bar">

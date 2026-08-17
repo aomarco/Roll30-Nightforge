@@ -83,6 +83,7 @@ export function createApplicationCommands({
       activeSceneId,
       revision: scenes.envelope?.revision || 0,
       recovered: Boolean(scenes.recovered || heroes.recovered),
+      recoverySource: scenes.recovered ? scenes.source : heroes.recovered ? heroes.source : null,
     });
     return success(
       { scenes: scenes.value, heroes: heroes.value, activeSceneId },

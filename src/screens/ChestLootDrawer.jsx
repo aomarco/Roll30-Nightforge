@@ -2,6 +2,7 @@ import { createPortal } from "react-dom";
 import { PackageOpen, X } from "lucide-react";
 
 import { getItem, itemSubtitle } from "../domain/catalog.js";
+import { useDialogA11y } from "../ui/useDialogA11y.js";
 
 const errorText = (error) => error ? `${error.message} ${error.recovery || "Retry the command."}` : "";
 
@@ -11,10 +12,11 @@ function PortalLayer({ children }) {
 
 export default function ChestLootDrawer({ chest, busy = false, error = null, take, close }) {
   const total = chest?.inventory?.reduce((sum, entry) => sum + entry.quantity, 0) || 0;
+  const dialogRef = useDialogA11y({ onClose: close });
   return (
     <PortalLayer>
       <div className="veil" onClick={close} />
-      <aside className="drawer nf-state-loot-drawer" role="dialog" aria-modal="true" aria-labelledby="chest-loot-title">
+      <aside ref={dialogRef} className="drawer nf-state-loot-drawer" role="dialog" aria-modal="true" aria-labelledby="chest-loot-title" tabIndex={-1}>
         <div className="drawer-top"><div><span className="kicker kicker-brass">Opened chest</span><h2 id="chest-loot-title">Take one item</h2></div><button className="glyph" onClick={close} aria-label="Close"><X size={17} /></button></div>
         <div className="drawer-body">
           {error && <div className="nf-state-inline-error" role="alert"><strong>Loot was not saved</strong><span>{errorText(error)}</span></div>}

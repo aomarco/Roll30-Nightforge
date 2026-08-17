@@ -1,4 +1,4 @@
-import { failure, fromThrown, success } from "../application/result.js";
+import { failure, fromThrown, isQuotaExceededError, success } from "../application/result.js";
 import { STORAGE_KEYS } from "./constants.js";
 import {
   createEmptyEnvelope,
@@ -41,10 +41,11 @@ export function createStateRepository(
 
     if (!candidates.length) {
       const empty = createEmptyEnvelope(clock());
+      const issues = [primary, backup].filter((result) => result.code !== "state-missing");
       return success(empty, {
         source: "empty",
-        recovered: false,
-        issues: [primary, backup].filter((result) => result.code !== "state-missing"),
+        recovered: issues.length > 0,
+        issues,
       });
     }
 
@@ -91,6 +92,12 @@ export function createStateRepository(
       } catch {
         // The original failure is more actionable; recovery is attempted best-effort.
       }
+      if (isQuotaExceededError(error)) return fromThrown(
+        "storage-quota-exceeded",
+        "Nightforge browser storage is full.",
+        error,
+        "Free browser storage or remove unused Nightforge records, then retry. Your previous valid state remains intact.",
+      );
       return fromThrown(
         "storage-write-failed",
         "Nightforge could not save to browser storage.",
@@ -102,4 +109,3 @@ export function createStateRepository(
 
   return { load, save };
 }
-

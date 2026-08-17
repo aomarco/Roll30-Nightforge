@@ -194,6 +194,224 @@
   }
 }
 
+/* Phase 11 hardening: the same Nightforge composition at constrained layouts. */
+.nf-state-screen-root h1,
+.nf-state-screen-root h2,
+.nf-state-screen-root h3,
+.nf-state-screen-root strong,
+.nf-state-scene-root h1,
+.nf-state-scene-root h2,
+.nf-state-table-root h2,
+.nf-state-table-root strong {
+  overflow-wrap: anywhere;
+}
+
+.nf-state-screen-root .loot-meta,
+.nf-state-screen-root .ledger-meta,
+.nf-state-table-root .cast-meta,
+.nf-state-table-root .hud-scene,
+.nf-state-table-root .track-name {
+  min-width: 0;
+}
+
+.nf-state-screen-root .loot-meta strong,
+.nf-state-screen-root .loot-meta small,
+.nf-state-screen-root .ledger-meta strong,
+.nf-state-screen-root .ledger-meta small,
+.nf-state-table-root .hud-scene strong {
+  white-space: normal;
+}
+
+.nf-state-table-root .track-order {
+  scrollbar-width: thin;
+}
+
+.nf-state-table-root .dock-body {
+  overflow-anchor: none;
+}
+
+.nf-state-table-root .hud-tl {
+  max-width: calc(50vw - 128px);
+  overflow: hidden;
+}
+
+.nf-state-table-root .hud-tl .hud-scene {
+  overflow: hidden;
+}
+
+.nf-state-table-root .hud-tl .hud-scene > * {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1080px) {
+  .nf-state-responsive-shell .deck {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 10px;
+  }
+
+  .nf-state-responsive-shell .deck-nav {
+    justify-self: center;
+  }
+
+  .nf-state-screen-root .measure {
+    padding-right: 24px;
+    padding-left: 24px;
+  }
+
+  .nf-state-scene-root .rig {
+    padding: 20px 22px;
+  }
+
+}
+
+@media (max-width: 900px) {
+  .nf-state-screen-root .masthead {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .nf-state-screen-root .masthead-acts,
+  .nf-state-screen-root .stage-foot,
+  .nf-state-screen-root .sheet-head,
+  .nf-state-screen-root .sheet-head > .row,
+  .nf-state-screen-root .loot-acts {
+    flex-wrap: wrap;
+  }
+
+  .nf-state-screen-root .codex-head {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .nf-state-table-root .track {
+    top: 70px;
+    bottom: auto;
+    width: calc(100vw - 24px);
+    max-width: none;
+    overflow-x: auto;
+  }
+
+  .nf-state-table-root .dock {
+    top: 148px;
+    bottom: 12px;
+    width: min(250px, calc(50vw - 18px));
+  }
+
+  .nf-state-table-root .dock-left { left: 12px; }
+  .nf-state-table-root .dock-right { right: 12px; }
+  .nf-state-table-root .hud-tl { left: 10px; max-width: min(230px, 34vw); }
+  .nf-state-table-root .hud-tr { right: 10px; }
+}
+
+@media (max-width: 720px) {
+  .nf-state-responsive-shell .deck {
+    gap: 6px;
+    padding: 0 8px;
+  }
+
+  .nf-state-responsive-shell .brand {
+    padding-right: 4px;
+  }
+
+  .nf-state-responsive-shell .brand-type {
+    display: none;
+  }
+
+  .nf-state-responsive-shell .deck-tab {
+    gap: 5px;
+    padding: 0 9px;
+  }
+
+  .nf-state-responsive-shell .deck-tail .btn {
+    padding: 0 10px;
+  }
+
+  .nf-state-screen-root .measure {
+    padding: 24px 16px 64px;
+  }
+
+  .nf-state-screen-root .masthead h1 {
+    font-size: 34px;
+  }
+
+  .nf-state-screen-root .masthead-acts > .btn,
+  .nf-state-screen-root .stage-foot > .btn {
+    flex: 1 1 170px;
+  }
+
+  .nf-state-screen-root .stage-body,
+  .nf-state-screen-root .codex,
+  .nf-state-screen-root .sheet {
+    padding-right: 20px;
+    padding-left: 20px;
+  }
+
+  .nf-state-screen-root .picks,
+  .nf-state-screen-root .identity {
+    grid-template-columns: 1fr;
+  }
+
+  .nf-state-screen-root .identity .span-all {
+    grid-column: auto;
+  }
+
+  .nf-state-screen-root .chapters {
+    display: flex;
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  .nf-state-screen-root .chapter {
+    flex: none;
+  }
+
+  .nf-state-scene-root .rig {
+    min-height: 280px;
+    padding: 14px;
+  }
+
+  .nf-state-scene-root .rig-bar,
+  .nf-state-scene-root .rig-tools,
+  .nf-state-scene-root .tune-title {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .nf-state-scene-root .tuner {
+    padding-right: 20px;
+    padding-left: 20px;
+  }
+
+  .nf-state-table-root .hud-tc {
+    top: 64px;
+  }
+
+  .nf-state-table-root .track {
+    top: 110px;
+  }
+
+  .nf-state-table-root .dock {
+    top: 190px;
+    width: min(238px, calc(50vw - 16px));
+  }
+
+  .nf-state-table-root .phase button {
+    padding: 0 10px;
+  }
+
+  .nf-state-battle-complete {
+    bottom: 12px;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .nf-state-battle-complete .btn {
+    grid-column: 1 / -1;
+  }
+}
+
 .nf-state-busy button[disabled] {
   cursor: wait;
   opacity: .55;

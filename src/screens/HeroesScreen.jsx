@@ -31,6 +31,7 @@ import {
   skillModifier,
   subraceById,
 } from "../domain/heroes.js";
+import { useDialogA11y } from "../ui/useDialogA11y.js";
 import GearChapter from "./GearChapter.jsx";
 
 const okay = () => ({ ok: true });
@@ -86,14 +87,7 @@ export default function HeroesScreen({
     setLocalError(null);
   }, [activeHero?.id]);
 
-  useEffect(() => {
-    if (!retiring) return undefined;
-    const close = (event) => {
-      if (event.key === "Escape") setRetiring(null);
-    };
-    document.addEventListener("keydown", close);
-    return () => document.removeEventListener("keydown", close);
-  }, [retiring]);
+  const retireDialogRef = useDialogA11y({ open: Boolean(retiring), onClose: () => setRetiring(null) });
 
   useEffect(
     () => () => {
@@ -239,7 +233,7 @@ export default function HeroesScreen({
   ] : [];
 
   return (
-    <div className={`scroller${busy ? " nf-state-busy" : ""}`}>
+    <div className={`scroller nf-state-screen-root nf-state-heroes-root${busy ? " nf-state-busy" : ""}`}>
       <div className="measure measure-wide enter">
         <div className="masthead">
           <div>
@@ -506,14 +500,14 @@ export default function HeroesScreen({
       {retiring && (
         <>
           <div className="veil" onClick={() => setRetiring(null)} />
-          <aside className="drawer" role="dialog" aria-modal="true" aria-labelledby="retire-hero-title">
+          <aside ref={retireDialogRef} className="drawer" role="dialog" aria-modal="true" aria-labelledby="retire-hero-title" aria-describedby="retire-hero-description" tabIndex={-1}>
             <div className="drawer-top">
               <div><span className="kicker">Retire hero</span><h2 id="retire-hero-title">Close this legend?</h2></div>
               <button className="glyph" onClick={() => setRetiring(null)} aria-label="Close"><X size={17} /></button>
             </div>
             <div className="drawer-body">
               {visibleError && <div className="nf-state-inline-error" role="alert"><strong>Hero not retired</strong><span>{errorText(visibleError)}</span></div>}
-              <p className="prose">Retire <strong>{retiring.name}</strong> from this Nightforge party?</p>
+              <p className="prose" id="retire-hero-description">Retire <strong>{retiring.name}</strong> from this Nightforge party?</p>
               <p className="note">Existing Scene tokens are independent snapshots and remain untouched.</p>
             </div>
             <div className="drawer-foot">

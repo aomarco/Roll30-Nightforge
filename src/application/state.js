@@ -12,6 +12,7 @@ export function createInitialApplicationState() {
       revision: 0,
       error: null,
       recovered: false,
+      recoverySource: null,
     },
   };
 }
@@ -31,6 +32,7 @@ export function applicationReducer(state, action) {
           revision: action.revision,
           error: null,
           recovered: Boolean(action.recovered),
+          recoverySource: action.recoverySource || null,
         },
       };
     case "hydrate-failure":
@@ -64,6 +66,7 @@ export function applicationReducer(state, action) {
           revision: action.revision,
           error: null,
           recovered: false,
+          recoverySource: null,
         },
       };
     case "persistence-failed":

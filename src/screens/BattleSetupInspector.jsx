@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Minus, Package, Plus, Search, Trash2, X } from "lucide-react";
 
 import { formatCost, getItem, itemSubtitle, ITEM_CATALOG } from "../domain/catalog.js";
+import { useDialogA11y } from "../ui/useDialogA11y.js";
 import GearChapter from "./GearChapter.jsx";
 
 const errorText = (error) => error ? `${error.message} ${error.recovery || "Retry the change."}` : "";
@@ -107,15 +108,11 @@ function ChestInventoryDrawer({ chest, busy, error, close, changeItem }) {
     const query = search.trim().toLowerCase();
     return query ? ITEM_CATALOG.filter((item) => `${item.name} ${itemSubtitle(item)}`.toLowerCase().includes(query)) : ITEM_CATALOG;
   }, [search]);
-  useEffect(() => {
-    const onKeyDown = (event) => { if (event.key === "Escape") close(); };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [close]);
+  const dialogRef = useDialogA11y({ onClose: close });
   return (
     <PortalLayer>
       <div className="veil" onClick={close} />
-      <aside className="drawer nf-state-table-chest-drawer" role="dialog" aria-modal="true" aria-labelledby="chest-inventory-title">
+      <aside ref={dialogRef} className="drawer nf-state-table-chest-drawer" role="dialog" aria-modal="true" aria-labelledby="chest-inventory-title" tabIndex={-1}>
         <div className="drawer-top"><div><span className="kicker kicker-brass">Battle cache</span><h2 id="chest-inventory-title">Fill chest</h2></div><button className="glyph" onClick={close} aria-label="Close"><X size={17} /></button></div>
         <div className="drawer-body">
           {error && <div className="nf-state-inline-error" role="alert"><strong>Chest unchanged</strong><span>{errorText(error)}</span></div>}

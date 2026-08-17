@@ -164,7 +164,7 @@ export default function App({ browser = window, runtimeFactory = createBrowserRu
   }
 
   return (
-    <div className="app">
+    <div className="app nf-state-responsive-shell">
       <CommandDeck route={state.route} go={go} activeScene={activeScene} />
       <main className="viewport" key={state.route.page}>{screen}</main>
     </div>

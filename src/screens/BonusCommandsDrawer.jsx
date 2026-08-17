@@ -1,9 +1,9 @@
-import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { ArchiveRestore, Footprints, PackageOpen, ShieldHalf, X } from "lucide-react";
 
 import { getItem, itemSubtitle } from "../domain/catalog.js";
 import { movementMaximum, movementRemaining } from "../domain/combat.js";
+import { useDialogA11y } from "../ui/useDialogA11y.js";
 
 const errorText = (error) => error ? `${error.message} ${error.recovery || "Retry the command."}` : "";
 
@@ -27,17 +27,12 @@ export default function BonusCommandsDrawer({
   const maximum = movementMaximum(resources, token);
   const remaining = movementRemaining(resources, token);
   const option = bonusState.ok ? bonusState.value.options[0] : null;
-
-  useEffect(() => {
-    const onKeyDown = (event) => { if (event.key === "Escape") close(); };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [close]);
+  const dialogRef = useDialogA11y({ onClose: close });
 
   return (
     <PortalLayer>
       <div className="veil" onClick={close} />
-      <aside className="drawer nf-state-combat-drawer" role="dialog" aria-modal="true" aria-labelledby="bonus-commands-title">
+      <aside ref={dialogRef} className="drawer nf-state-combat-drawer" role="dialog" aria-modal="true" aria-labelledby="bonus-commands-title" tabIndex={-1}>
         <div className="drawer-top"><div><span className="kicker kicker-brass">Bonus command</span><h2 id="bonus-commands-title">{token.name}&apos;s Bonus Action</h2></div><button className="glyph" onClick={close} aria-label="Close"><X size={17} /></button></div>
         <div className="drawer-body">
           {error && <div className="nf-state-inline-error" role="alert"><strong>Command not completed</strong><span>{errorText(error)}</span></div>}

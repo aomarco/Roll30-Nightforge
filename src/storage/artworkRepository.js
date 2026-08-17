@@ -1,4 +1,4 @@
-import { fromThrown, success } from "../application/result.js";
+import { fromThrown, isQuotaExceededError, success } from "../application/result.js";
 import { ARTWORK_DATABASE, ARTWORK_STORE } from "./constants.js";
 
 const requestResult = (request) =>
@@ -60,6 +60,14 @@ export function createArtworkRepository(adapter) {
     try {
       return success(await adapter[operation](...args));
     } catch (error) {
+      if (operation === "put" && isQuotaExceededError(error)) {
+        return fromThrown(
+          "artwork-quota-exceeded",
+          "Nightforge artwork storage is full.",
+          error,
+          "Remove unused Scene artwork or choose a smaller image, then retry. Your previous artwork remains active.",
+        );
+      }
       return fromThrown(
         failureDetails.code,
         failureDetails.message,

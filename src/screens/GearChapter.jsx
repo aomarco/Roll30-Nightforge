@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   Gem,
@@ -32,6 +32,7 @@ import {
   toggleWornItem,
   wornMagicBonuses,
 } from "../domain/items.js";
+import { useDialogA11y } from "../ui/useDialogA11y.js";
 
 const KIND_ICONS = {
   weapon: Sword,
@@ -169,10 +170,11 @@ function LoadoutContinuation({ hero, run, error, clearError, busy }) {
 function CatalogDrawer({ hero, filters, setFilters, run, close, busy }) {
   const visible = useMemo(() => filterCatalog(ITEM_CATALOG, filters), [filters]);
   const update = (field) => (event) => setFilters((current) => ({ ...current, [field]: event.target.value }));
+  const dialogRef = useDialogA11y({ onClose: close });
   return (
     <PortalLayer>
       <div className="veil" onClick={close} />
-      <aside className="drawer nf-state-gear-drawer" role="dialog" aria-modal="true" aria-labelledby="catalog-title">
+      <aside ref={dialogRef} className="drawer nf-state-gear-drawer" role="dialog" aria-modal="true" aria-labelledby="catalog-title" tabIndex={-1}>
         <div className="drawer-top"><div><span className="kicker kicker-brass">The equipment ledger</span><h2 id="catalog-title">Add an item</h2></div><button className="glyph" onClick={close} aria-label="Close"><X size={17} /></button></div>
         <div className="drawer-body">
           <div className="seek"><Search size={16} /><input className="inp" value={filters.text} onChange={update("text")} placeholder="Search all 355 items…" autoFocus /></div>
@@ -211,10 +213,11 @@ function ItemDrawer({ hero, item, run, close, error, busy }) {
   const off = hero.loadout.offHand === item.id;
   const body = hero.armorId === item.id;
   const shield = hero.shieldId === item.id;
+  const dialogRef = useDialogA11y({ onClose: close });
   return (
     <PortalLayer>
       <div className="veil" onClick={close} />
-      <aside className="drawer nf-state-gear-drawer" role="dialog" aria-modal="true" aria-labelledby="item-title">
+      <aside ref={dialogRef} className="drawer nf-state-gear-drawer" role="dialog" aria-modal="true" aria-labelledby="item-title" tabIndex={-1}>
         <div className="drawer-top"><div><span className="kicker">Equipment record</span><h2 id="item-title">{item.name}</h2></div><button className="glyph" onClick={close} aria-label="Close"><X size={17} /></button></div>
         <div className="drawer-body">
           <div className={`nf-state-item-hero loot-${item.kind}`}><span className="loot-ico"><Icon size={20} /></span><div><strong>{item.typeLabel}</strong><p className="note">{itemSubtitle(item)}</p></div></div>
@@ -249,13 +252,6 @@ export default function GearChapter({
   const owned = useMemo(() => hero.inventory
     .map((entry) => ({ entry, item: getItem(entry.itemId) }))
     .filter(({ item }) => item && (!search.trim() || item.name.toLowerCase().includes(search.trim().toLowerCase()))), [hero.inventory, search]);
-
-  useEffect(() => {
-    if (!drawer) return undefined;
-    const close = (event) => { if (event.key === "Escape") setDrawer(null); };
-    document.addEventListener("keydown", close);
-    return () => document.removeEventListener("keydown", close);
-  }, [drawer]);
 
   const run = (result) => {
     if (!result?.ok) {

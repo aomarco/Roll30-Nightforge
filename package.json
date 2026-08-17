@@ -27,14 +27,24 @@
     "test:phase9:render": "node scripts/phase9-render-smoke.mjs",
     "verify:phase10": "node scripts/verify-phase10.mjs",
     "test:phase10:render": "node scripts/phase10-render-smoke.mjs",
-    "verify": "npm test && npm run test:phase2:render && npm run test:phase3:render && npm run test:phase4:render && npm run test:phase5:render && npm run test:phase6:render && npm run test:phase7:render && npm run test:phase8:render && npm run test:phase9:render && npm run test:phase10:render && npm run verify:phase1 && npm run verify:phase2 && npm run verify:phase3 && npm run verify:phase4 && npm run verify:phase5 && npm run verify:phase6 && npm run verify:phase7 && npm run verify:phase8 && npm run verify:phase9 && npm run verify:phase10 && npm run build"
+    "test:phase11": "node --test src/phase11.test.js",
+    "test:phase11:render": "node scripts/phase11-render-smoke.mjs",
+    "test:phase11:browser": "playwright test",
+    "verify:phase11": "node scripts/verify-phase11.mjs",
+    "verify:dependencies": "npm audit --audit-level=high",
+    "verify": "npm test && npm run test:phase2:render && npm run test:phase3:render && npm run test:phase4:render && npm run test:phase5:render && npm run test:phase6:render && npm run test:phase7:render && npm run test:phase8:render && npm run test:phase9:render && npm run test:phase10:render && npm run test:phase11:render && npm run verify:phase1 && npm run verify:phase2 && npm run verify:phase3 && npm run verify:phase4 && npm run verify:phase5 && npm run verify:phase6 && npm run verify:phase7 && npm run verify:phase8 && npm run verify:phase9 && npm run verify:phase10 && npm run test:phase11:browser && npm run verify:phase11 && npm run verify:dependencies && npm run build"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
-    "vite": "latest",
+    "lucide-react": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "lucide-react": "latest"
+    "vite": "latest"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "@playwright/test": "1.62.1"
+  },
+  "overrides": {
+    "nanoid": "3.3.18"
+  }
 }

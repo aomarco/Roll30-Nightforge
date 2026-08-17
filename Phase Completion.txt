@@ -3321,3 +3321,220 @@ Every Phase 10 requirement has direct implementation and verification evidence:
   regression suite, and production build: proven.
 
 Phase 10 is complete and ready for Phase 11.
+
+
+======================================================================
+PHASE 11 COMPLETION RECORD
+======================================================================
+
+130. HARDENING SCOPE COMPLETED
+------------------------------
+
+Phase 11 closes the planned hardening scope without replacing, borrowing, or
+rearranging the Nightforge UI. The seven permanent visual files remain
+byte-identical. Responsive and behavioral state rules live only in
+`src/styles/functional-states.css` under `.nf-state-` selectors.
+
+Completed hardening covers:
+
+- Loading, empty, success, error, backup-recovery, and clean-vault recovery.
+- Forward and reverse keyboard navigation, visible focus, modal focus traps,
+  topmost Escape handling, and focus restoration.
+- Exact destructive targets and honest unavailable/disabled explanations.
+- Reduced motion and deterministic finite-animation settling.
+- Long Scene and Hero names without control overlap.
+- The complete 355-entry catalog in one inventory.
+- Active encounters with 180 tokens.
+- Corrupt JSON, shape, version, and checksum records.
+- Separate LocalStorage and IndexedDB/artwork quota failures.
+- Six required viewports and 100%, 125%, and 150% browser-zoom emulation.
+- Compact Table docks, turn controls, map pointer layering, and scroll state.
+
+
+131. DATA RECOVERY AND FAILURE SAFETY
+-------------------------------------
+
+- If the primary envelope is corrupt and the backup is valid, the valid backup
+  remains authoritative and the UI identifies the recovery.
+- If both saved envelopes are damaged, Nightforge opens a clean in-memory vault
+  without overwriting either damaged record.
+- Corrupt-data diagnostics distinguish invalid JSON, shape, schema version, and
+  checksum failures.
+- LocalStorage quota exhaustion returns `storage-quota-exceeded`, preserves the
+  previous valid state, and shows actionable recovery copy.
+- Artwork quota exhaustion returns `artwork-quota-exceeded`; the previous
+  artwork contract remains active.
+- Successful Nightforge operations were executed with all four original
+  Roll30 storage identifiers pre-seeded, and every marker remained unchanged.
+- No characters, games, maps, saves, artwork, or other user data were imported.
+
+
+132. KEYBOARD AND ACCESSIBILITY CONTRACT
+----------------------------------------
+
+All eleven modal drawers share `src/ui/useDialogA11y.js`:
+
+- Focus enters the opened dialog.
+- Tab and Shift+Tab wrap inside the topmost dialog.
+- Only the topmost dialog consumes Escape.
+- Focus cannot escape to the obscured page.
+- Closing restores focus to the exact invoker.
+- Dialogs expose modal semantics and a programmatic focus target.
+
+Global `:focus-visible` treatment was verified through keyboard traversal of
+the primary Library actions. Scene deletion, Hero retirement, and Battle
+abandonment identify their exact target. Status and error states use text and
+semantics rather than color alone. Disabled Scene/Table controls explain why
+they cannot run, and active-Battle creation controls are visibly disabled.
+
+
+133. RESPONSIVE, CONTENT, AND MOTION VERIFICATION
+-------------------------------------------------
+
+Twenty-one deterministic Chromium screenshot baselines cover:
+
+- Library and Forge.
+- Heroes Identity, Abilities, and Gear.
+- Scene Play and Scene Battle.
+- Table Setup with a selected token, Table with nothing selected, and active
+  Table Battle.
+- 1920x1080, 1600x900, 1440x900, 1280x800, 1180x820, and 1024x768.
+- Browser-zoom emulation at 100%, 125%, and 150% using proportional CSS
+  viewports plus matching device scale factors.
+- Compact and 150%-equivalent active Table layouts.
+
+Every capture waits for `document.fonts.ready`, repository hydration, absence
+of busy state, completion of finite Web Animations, and two rendered frames.
+Playwright disables animation for the screenshot itself. Windows comparisons
+permit zero changed pixels; pinned-renderer CI permits at most 0.1%.
+
+Manual visual review covered Forge, standard Setup, active Battle, compact
+Table, 150%-equivalent Table, and 150%-equivalent Library. The review found and
+fixed long Scene-title overlap and misleading active-Battle disabled styling.
+
+
+134. PERFORMANCE AND PURITY CONTRACT
+------------------------------------
+
+- Attack ranges remain one bounded SVG path per range tier.
+- A* pathfinding remains capped at exactly 4,000 cells.
+- Pointer movement updates transient React state; persistence occurs on the
+  final pointer-up operation.
+- No document-level pointer listener remains.
+- Scene and Hero drafts retain their 450 ms debounce and flush on blur and
+  navigation.
+- Complete-catalog filtering and 180-token selection were exercised in the
+  browser.
+- Artwork remains in IndexedDB; image payloads never enter LocalStorage.
+- No runtime TODO, FIXME, `noop`, empty handler, original-project import/path,
+  or forbidden original storage access remains.
+- All visible buttons have submit, click, pointer, or explicit disabled
+  behavior.
+- The complete dependency audit reports zero vulnerabilities.
+
+
+135. FILES ADDED
+----------------
+
+- `src/ui/useDialogA11y.js`
+  Shared modal stack, focus trap, Escape, and restoration contract.
+
+- `src/phase11.test.js`
+  Eight corrupt-data, quota, recovery-source, long-content, complete-inventory,
+  and 180-token tests.
+
+- `tests/phase11.spec.js` and `playwright.config.js`
+  Fifteen pinned-Chromium journeys and deterministic visual coverage.
+
+- `tests/__screenshots__/`
+  Twenty-one frozen Phase 11 PNG baselines.
+
+- `scripts/phase11-render-smoke.mjs`
+  Server-rendered loading/empty/success/error/recovery/extreme-content matrix.
+
+- `scripts/verify-phase11.mjs`
+  Purity, UI protection, accessibility, performance, parity, browser-contract,
+  and screenshot-manifest gate.
+
+- `scripts/nightforge-phase11-screenshot-hashes.json`
+  SHA-256 manifest for every deterministic Phase 11 screenshot.
+
+- `PARITY_REGISTER.md`
+  All 47 planned acceptance journeys mapped to direct passing evidence.
+
+
+136. FILES UPDATED
+------------------
+
+- Application state, commands, and result helpers now preserve recovery source
+  and distinguish storage quota exhaustion.
+- State and artwork repositories now expose actionable quota recovery while
+  preserving the last valid state/artwork contract.
+- Every modal screen now uses the shared keyboard/focus contract.
+- Library loading and corrupt-data recovery are explicit and safe.
+- Table long names no longer overlap phase controls, disabled encounter actions
+  read as unavailable, and scroll anchoring is deterministic.
+- `src/styles/functional-states.css` contains the only Phase 11 responsive and
+  behavioral presentation changes.
+- `package.json` pins Playwright 1.62.1, overrides Nano ID to patched 3.3.18,
+  and includes all Phase 11, dependency-audit, and browser gates in `verify`.
+- `README.md` now describes the functional application and its verification
+  commands instead of the former prototype state.
+- `NIGHTFORGE_FULL_FUNCTIONALITY_PORT_PLAN.txt` has its inherited mojibake
+  repaired so phase names, apostrophes, ranges, and viewport dimensions render
+  correctly without changing the plan's meaning.
+
+
+137. VERIFICATION EVIDENCE
+--------------------------
+
+Complete command executed:
+
+    npm run verify
+
+Result: PASS.
+
+- Node domain/repository/integration suite: 229 passed, 0 failed, 0 skipped.
+- Phase 2 through Phase 11 render smoke suites: Pass.
+- Phase 1 through Phase 11 structural and purity verifiers: Pass.
+- Pinned Playwright Chromium suite: 15 passed.
+- Deterministic screenshot set: 21 manifested baselines, zero changed pixels on
+  the final Windows comparison.
+- Required six viewports and three browser-zoom emulations: Pass.
+- All 47 parity-register journeys: PASS; open entries: 0.
+- Eleven managed dialogs: keyboard/focus contract verified.
+- Corruption, LocalStorage quota, artwork quota, 355-item inventory, 180-token
+  encounter, reduced motion, and original-key isolation: Pass.
+- Permanent Nightforge visual hashes: Pass across all seven protected files.
+- Runtime mojibake, deferred-marker, empty-handler, original-path/import, and
+  original-storage-access scan: Pass.
+- Dependency audit: 0 vulnerabilities.
+- Production Vite build: Pass; 1,825 modules transformed.
+- Production assets: HTML 0.78 kB, CSS 67.71 kB, JavaScript 497.10 kB.
+
+
+138. PHASE BOUNDARY AUDIT
+-------------------------
+
+Phase 11 completes hardening and closes every parity-register entry. Phase 12
+is not part of this change: no GitHub repository was created, no preview was
+published, no production path was replaced, and no rollback tag was created.
+Those release actions require separate explicit owner approval.
+
+
+139. PHASE 11 COMPLETION STATEMENT
+----------------------------------
+
+Every Phase 11 requirement has implementation and direct verification evidence:
+
+- State lifecycle, keyboard/focus, reduced motion, long content, large
+  inventories, large token lists, corrupt data, quota failures, and responsive
+  behavior: proven.
+- Six viewport baselines, three zoom levels, all named screen states, compact
+  Table layouts, deterministic animation settling, and zero-pixel final Windows
+  comparison: proven.
+- Accessibility and performance requirements, 47 acceptance journeys, complete
+  regression suite, production build, dependency audit, Nightforge visual
+  protection, original Roll30 isolation, and no data import: proven.
+
+Phase 11 is complete. Phase 12 remains deliberately unexecuted.

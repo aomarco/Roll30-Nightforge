@@ -89,6 +89,7 @@ import {
   zoomCameraAtViewportCenter,
 } from "../domain/table.js";
 import { Pip } from "../ui/Glyphs.jsx";
+import { useDialogA11y } from "../ui/useDialogA11y.js";
 import BattleSetupInspector from "./BattleSetupInspector.jsx";
 import AttackCinematic from "./AttackCinematic.jsx";
 import BattleCompletion from "./BattleCompletion.jsx";
@@ -117,12 +118,12 @@ function useArtworkUrl(scene, artworkRepository, suppliedUrl) {
   useEffect(() => {
     if (suppliedUrl) {
       setState({ url: suppliedUrl, error: null });
-      return () => {};
+      return undefined;
     }
     let active = true;
     let objectUrl = null;
     setState({ url: null, error: null });
-    if (!scene?.artworkKey || !artworkRepository) return () => {};
+    if (!scene?.artworkKey || !artworkRepository) return undefined;
     const load = async () => {
       const result = await artworkRepository.get(scene.artworkKey);
       if (!active) return;
@@ -273,10 +274,11 @@ function TableToolsDrawer({
   toggleWalls,
   exitTool,
 }) {
+  const dialogRef = useDialogA11y({ onClose: close });
   return (
     <PortalLayer>
       <div className="veil" onClick={close} />
-      <aside className="drawer nf-state-table-tools-drawer" role="dialog" aria-modal="true" aria-labelledby="table-tools-title">
+      <aside ref={dialogRef} className="drawer nf-state-table-tools-drawer" role="dialog" aria-modal="true" aria-labelledby="table-tools-title" tabIndex={-1}>
         <div className="drawer-top">
           <div><span className="kicker kicker-brass">Table instruments</span><h2 id="table-tools-title">Table tools</h2></div>
           <button className="glyph" onClick={close} aria-label="Close"><X size={17} /></button>
@@ -411,6 +413,7 @@ export default function TableScreen({
   const selectedChest = visibleChests.find((chest) => chest.id === selectedChestId) || null;
   const lootChest = chests.find((chest) => chest.id === lootChestId) || null;
   const visibleError = localError || persistence.error || artworkError;
+  const abandonDialogRef = useDialogA11y({ open: abandonOpen, onClose: () => setAbandonOpen(false) });
   const walls = scene?.walls || [];
   const wallsVisible = scene?.wallsVisible !== false;
   const canAdjustArtwork = Boolean(artworkUrl || scene?.blankCanvas);
@@ -1265,7 +1268,7 @@ export default function TableScreen({
       <div className="hud hud-tl glass grained">
         <button className="glyph" onClick={() => go({ page: "home" })} title="All maps"><ChevronLeft size={18} /></button>
         <span className="hud-div" />
-        <div className="hud-scene"><span className="kicker">{scene?.name || "Untitled scene"}</span><strong>{isPlay ? "Free play" : isCompleteBattle ? scene.encounter.winnerTokenId ? `${tableTokens.find((token) => token.id === scene.encounter.winnerTokenId)?.name || "Winner"} · Battle complete` : "No survivor · Battle complete" : isActiveBattle ? `Round ${scene.encounter.round} · ${active?.name || "Token"}'s turn` : "Setup mode"}</strong></div>
+        <div className="hud-scene"><span className="kicker" title={scene?.name || "Untitled scene"}>{scene?.name || "Untitled scene"}</span><strong>{isPlay ? "Free play" : isCompleteBattle ? scene.encounter.winnerTokenId ? `${tableTokens.find((token) => token.id === scene.encounter.winnerTokenId)?.name || "Winner"} · Battle complete` : "No survivor · Battle complete" : isActiveBattle ? `Round ${scene.encounter.round} · ${active?.name || "Token"}'s turn` : "Setup mode"}</strong></div>
       </div>
 
       <div className="hud hud-tc glass grained">
@@ -1291,11 +1294,11 @@ export default function TableScreen({
         <div className="dock-body">
           <section className="unit">
             <div className="unit-top"><span className="unit-label">Summon a token</span></div>
-            <select className="sel" value={isPlay ? "" : summonChoice} onChange={(event) => setSummonChoice(event.target.value)} disabled={isBattle}>
+            <select className={`sel${isBattle ? " nf-state-disabled" : ""}`} value={isPlay ? "" : summonChoice} onChange={(event) => setSummonChoice(event.target.value)} disabled={isBattle}>
               <option value="">Blank token</option>
               {!isPlay && heroes.map((hero) => <option value={hero.id} key={hero.id}>{hero.name}</option>)}
             </select>
-            <button className="btn btn-key btn-sm btn-wide" onClick={isPlay ? addPlayToken : addSetupToken} disabled={busy || isBattle}><Plus size={15} strokeWidth={2.4} /> Add to map</button>
+            <button className={`btn btn-key btn-sm btn-wide${isBattle ? " nf-state-disabled" : ""}`} onClick={isPlay ? addPlayToken : addSetupToken} disabled={busy || isBattle}><Plus size={15} strokeWidth={2.4} /> Add to map</button>
             {isSetup && <button className="btn btn-line btn-sm btn-wide" onClick={placeSetupChest} disabled={busy}><Package size={14} /> Place a chest</button>}
             {isBattle && <p className="note">Token and chest creation are locked while this encounter is preserved.</p>}
           </section>
@@ -1327,7 +1330,7 @@ export default function TableScreen({
               <section className="unit nf-state-battle-inventory"><div className="unit-top"><span className="unit-label">Battle inventory</span><span className="tag">{selected.inventory.reduce((total, entry) => total + entry.quantity, 0)} units</span></div><div className="nf-state-table-chest-owned">{selected.inventory.map((entry) => { const item = getItem(entry.itemId); const hands = [selected.loadout.mainHand === entry.itemId ? "Main" : null, selected.loadout.offHand === entry.itemId ? "Off" : null].filter(Boolean); return <span key={entry.itemId}><strong>{item?.name || entry.itemId}{hands.length ? ` · ${hands.join("/")}` : ""}</strong><em className="numeral">×{entry.quantity}</em></span>; })}{!selected.inventory.length && <p className="note">Inventory is empty.</p>}</div><p className="note">Shots consume one matching ammunition unit. Thrown weapons leave inventory until they are retrieved.</p></section>
               <form className="unit" onSubmit={(event) => event.preventDefault()}><div className="unit-top"><span className="unit-label">Adjust stat</span><span className="tag">Locked</span></div><div className="console-row"><select className="sel" defaultValue="hp" disabled><option value="hp">HP</option><option value="maxHp">Max HP</option><option value="ac">AC</option><option value="speed">Speed</option></select><input className="inp" placeholder="+5 / −5" inputMode="numeric" disabled /></div><button className="btn btn-key btn-sm btn-wide" type="submit" disabled>Apply adjustment</button></form>
             </>}
-            <button className="btn btn-hazard btn-sm btn-wide" onClick={isPlay ? removeSelectedPlayToken : undefined} disabled={busy || isBattle} title={isBattle ? "Tokens cannot be removed during an active Battle" : undefined}><Trash2 size={15} /> Remove token</button>
+            <button className={`btn btn-hazard btn-sm btn-wide${isBattle ? " nf-state-disabled" : ""}`} onClick={isPlay ? removeSelectedPlayToken : undefined} disabled={busy || isBattle} title={isBattle ? "Tokens cannot be removed during an active Battle" : undefined}><Trash2 size={15} /> Remove token</button>
           </div>
         </> : selectedChest ? <><header className="dock-head"><span className="sigil sigil-lg nf-state-table-chest-sigil"><Package size={18} /></span><div><span className="kicker">Selected chest</span><h2>Battle chest</h2></div></header><div className="dock-body"><section className="unit"><div className="unit-top"><span className="unit-label">Contents</span><span className={`tag ${selectedChest.inventory.length ? "tag-brass" : ""}`}>{selectedChest.inventory.length ? isActiveBattle ? "Bonus Action" : "Final state" : "Empty"}</span></div><div className="nf-state-table-chest-owned">{selectedChest.inventory.map((entry) => <span key={entry.itemId}><strong>{getItem(entry.itemId)?.name || entry.itemId}</strong><em className="numeral">×{entry.quantity}</em></span>)}{!selectedChest.inventory.length && <p className="note">This chest is empty.</p>}</div><p className="note">Chest movement and Setup editing stay locked. An adjacent active token can open it through the Bonus command; depleted contents persist through restart.</p></section></div></> : <div className="void-state"><span className="void-orb"><CircleDot size={26} /></span><h3>Nothing selected</h3><p>Pick a token on the map or in the cast list to inspect it.</p></div>}
       </aside>
@@ -1342,7 +1345,7 @@ export default function TableScreen({
       {lootChest && isActiveBattle && <ChestLootDrawer chest={lootChest} busy={busy || combatLocked} error={visibleError} take={takeChestItem} close={() => setLootChestId(null)} />}
       {cinematic && <AttackCinematic cinematic={cinematic} />}
       {retrievalCinematic && <RetrievalCinematic cinematic={retrievalCinematic} />}
-      {abandonOpen && <PortalLayer><div className="veil" onClick={() => setAbandonOpen(false)} /><aside className="drawer" role="dialog" aria-modal="true" aria-labelledby="abandon-battle-title"><div className="drawer-top"><div><span className="kicker">Return to Setup</span><h2 id="abandon-battle-title">Abandon this encounter?</h2></div><button className="glyph" onClick={() => setAbandonOpen(false)} aria-label="Close"><X size={17} /></button></div><div className="drawer-body">{visibleError && <div className="nf-state-inline-error" role="alert"><strong>Battle not abandoned</strong><span>{errorText(visibleError)}</span></div>}<p className="prose">Return <strong>{scene?.name}</strong> to editable Battle Setup?</p><p className="note">Current token HP and positions are preserved. Initiative, turn resources, and physical battle items are cleared.</p></div><div className="drawer-foot"><button className="btn btn-line" onClick={() => setAbandonOpen(false)} autoFocus>Continue Battle</button><button className="btn btn-hazard" onClick={abandonBattle} disabled={busy}><Hammer size={15} /> Abandon Battle</button></div></aside></PortalLayer>}
+      {abandonOpen && <PortalLayer><div className="veil" onClick={() => setAbandonOpen(false)} /><aside ref={abandonDialogRef} className="drawer" role="dialog" aria-modal="true" aria-labelledby="abandon-battle-title" aria-describedby="abandon-battle-description" tabIndex={-1}><div className="drawer-top"><div><span className="kicker">Return to Setup</span><h2 id="abandon-battle-title">Abandon this encounter?</h2></div><button className="glyph" onClick={() => setAbandonOpen(false)} aria-label="Close"><X size={17} /></button></div><div className="drawer-body">{visibleError && <div className="nf-state-inline-error" role="alert"><strong>Battle not abandoned</strong><span>{errorText(visibleError)}</span></div>}<p className="prose" id="abandon-battle-description">Return <strong>{scene?.name}</strong> to editable Battle Setup?</p><p className="note">Current token HP and positions are preserved. Initiative, turn resources, and physical battle items are cleared.</p></div><div className="drawer-foot"><button className="btn btn-line" onClick={() => setAbandonOpen(false)} autoFocus>Continue Battle</button><button className="btn btn-hazard" onClick={abandonBattle} disabled={busy}><Hammer size={15} /> Abandon Battle</button></div></aside></PortalLayer>}
     </div>
   );
 }

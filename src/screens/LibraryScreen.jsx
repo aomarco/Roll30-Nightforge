@@ -13,8 +13,15 @@ import {
 } from "lucide-react";
 
 import { accentForScene, orderScenesForLibrary } from "../application/library.js";
+import { useDialogA11y } from "../ui/useDialogA11y.js";
 
-const noop = () => {};
+const unavailable = () => ({
+  ok: false,
+  code: "COMMAND_UNAVAILABLE",
+  message: "This command is not connected.",
+  recovery: "Open Nightforge through its application shell.",
+  retryable: false,
+});
 const modeLabel = (kind) => (kind === "battle" ? "Battle" : "Play");
 const modeNote = (kind) => (kind === "battle" ? "Combat ready" : "Free play");
 const errorText = (error) =>
@@ -31,7 +38,7 @@ function useArtworkUrls(scenes, artworkRepository) {
     setArtworkError(null);
     if (!artworkRepository) {
       setArtworkUrls({});
-      return () => {};
+      return undefined;
     }
 
     const load = async () => {
@@ -91,11 +98,11 @@ export default function LibraryScreen({
   lifecycle = "ready",
   persistence = { status: "idle", error: null },
   artworkRepository = null,
-  go = noop,
-  onForge = noop,
-  onOpen = noop,
-  onSettings = noop,
-  onDelete = noop,
+  go = unavailable,
+  onForge = unavailable,
+  onOpen = unavailable,
+  onSettings = unavailable,
+  onDelete = unavailable,
 }) {
   const [mapName, setMapName] = useState("");
   const [createMode, setCreateMode] = useState("battle");
@@ -104,19 +111,10 @@ export default function LibraryScreen({
   const orderedScenes = useMemo(() => orderScenesForLibrary(scenes), [scenes]);
   const [featured, ...rest] = orderedScenes;
   const { artworkUrls, artworkError } = useArtworkUrls(orderedScenes, artworkRepository);
-  const busy = persistence.status === "saving";
+  const busy = lifecycle === "booting" || persistence.status === "saving";
   const visibleError = persistence.error || artworkError;
-
-  useEffect(() => {
-    if (!forging && !deleting) return undefined;
-    const close = (event) => {
-      if (event.key !== "Escape") return;
-      setForging(false);
-      setDeleting(null);
-    };
-    document.addEventListener("keydown", close);
-    return () => document.removeEventListener("keydown", close);
-  }, [forging, deleting]);
+  const forgeDialogRef = useDialogA11y({ open: forging, onClose: () => setForging(false) });
+  const deleteDialogRef = useDialogA11y({ open: Boolean(deleting), onClose: () => setDeleting(null) });
 
   const forge = (event) => {
     event.preventDefault();
@@ -140,7 +138,7 @@ export default function LibraryScreen({
   );
 
   return (
-    <div className={`scroller${busy ? " nf-state-busy" : ""}`}>
+    <div className={`scroller nf-state-screen-root nf-state-library-root${busy ? " nf-state-busy" : ""}`}>
       <div className="measure measure-wide enter">
         <div className="masthead">
           <div>
@@ -170,8 +168,10 @@ export default function LibraryScreen({
 
         {!visibleError && persistence.recovered && (
           <div className="nf-state-recovery" role="status">
-            <strong>Nightforge restored the backup vault.</strong>
-            <span>The primary browser save was invalid, so the newest valid backup is active.</span>
+            <strong>Nightforge recovered safely.</strong>
+            <span>{persistence.recoverySource === "empty"
+              ? "The damaged saved records could not be used, so a clean vault was opened without overwriting them."
+              : "The primary browser save was invalid, so Nightforge restored the backup vault."}</span>
           </div>
         )}
 
@@ -286,7 +286,7 @@ export default function LibraryScreen({
       {forging && (
         <>
           <div className="veil" onClick={() => setForging(false)} />
-          <aside className="drawer" role="dialog" aria-modal="true" aria-label="Forge a scene">
+          <aside ref={forgeDialogRef} className="drawer" role="dialog" aria-modal="true" aria-label="Forge a scene" tabIndex={-1}>
             <form className="nf-state-drawer-form" onSubmit={forge}>
               <div className="drawer-top">
                 <div><span className="kicker kicker-jade">New scene</span><h2>The Forge</h2></div>
@@ -329,7 +329,7 @@ export default function LibraryScreen({
       {deleting && (
         <>
           <div className="veil" onClick={() => setDeleting(null)} />
-          <aside className="drawer" role="dialog" aria-modal="true" aria-labelledby="delete-scene-title">
+          <aside ref={deleteDialogRef} className="drawer" role="dialog" aria-modal="true" aria-labelledby="delete-scene-title" aria-describedby="delete-scene-description" tabIndex={-1}>
             <div className="drawer-top">
               <div><span className="kicker">Remove scene</span><h2 id="delete-scene-title">Close this chapter?</h2></div>
               <button className="glyph" onClick={() => setDeleting(null)} aria-label="Close"><X size={17} /></button>
@@ -341,7 +341,7 @@ export default function LibraryScreen({
                   <span>{errorText(persistence.error)}</span>
                 </div>
               )}
-              <p className="prose">Delete <strong>{deleting.name}</strong> from this Nightforge vault?</p>
+              <p className="prose" id="delete-scene-description">Delete <strong>{deleting.name}</strong> from this Nightforge vault?</p>
               <p className="note">This removes the Scene record. Original Roll30 saves are never accessed or changed.</p>
             </div>
             <div className="drawer-foot">
