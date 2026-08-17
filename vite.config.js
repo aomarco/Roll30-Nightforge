@@ -1,8 +1,8 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-// Standalone UI-redesign sandbox — served from root (unlike the real project's
-// /Roll30/ base) so it runs cleanly on its own.
+// Local development stays at root. Release builds pass an explicit Pages base:
+// /Roll30-Nightforge/ for preview and /Roll30/ for production.
 export default defineConfig({
   plugins: [react()],
 });

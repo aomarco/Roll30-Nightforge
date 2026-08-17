@@ -22,6 +22,16 @@ npm run dev
 The development server prints the local URL. Production output is created with
 `npm run build`.
 
+Release builds use explicit GitHub Pages bases:
+
+| Command | Pages path |
+|---|---|
+| `npm run build:preview` | `/Roll30-Nightforge/` |
+| `npm run build` | `/Roll30/` |
+
+The same verified source can therefore be reviewed in an isolated preview
+repository before the production repository is replaced.
+
 ## Verification
 
 ```bash
