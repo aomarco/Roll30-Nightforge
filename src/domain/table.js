@@ -381,6 +381,7 @@ export const createTurnResources = (token) => ({
   offHandAttackAvailable: false,
   offHandWeaponId: null,
   offHandAttackHand: null,
+  openedChestId: null,
 });
 
 export function normalizeTurnResources(resources, token) {
@@ -403,7 +404,56 @@ export function normalizeTurnResources(resources, token) {
     offHandAttackAvailable: Boolean(resources?.offHandAttackAvailable),
     offHandWeaponId: typeof resources?.offHandWeaponId === "string" ? resources.offHandWeaponId : null,
     offHandAttackHand: ["mainHand", "offHand"].includes(resources?.offHandAttackHand) ? resources.offHandAttackHand : null,
+    openedChestId: typeof resources?.openedChestId === "string" && resources.openedChestId.trim()
+      ? resources.openedChestId.trim()
+      : null,
   };
+}
+
+export function normalizeBattleItem(input, tokens = []) {
+  const id = typeof input?.id === "string" && input.id.trim() ? input.id.trim() : null;
+  const item = ITEM_BY_ID[input?.itemId];
+  if (!id || item?.kind !== "weapon") return null;
+  const tokenIds = new Set(normalizeTableTokens(tokens).map((token) => token.id));
+  const state = input.state === "embedded" ? "embedded" : "ground";
+  const carrierTokenId = state === "embedded" && tokenIds.has(input.carrierTokenId)
+    ? input.carrierTokenId
+    : null;
+  if (state === "embedded" && !carrierTokenId) return null;
+  return {
+    id,
+    itemId: item.id,
+    state,
+    position: state === "ground" ? normalizePosition(input.position) : null,
+    carrierTokenId,
+    sourceTokenId: tokenIds.has(input.sourceTokenId) ? input.sourceTokenId : null,
+  };
+}
+
+export const normalizeBattleItems = (items, tokens = []) => {
+  const seen = new Set();
+  return Array.isArray(items)
+    ? items.flatMap((item) => {
+        const normalized = normalizeBattleItem(item, tokens);
+        if (!normalized || seen.has(normalized.id)) return [];
+        seen.add(normalized.id);
+        return [normalized];
+      })
+    : [];
+};
+
+export function normalizeAmmoSpentByToken(input, tokens = []) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return {};
+  const tokenIds = new Set(normalizeTableTokens(tokens).map((token) => token.id));
+  return Object.fromEntries(Object.entries(input).flatMap(([tokenId, ammunition]) => {
+    if (!tokenIds.has(tokenId) || !ammunition || typeof ammunition !== "object" || Array.isArray(ammunition)) return [];
+    const spent = Object.fromEntries(Object.entries(ammunition).flatMap(([itemId, quantity]) => {
+      const item = ITEM_BY_ID[itemId];
+      const normalizedQuantity = Math.max(0, Math.floor(finite(quantity)));
+      return item?.kind === "ammunition" && normalizedQuantity > 0 ? [[itemId, normalizedQuantity]] : [];
+    }));
+    return Object.keys(spent).length ? [[tokenId, spent]] : [];
+  }));
 }
 
 export function normalizeEncounter(encounter, tokens = []) {
@@ -429,8 +479,9 @@ export function normalizeEncounter(encounter, tokens = []) {
     activeIndex,
     round: Math.max(1, Math.floor(finite(encounter.round, 1))),
     resources: activeToken ? { [activeToken.id]: normalizeTurnResources(resourceInput, activeToken) } : {},
-    battleItems: Array.isArray(encounter.battleItems) ? encounter.battleItems : [],
-    ammoSpentByToken: encounter.ammoSpentByToken && typeof encounter.ammoSpentByToken === "object" ? encounter.ammoSpentByToken : {},
+    battleItems: normalizeBattleItems(encounter.battleItems, tokens),
+    ammoSpentByToken: normalizeAmmoSpentByToken(encounter.ammoSpentByToken, tokens),
+    ammunitionRecovered: Boolean(encounter.ammunitionRecovered),
     winnerTokenId: tokenIds.has(encounter.winnerTokenId) ? encounter.winnerTokenId : null,
     log: Array.isArray(encounter.log) ? encounter.log.filter((entry) => typeof entry === "string") : [],
   };
@@ -505,6 +556,7 @@ export function prepareBattleStart(scene, { viewport, random = Math.random } = {
     resources: firstToken ? { [firstToken.id]: createTurnResources(firstToken) } : {},
     battleItems: [],
     ammoSpentByToken: {},
+    ammunitionRecovered: false,
     winnerTokenId: null,
     log: [`Battle began with ${snappedTokens.length} tokens.`],
   };

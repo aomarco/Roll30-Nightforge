@@ -84,9 +84,9 @@ export default function CombatCommandsDrawer({
               <div className="unit-top"><span className="unit-label">Choose attack weapon</span><span className="tag tag-jade">Equipped only</span></div>
               <div className="nf-state-combat-weapon-list">
                 {attackState.value.options.map((option) => (
-                  <button className="btn btn-line btn-wide" key={option.key} onClick={() => attack({ kind: "action", weaponId: option.weaponId, hand: option.hand })} disabled={busy}>
+                  <button className="btn btn-line btn-wide" key={option.key} onClick={() => attack({ kind: "action", weaponId: option.weaponId, hand: option.hand })} disabled={busy || !option.supply.ok} title={option.supply.ok ? "Enter targeting mode" : option.supply.message}>
                     <Swords size={15} />
-                    <span className="nf-state-combat-weapon-copy"><strong>{option.weapon.name}</strong><small>{option.hand === "mainHand" ? "Main hand" : "Off hand"} · {itemSubtitle(option.weapon)}</small></span>
+                    <span className="nf-state-combat-weapon-copy"><strong>{option.weapon.name}</strong><small>{option.supply.ok ? `${option.hand === "mainHand" ? "Main hand" : "Off hand"} · ${itemSubtitle(option.weapon)}` : option.supply.message}</small></span>
                   </button>
                 ))}
               </div>

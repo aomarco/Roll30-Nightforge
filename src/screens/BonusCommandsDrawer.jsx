@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { ArchiveRestore, Footprints, PackageOpen, ShieldHalf, X } from "lucide-react";
 
-import { itemSubtitle } from "../domain/catalog.js";
+import { getItem, itemSubtitle } from "../domain/catalog.js";
 import { movementMaximum, movementRemaining } from "../domain/combat.js";
 
 const errorText = (error) => error ? `${error.message} ${error.recovery || "Retry the command."}` : "";
@@ -19,6 +19,10 @@ export default function BonusCommandsDrawer({
   error = null,
   close,
   attack,
+  chestOptions = [],
+  retrievalOptions = [],
+  openChest,
+  retrieve,
 }) {
   const maximum = movementMaximum(resources, token);
   const remaining = movementRemaining(resources, token);
@@ -50,8 +54,25 @@ export default function BonusCommandsDrawer({
               <ShieldHalf size={15} /> Off-hand attack
               <span className="nf-state-command-reason">{option ? `${option.weapon.name} · ${itemSubtitle(option.weapon)}` : bonusState.message}</span>
             </button>
-            <button className="btn btn-line btn-wide" disabled title="Battle chest looting arrives in Phase 10"><PackageOpen size={15} /> Open adjacent chest <span className="nf-state-command-reason">Phase 10</span></button>
-            <button className="btn btn-line btn-wide" disabled title="Physical weapon retrieval arrives in Phase 10"><ArchiveRestore size={15} /> Retrieve weapon <span className="nf-state-command-reason">Phase 10</span></button>
+            <div className="nf-state-bonus-command-group">
+              <span className="label">Battle chests</span>
+              {chestOptions.map(({ chest, availability }, index) => <button className="btn btn-line btn-wide" key={chest.id} onClick={() => openChest(chest.id)} disabled={busy || !availability.ok} title={availability.ok ? availability.value.alreadyOpen ? "Resume this opened chest" : "Spend Bonus Action and open this chest" : availability.message}>
+                <PackageOpen size={15} /> Chest {index + 1}
+                <span className="nf-state-command-reason">{availability.ok ? availability.value.alreadyOpen ? "Resume looting" : `${chest.inventory.reduce((total, entry) => total + entry.quantity, 0)} items · adjacent` : availability.message}</span>
+              </button>)}
+              {!chestOptions.length && <p className="note">No Battle chests are on this Table.</p>}
+            </div>
+            <div className="nf-state-bonus-command-group">
+              <span className="label">Physical weapons</span>
+              {retrievalOptions.map(({ battleItem, availability }) => {
+                const weapon = getItem(battleItem.itemId);
+                return <button className="btn btn-line btn-wide" key={battleItem.id} onClick={() => retrieve(battleItem.id)} disabled={busy || !availability.ok} title={availability.ok ? `${availability.value.cost === "free" ? "Free" : "Bonus Action"} retrieval` : availability.message}>
+                  <ArchiveRestore size={15} /> Retrieve {weapon?.name || battleItem.itemId}
+                  <span className="nf-state-command-reason">{availability.ok ? `${availability.value.retrievalKind.replaceAll("-", " ")} · ${availability.value.cost}` : availability.message}</span>
+                </button>;
+              })}
+              {!retrievalOptions.length && <p className="note">No thrown weapons are present in this encounter.</p>}
+            </div>
           </section>
           {!bonusState.ok && <div className="nf-state-inline-error" role="status"><strong>Off-hand attack unavailable</strong><span>{bonusState.message} {bonusState.recovery}</span></div>}
         </div>

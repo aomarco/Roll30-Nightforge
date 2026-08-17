@@ -69,7 +69,6 @@ if (!attacks.includes("naturalRoll === 20") || !attacks.includes("naturalRoll !=
 if (!attacks.includes("parsed.count * (critical ? 2 : 1)")) failures.push("Critical hits do not double dice only.");
 if (!attacks.includes("Math.max(0, diceTotal + modifier)")) failures.push("Final damage is not clamped at zero.");
 if (!attacks.includes("Math.min(0, ability)")) failures.push("Off-hand damage does not retain only non-positive ability modifiers.");
-if (attacks.includes("ammoSpentByToken") || attacks.includes("battleItems:") || attacks.includes("changeInventory")) failures.push("Phase 10 ammunition or physical-item mutation was pulled into Phase 9.");
 
 const conditions = await read("src/domain/conditions.js");
 for (const behavior of [
@@ -116,7 +115,7 @@ for (const control of ["Choose attack weapon", "Equipped only", "Blocked and out
 }
 
 const bonusDrawer = await read("src/screens/BonusCommandsDrawer.jsx");
-for (const control of ["Off-hand attack", "Open adjacent chest", "Retrieve weapon", "Phase 10", "No automatic End Turn", "kind: \"bonus\""]) {
+for (const control of ["Off-hand attack", "Battle chests", "Physical weapons", "openChest", "retrieve", "No automatic End Turn", "kind: \"bonus\""]) {
   if (!bonusDrawer.includes(control)) failures.push(`Bonus Commands drawer is missing ${control}.`);
 }
 
@@ -174,4 +173,4 @@ if (failures.length) {
 }
 console.log("All permanent Nightforge visual files match the frozen baseline.");
 console.log("Phase 9 attack selection, bounded range SVG, line of sight, roll modes, damage, dual wielding, all conditions, Action/Bonus drawers, and cinematics are present.");
-console.log("Phase 10 ammunition and physical-item mutation remain deferred; original Roll30 runtime, UI, storage identifiers, and user data remain isolated.");
+console.log("Phase 9 behavior remains intact alongside later encounter integration; original Roll30 runtime, UI, storage identifiers, and user data remain isolated.");

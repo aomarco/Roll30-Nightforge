@@ -95,7 +95,7 @@ for (const integration of [
   "returnTo: { page: \"board\", mode }",
 ]) if (!table.includes(integration)) failures.push(`Table screen is missing Phase 8 integration ${integration}.`);
 if (!table.includes("token.id === active?.id")) failures.push("The Table does not restrict Battle dragging to the active token.");
-if (!table.includes("kind: isBattle ? \"movement\" : \"token\"")) failures.push("Battle pointer input is not isolated from Setup and Play dragging.");
+if (!table.includes("kind: isActiveBattle ? \"movement\" : \"token\"")) failures.push("Active-Battle pointer input is not isolated from Setup, Play, and completed encounters.");
 if (!/<button className=\{`pip-key nf-state-command-pip/.test(table)) failures.push("The Action resource is not a semantic command button.");
 if (!table.includes("aria-label=\"Open Bonus Commands\"")) failures.push("The Bonus resource is not a semantic command button.");
 

@@ -25,7 +25,9 @@
     "test:phase8:render": "node scripts/phase8-render-smoke.mjs",
     "verify:phase9": "node scripts/verify-phase9.mjs",
     "test:phase9:render": "node scripts/phase9-render-smoke.mjs",
-    "verify": "npm test && npm run test:phase2:render && npm run test:phase3:render && npm run test:phase4:render && npm run test:phase5:render && npm run test:phase6:render && npm run test:phase7:render && npm run test:phase8:render && npm run test:phase9:render && npm run verify:phase1 && npm run verify:phase2 && npm run verify:phase3 && npm run verify:phase4 && npm run verify:phase5 && npm run verify:phase6 && npm run verify:phase7 && npm run verify:phase8 && npm run verify:phase9 && npm run build"
+    "verify:phase10": "node scripts/verify-phase10.mjs",
+    "test:phase10:render": "node scripts/phase10-render-smoke.mjs",
+    "verify": "npm test && npm run test:phase2:render && npm run test:phase3:render && npm run test:phase4:render && npm run test:phase5:render && npm run test:phase6:render && npm run test:phase7:render && npm run test:phase8:render && npm run test:phase9:render && npm run test:phase10:render && npm run verify:phase1 && npm run verify:phase2 && npm run verify:phase3 && npm run verify:phase4 && npm run verify:phase5 && npm run verify:phase6 && npm run verify:phase7 && npm run verify:phase8 && npm run verify:phase9 && npm run verify:phase10 && npm run build"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",

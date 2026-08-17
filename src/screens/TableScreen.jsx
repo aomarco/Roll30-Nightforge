@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import {
   ChevronLeft,
   CircleDot,
+  ArchiveRestore,
   Eye,
   EyeOff,
   Grid3x3,
@@ -11,6 +12,7 @@ import {
   Minus,
   Move,
   Package,
+  PackageOpen,
   PenLine,
   Plus,
   RotateCcw,
@@ -48,6 +50,14 @@ import {
 } from "../domain/combat.js";
 import { CONDITIONS, conditionById } from "../domain/conditions.js";
 import {
+  chestCommandOptions,
+  openAdjacentChest,
+  restartCompletedBattle,
+  retrievalCommandOptions,
+  retrieveBattleItem,
+  takeOneFromOpenChest,
+} from "../domain/encounter.js";
+import {
   adjustArtworkBy,
   applySetupTokenEquipment,
   canOccupySetupPosition,
@@ -64,6 +74,7 @@ import {
   midpointPercent,
   normalizeCamera,
   normalizeChests,
+  normalizeBattleItems,
   normalizeMapView,
   normalizeTableTokens,
   prepareBattleStart,
@@ -80,8 +91,11 @@ import {
 import { Pip } from "../ui/Glyphs.jsx";
 import BattleSetupInspector from "./BattleSetupInspector.jsx";
 import AttackCinematic from "./AttackCinematic.jsx";
+import BattleCompletion from "./BattleCompletion.jsx";
 import BonusCommandsDrawer from "./BonusCommandsDrawer.jsx";
+import ChestLootDrawer from "./ChestLootDrawer.jsx";
 import CombatCommandsDrawer from "./CombatCommandsDrawer.jsx";
+import RetrievalCinematic from "./RetrievalCinematic.jsx";
 
 const okay = () => ({ ok: true });
 const initials = (name) => String(name || "?").slice(0, 2).toUpperCase();
@@ -324,6 +338,7 @@ export default function TableScreen({
   persistence = { status: "idle", error: null },
   tokenIdFactory = () => `token-${globalThis.crypto?.randomUUID?.() || Date.now()}`,
   chestIdFactory = () => `chest-${globalThis.crypto?.randomUUID?.() || Date.now()}`,
+  battleItemIdFactory = () => `battle-item-${globalThis.crypto?.randomUUID?.() || Date.now()}`,
   wallIdFactory = () => `wall-${globalThis.crypto?.randomUUID?.() || Date.now()}`,
   random = Math.random,
   initialCamera = DEFAULT_CAMERA,
@@ -342,16 +357,21 @@ export default function TableScreen({
   initialAttackOpen = false,
   initialAttackDraft = null,
   initialCinematic = null,
+  initialRetrievalCinematic = null,
+  initialLootChestId = null,
   initialImpact = null,
   suppliedArtworkUrl = null,
 }) {
   const isPlay = scene?.kind === "play" || mode === "play";
   const isBattle = !isPlay && Boolean(scene?.encounter);
+  const isActiveBattle = isBattle && scene?.encounter?.status === "active";
+  const isCompleteBattle = isBattle && scene?.encounter?.status === "complete";
   const isSetup = !isPlay && !isBattle;
   const mapRef = useRef(null);
   const worldRef = useRef(null);
   const arrivalTimerRef = useRef(null);
   const cinematicTimersRef = useRef([]);
+  const retrievalTimersRef = useRef([]);
   const [camera, setCamera] = useState(() => normalizeCamera(initialCamera));
   const [mapView, setMapView] = useState(() => normalizeMapView(scene?.mapView));
   const [selectedId, setSelectedId] = useState(() => initialSelectedId === undefined ? scene?.tokens?.[0]?.id || null : initialSelectedId);
@@ -371,21 +391,25 @@ export default function TableScreen({
   const [movementPreview, setMovementPreview] = useState(initialMovementPreview);
   const [attackDraft, setAttackDraft] = useState(initialAttackDraft);
   const [cinematic, setCinematic] = useState(initialCinematic);
+  const [retrievalCinematic, setRetrievalCinematic] = useState(initialRetrievalCinematic);
+  const [lootChestId, setLootChestId] = useState(initialLootChestId);
   const [impact, setImpact] = useState(initialImpact);
   const [arrivalId, setArrivalId] = useState(null);
   const [localError, setLocalError] = useState(null);
   const { url: artworkUrl, error: artworkError } = useArtworkUrl(scene, artworkRepository, suppliedArtworkUrl);
   const busy = persistence.status === "saving";
-  const combatLocked = Boolean(cinematic);
+  const combatLocked = Boolean(cinematic || retrievalCinematic);
   const tableTokens = useMemo(() => normalizeTableTokens(scene?.tokens), [scene?.tokens]);
   const playTokens = tableTokens;
   const chests = useMemo(() => normalizeChests(scene?.chests), [scene?.chests]);
+  const battleItems = useMemo(() => normalizeBattleItems(scene?.encounter?.battleItems, scene?.tokens), [scene?.encounter?.battleItems, scene?.tokens]);
   const visibleTokens = tableTokens.map((token) => tokenPreview?.id === token.id ? { ...token, position: tokenPreview.position } : token);
   const visibleChests = chests.map((chest) => chestPreview?.id === chest.id ? { ...chest, position: chestPreview.position } : chest);
   const activeId = scene?.encounter?.initiativeOrder?.[scene?.encounter?.activeIndex || 0];
   const active = tableTokens.find((token) => token.id === activeId) || tableTokens[0] || null;
   const selected = visibleTokens.find((token) => token.id === selectedId) || null;
   const selectedChest = visibleChests.find((chest) => chest.id === selectedChestId) || null;
+  const lootChest = chests.find((chest) => chest.id === lootChestId) || null;
   const visibleError = localError || persistence.error || artworkError;
   const walls = scene?.walls || [];
   const wallsVisible = scene?.wallsVisible !== false;
@@ -399,9 +423,15 @@ export default function TableScreen({
     cinematicTimersRef.current = [];
   };
 
+  const clearRetrievalTimers = () => {
+    for (const timer of retrievalTimersRef.current) clearTimeout(timer);
+    retrievalTimersRef.current = [];
+  };
+
   useEffect(() => () => {
     if (arrivalTimerRef.current) clearTimeout(arrivalTimerRef.current);
     clearCinematicTimers();
+    clearRetrievalTimers();
   }, []);
 
   useEffect(() => {
@@ -424,8 +454,11 @@ export default function TableScreen({
     setMovementPreview(null);
     setAttackDraft(null);
     setCinematic(null);
+    setRetrievalCinematic(null);
+    setLootChestId(null);
     setImpact(null);
     clearCinematicTimers();
+    clearRetrievalTimers();
     setArrivalId(null);
     setLocalError(null);
   }, [scene?.id]);
@@ -439,6 +472,7 @@ export default function TableScreen({
     setBonusOpen(false);
     setMovementPreview(null);
     setAttackDraft(null);
+    setLootChestId(null);
     setInteraction((current) => current?.kind === "movement" ? null : current);
   }, [activeId]);
 
@@ -485,6 +519,10 @@ export default function TableScreen({
         setLocalError(null);
         return;
       }
+      if (lootChestId) {
+        setLootChestId(null);
+        return;
+      }
       if (commandOpen) {
         setCommandOpen(false);
         return;
@@ -506,7 +544,7 @@ export default function TableScreen({
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [abandonOpen, activeTool, attackDraft, bonusOpen, combatLocked, commandOpen, drawerOpen, wallDraft, walls]);
+  }, [abandonOpen, activeTool, attackDraft, bonusOpen, combatLocked, commandOpen, drawerOpen, lootChestId, wallDraft, walls]);
 
   const localPoint = (event) => {
     const rect = worldRef.current?.getBoundingClientRect();
@@ -562,7 +600,7 @@ export default function TableScreen({
       event.stopPropagation();
       return;
     }
-    const canDrag = isPlay || isSetup || (isBattle && token.id === active?.id);
+    const canDrag = isPlay || isSetup || (isActiveBattle && token.id === active?.id);
     if (!canDrag) return;
     event.stopPropagation();
     setSelectedId(token.id);
@@ -570,7 +608,7 @@ export default function TableScreen({
     const pointer = localPoint(event);
     capturePointer(event.pointerId);
     setInteraction({
-      kind: isBattle ? "movement" : "token",
+      kind: isActiveBattle ? "movement" : "token",
       pointerId: event.pointerId,
       tokenId: token.id,
       offset: {
@@ -581,7 +619,12 @@ export default function TableScreen({
   };
 
   const onChestPointerDown = (event, chest) => {
-    if (!isSetup || activeTool || event.button !== 0) return;
+    if (activeTool || event.button !== 0) return;
+    if (isBattle) {
+      event.stopPropagation();
+      return;
+    }
+    if (!isSetup) return;
     event.stopPropagation();
     setSelectedChestId(chest.id);
     setSelectedId(null);
@@ -913,7 +956,7 @@ export default function TableScreen({
 
   const resolveAttackTarget = (targetId) => {
     if (!attackDraft || combatLocked) return { ok: false, message: "No attack is ready." };
-    const resolved = performWeaponAttack(scene, { ...attackDraft, targetId }, { random });
+    const resolved = performWeaponAttack(scene, { ...attackDraft, targetId }, { random, battleItemIdFactory });
     if (!resolved.ok) {
       setLocalError(resolved);
       return resolved;
@@ -958,8 +1001,112 @@ export default function TableScreen({
     return resolved;
   };
 
+  const openBattleChest = (chestId) => {
+    if (!isActiveBattle || combatLocked) return { ok: false, message: "Chest interaction requires an active unlocked Battle." };
+    const opened = openAdjacentChest(scene, chestId, setupViewport());
+    if (!opened.ok) {
+      setLocalError(opened);
+      return opened;
+    }
+    if (opened.resumed) {
+      setLootChestId(chestId);
+      setBonusOpen(false);
+      setLocalError(null);
+      return opened;
+    }
+    const saved = savePatch(opened.value);
+    if (saved.ok) {
+      setLootChestId(chestId);
+      setBonusOpen(false);
+      setCommandOpen(false);
+      setSelectedChestId(chestId);
+      setSelectedId(null);
+    }
+    return saved;
+  };
+
+  const takeChestItem = (itemId) => {
+    if (!lootChestId || combatLocked) return { ok: false, message: "No opened chest is ready." };
+    const taken = takeOneFromOpenChest(scene, lootChestId, itemId, setupViewport());
+    if (!taken.ok) {
+      setLocalError(taken);
+      return taken;
+    }
+    return savePatch(taken.value);
+  };
+
+  const resolveRetrieval = (battleItemId) => {
+    if (!isActiveBattle || combatLocked) return { ok: false, message: "Weapon retrieval requires an active unlocked Battle." };
+    const resolved = retrieveBattleItem(scene, battleItemId, setupViewport(), { random });
+    if (!resolved.ok) {
+      setLocalError(resolved);
+      return resolved;
+    }
+    setBonusOpen(false);
+    setCommandOpen(false);
+    setLootChestId(null);
+    setLocalError(null);
+    if (!resolved.outcome.requiresRoll) {
+      const saved = savePatch(resolved.value);
+      if (saved.ok) {
+        setSelectedId(resolved.outcome.actorId);
+        setSelectedChestId(null);
+      }
+      return saved;
+    }
+    clearRetrievalTimers();
+    setRetrievalCinematic({ outcome: resolved.outcome, stage: "spin", error: null });
+    const reducedMotion = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    const timings = reducedMotion
+      ? { natural: 80, modifiers: 160, verdict: 240, impact: 340, close: 680 }
+      : { natural: 420, modifiers: 820, verdict: 1220, impact: 1640, close: 2360 };
+    const schedule = (callback, delay) => {
+      const timer = setTimeout(callback, delay);
+      retrievalTimersRef.current.push(timer);
+    };
+    for (const stage of ["natural", "modifiers", "verdict"]) {
+      schedule(() => setRetrievalCinematic((current) => current ? { ...current, stage } : current), timings[stage]);
+    }
+    schedule(() => {
+      const saved = savePatch(resolved.value);
+      if (!saved.ok) {
+        setRetrievalCinematic((current) => current ? { ...current, stage: "failed", error: saved } : current);
+        return;
+      }
+      setSelectedId(resolved.outcome.actorId);
+      setSelectedChestId(null);
+      setRetrievalCinematic((current) => current ? { ...current, stage: "impact", error: null } : current);
+    }, timings.impact);
+    schedule(() => {
+      setRetrievalCinematic(null);
+      retrievalTimersRef.current = [];
+    }, timings.close);
+    return resolved;
+  };
+
+  const restartBattle = () => {
+    if (!isCompleteBattle || combatLocked) return { ok: false, message: "Only a completed Battle can restart." };
+    const restarted = restartCompletedBattle(scene, { random });
+    if (!restarted.ok) {
+      setLocalError(restarted);
+      return restarted;
+    }
+    const saved = savePatch(restarted.value);
+    if (saved.ok) {
+      setSelectedId(restarted.activeTokenId);
+      setSelectedChestId(null);
+      setLootChestId(null);
+      setAttackDraft(null);
+      setCommandOpen(false);
+      setBonusOpen(false);
+      setImpact(null);
+      setMode("battle");
+    }
+    return saved;
+  };
+
   const changeSelectedCondition = (conditionId) => {
-    if (!selected || !isBattle || combatLocked) return { ok: false, message: "Select a Battle token before changing conditions." };
+    if (!selected || !isActiveBattle || combatLocked) return { ok: false, message: "Select an active Battle token before changing conditions." };
     const changed = toggleBattleCondition(scene, selected.id, conditionId);
     if (!changed.ok) {
       setLocalError(changed);
@@ -983,6 +1130,7 @@ export default function TableScreen({
       setBonusOpen(false);
       setMovementPreview(null);
       setAttackDraft(null);
+      setLootChestId(null);
       setImpact(null);
       setInteraction(null);
     }
@@ -1003,10 +1151,18 @@ export default function TableScreen({
     : tableTokens;
   const activeResources = active ? scene?.encounter?.resources?.[active.id] : null;
   const routePreview = movementPreview?.ok ? movementPreview.value : movementPreview;
-  const dashState = isBattle ? dashAvailability(scene) : { ok: false, message: "Battle is not active." };
-  const swapState = isBattle ? swapAvailability(scene) : { ok: false, message: "Battle is not active." };
-  const attackState = isBattle ? mainAttackAvailability(scene) : { ok: false, message: "Battle is not active." };
-  const bonusState = isBattle ? bonusAttackAvailability(scene) : { ok: false, message: "Battle is not active." };
+  const dashState = isActiveBattle ? dashAvailability(scene) : { ok: false, message: "Battle is not active." };
+  const swapState = isActiveBattle ? swapAvailability(scene) : { ok: false, message: "Battle is not active." };
+  const attackState = isActiveBattle ? mainAttackAvailability(scene) : { ok: false, message: "Battle is not active." };
+  const bonusState = isActiveBattle ? bonusAttackAvailability(scene) : { ok: false, message: "Battle is not active." };
+  const battleViewport = setupViewport();
+  const battleChestOptions = isActiveBattle ? chestCommandOptions(scene, battleViewport) : [];
+  const battleRetrievalOptions = isActiveBattle ? retrievalCommandOptions(scene, battleViewport) : [];
+  const embeddedByCarrier = battleItems.filter((item) => item.state === "embedded").reduce((groups, item) => ({
+    ...groups,
+    [item.carrierTokenId]: [...(groups[item.carrierTokenId] || []), item],
+  }), {});
+  const selectedEmbedded = selected ? embeddedByCarrier[selected.id] || [] : [];
   const attackTargetStates = useMemo(() => attackDraft
     ? Object.fromEntries(tableTokens.map((token) => [token.id, attackTargetEligibility(scene, { ...attackDraft, targetId: token.id })]))
     : {}, [attackDraft, scene, tableTokens]);
@@ -1014,7 +1170,7 @@ export default function TableScreen({
   const movementLeft = active && activeResources ? movementRemaining(activeResources, active) : 0;
 
   return (
-    <div className={`table nf-state-table-root${busy ? " nf-state-busy" : ""}${combatLocked ? " nf-state-combat-locked" : ""}`}>
+    <div className={`table nf-state-table-root${busy ? " nf-state-busy" : ""}${combatLocked ? " nf-state-combat-locked" : ""}${isCompleteBattle ? " nf-state-battle-complete-root" : ""}`}>
       <div
         className={`map nf-state-table-map${activeTool ? ` nf-state-table-tool-${activeTool}` : ""}${attackDraft ? " nf-state-table-attack-mode" : ""}`}
         ref={mapRef}
@@ -1039,28 +1195,55 @@ export default function TableScreen({
             {!isPlay && <div className="map-grid nf-state-table-infinite-grid" aria-hidden="true" />}
             <div className="map-fog" aria-hidden="true" />
             <WallAndRulerLayer walls={walls} wallsVisible={wallsVisible} wallDraft={wallDraft} wallHover={wallHover} rulerDraft={rulerDraft} rulerFeet={rulerFeet} />
-            {isBattle && <MovementRouteLayer preview={routePreview} />}
-            {isBattle && attackDraft && <AttackRangeLayer model={attackDraft.rangeModel} />}
-            {!isPlay && visibleChests.map((chest) => (
-              <button
+            {isActiveBattle && <MovementRouteLayer preview={routePreview} />}
+            {isActiveBattle && attackDraft && <AttackRangeLayer model={attackDraft.rangeModel} />}
+            {!isPlay && visibleChests.map((chest) => {
+              const option = battleChestOptions.find((entry) => entry.chest.id === chest.id);
+              const canOpen = Boolean(option?.availability.ok);
+              const count = chest.inventory.reduce((total, entry) => total + entry.quantity, 0);
+              return <button
                 key={chest.id}
-                className={`nf-state-table-chest${selectedChestId === chest.id ? " on" : ""}${chestPreview?.id === chest.id && chestPreview.blocked ? " blocked" : ""}`}
+                className={`nf-state-table-chest${selectedChestId === chest.id ? " on" : ""}${chestPreview?.id === chest.id && chestPreview.blocked ? " blocked" : ""}${canOpen ? " nf-state-table-chest-eligible" : ""}${count === 0 ? " nf-state-table-chest-empty" : ""}`}
                 style={{ left: `${chest.position.xPercent}%`, top: `${chest.position.yPercent}%` }}
                 onPointerDown={(event) => onChestPointerDown(event, chest)}
-                onClick={(event) => { event.stopPropagation(); setSelectedChestId(chest.id); setSelectedId(null); }}
-                aria-label={`Chest with ${chest.inventory.reduce((total, entry) => total + entry.quantity, 0)} items`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (isActiveBattle && canOpen) openBattleChest(chest.id);
+                  else { setSelectedChestId(chest.id); setSelectedId(null); }
+                }}
+                aria-label={isActiveBattle ? canOpen ? `Open adjacent chest with ${count} items` : `Chest unavailable: ${option?.availability.message || "Battle is complete"}` : `Chest with ${count} items`}
               >
                 <Package size={18} />
-                <span className="nf-state-table-chest-count numeral">{chest.inventory.reduce((total, entry) => total + entry.quantity, 0)}</span>
-              </button>
-            ))}
+                <span className="nf-state-table-chest-count numeral">{count}</span>
+              </button>;
+            })}
+            {isBattle && battleItems.map((battleItem) => {
+              const carrier = battleItem.carrierTokenId ? visibleTokens.find((token) => token.id === battleItem.carrierTokenId) : null;
+              const position = battleItem.state === "embedded" ? carrier?.position : battleItem.position;
+              if (!position) return null;
+              const option = battleRetrievalOptions.find((entry) => entry.battleItem.id === battleItem.id);
+              const eligible = Boolean(option?.availability.ok);
+              const weapon = getItem(battleItem.itemId);
+              return <button
+                key={battleItem.id}
+                type="button"
+                className={`nf-state-battle-item nf-state-battle-item-${battleItem.state}${eligible ? " nf-state-battle-item-eligible" : ""}`}
+                style={{ left: `${position.xPercent}%`, top: `${position.yPercent}%` }}
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => { event.stopPropagation(); if (eligible) resolveRetrieval(battleItem.id); }}
+                disabled={!eligible || combatLocked}
+                title={eligible ? `${option.availability.value.cost === "free" ? "Free" : "Bonus Action"} retrieval` : option?.availability.message || "Battle is complete"}
+                aria-label={`${weapon?.name || battleItem.itemId} ${battleItem.state}${eligible ? ", retrieve" : ", unavailable"}`}
+              ><ArchiveRestore size={14} /><span>{battleItem.state === "embedded" ? "Embedded" : "Ground"}</span></button>;
+            })}
             {visibleTokens.map((token) => {
               const targetState = attackTargetStates[token.id];
               const conditions = token.conditions.map(conditionById).filter(Boolean);
+              const embedded = embeddedByCarrier[token.id] || [];
               return (
               <button
                 key={token.id}
-                className={`piece${selectedId === token.id ? " on" : ""}${isBattle && token.id === active?.id ? " acting" : ""}${tokenPreview?.id === token.id && tokenPreview.blocked ? " blocked" : ""}${arrivalId === token.id ? " nf-state-table-arriving" : ""}${targetState?.ok ? " nf-state-table-targetable" : ""}${impact?.targetId === token.id ? ` nf-state-table-hit${impact.critical ? " nf-state-table-critical" : ""}` : ""}`}
+                className={`piece${selectedId === token.id ? " on" : ""}${isActiveBattle && token.id === active?.id ? " acting" : ""}${tokenPreview?.id === token.id && tokenPreview.blocked ? " blocked" : ""}${arrivalId === token.id ? " nf-state-table-arriving" : ""}${targetState?.ok ? " nf-state-table-targetable" : ""}${impact?.targetId === token.id ? ` nf-state-table-hit${impact.critical ? " nf-state-table-critical" : ""}` : ""}`}
                 style={{ left: `${token.position.xPercent}%`, top: `${token.position.yPercent}%`, "--piece": token.color }}
                 onPointerDown={(event) => onTokenPointerDown(event, token)}
                 onClick={(event) => { event.stopPropagation(); if (attackDraft) resolveAttackTarget(token.id); else { setSelectedId(token.id); setSelectedChestId(null); } }}
@@ -1070,6 +1253,7 @@ export default function TableScreen({
                 <span className="piece-name">{token.name}</span>
                 {isBattle && <span className="piece-hp"><i style={{ width: `${(token.hp / token.maxHp) * 100}%`, background: healthTone(token.hp, token.maxHp) }} /></span>}
                 {isBattle && conditions.length > 0 && <span className="nf-state-table-condition-badges" aria-label={`${conditions.length} conditions`}>{conditions.map((condition) => <i key={condition.id} title={`${condition.name}: ${condition.note}`} style={{ "--nf-condition": condition.color }}>{condition.abbreviation}</i>)}</span>}
+                {isBattle && embedded.length > 0 && <span className="nf-state-table-embedded-count" aria-label={`${embedded.length} embedded weapon${embedded.length === 1 ? "" : "s"}`}><ArchiveRestore size={10} />{embedded.length}</span>}
                 {impact?.targetId === token.id && <span className="nf-state-table-damage-float" role="status">−{impact.damage}{impact.critical ? " critical" : ""}</span>}
               </button>
               );
@@ -1081,12 +1265,12 @@ export default function TableScreen({
       <div className="hud hud-tl glass grained">
         <button className="glyph" onClick={() => go({ page: "home" })} title="All maps"><ChevronLeft size={18} /></button>
         <span className="hud-div" />
-        <div className="hud-scene"><span className="kicker">{scene?.name || "Untitled scene"}</span><strong>{isPlay ? "Free play" : isBattle ? `Round ${scene.encounter.round} · ${active?.name || "Token"}'s turn` : "Setup mode"}</strong></div>
+        <div className="hud-scene"><span className="kicker">{scene?.name || "Untitled scene"}</span><strong>{isPlay ? "Free play" : isCompleteBattle ? scene.encounter.winnerTokenId ? `${tableTokens.find((token) => token.id === scene.encounter.winnerTokenId)?.name || "Winner"} · Battle complete` : "No survivor · Battle complete" : isActiveBattle ? `Round ${scene.encounter.round} · ${active?.name || "Token"}'s turn` : "Setup mode"}</strong></div>
       </div>
 
       <div className="hud hud-tc glass grained">
         <div className="phase">
-          {isPlay ? <button className="on" disabled aria-current="page"><Sparkles size={14} /> Play</button> : <><button className={isSetup ? "on" : ""} onClick={() => isBattle ? setAbandonOpen(true) : setMode("setup")}><Hammer size={14} /> Setup</button><button className={isBattle ? "on" : ""} onClick={isSetup ? beginBattle : undefined} disabled={busy}><Swords size={14} /> Battle</button></>}
+          {isPlay ? <button className="on" disabled aria-current="page"><Sparkles size={14} /> Play</button> : <><button className={isSetup ? "on" : ""} onClick={() => isBattle ? setAbandonOpen(true) : setMode("setup")}><Hammer size={14} /> Setup</button><button className={isBattle ? "on" : ""} onClick={isSetup ? beginBattle : isCompleteBattle ? restartBattle : undefined} disabled={busy}><Swords size={14} /> {isCompleteBattle ? "Restart Battle" : "Battle"}</button></>}
         </div>
       </div>
 
@@ -1103,7 +1287,7 @@ export default function TableScreen({
       {visibleError && !drawerOpen && <div className="nf-state-table-error glass" role="alert"><strong>Table change not saved</strong><span>{errorText(visibleError)}</span></div>}
 
       <aside className="dock dock-left glass grained">
-        <header className="dock-head"><div><span className="kicker kicker-jade">{isPlay ? "Free play" : "Encounter"}</span><h2>{isPlay ? "Build the cast" : isBattle ? "Battle running" : "Build the scene"}</h2></div></header>
+        <header className="dock-head"><div><span className="kicker kicker-jade">{isPlay ? "Free play" : "Encounter"}</span><h2>{isPlay ? "Build the cast" : isCompleteBattle ? "Battle complete" : isActiveBattle ? "Battle running" : "Build the scene"}</h2></div></header>
         <div className="dock-body">
           <section className="unit">
             <div className="unit-top"><span className="unit-label">Summon a token</span></div>
@@ -1113,7 +1297,7 @@ export default function TableScreen({
             </select>
             <button className="btn btn-key btn-sm btn-wide" onClick={isPlay ? addPlayToken : addSetupToken} disabled={busy || isBattle}><Plus size={15} strokeWidth={2.4} /> Add to map</button>
             {isSetup && <button className="btn btn-line btn-sm btn-wide" onClick={placeSetupChest} disabled={busy}><Package size={14} /> Place a chest</button>}
-            {isBattle && <p className="note">Token and chest creation are locked while this Battle is active.</p>}
+            {isBattle && <p className="note">Token and chest creation are locked while this encounter is preserved.</p>}
           </section>
           <section className="unit">
             <div className="unit-top"><span className="unit-label">On the map</span><span className="tag numeral">{tableTokens.length}</span></div>
@@ -1138,20 +1322,26 @@ export default function TableScreen({
             <label className="field"><span className="label">Name</span><input className="inp" value={selected.name} readOnly /></label>
             {isPlay ? <section className="unit"><div className="unit-top"><span className="unit-label">Free position</span><span className="tag tag-jade">No turn limits</span></div><div className="nf-state-table-position"><span>X <strong className="numeral">{selected.position.xPercent.toFixed(1)}%</strong></span><span>Y <strong className="numeral">{selected.position.yPercent.toFixed(1)}%</strong></span></div><p className="note">Drag this token directly on the Table. No grid snapping or combat resources apply in Play.</p></section> : <>
               <section className="unit"><div className="unit-top"><span className="unit-label">Vitals</span></div><div className="quad"><div className="quad-cell"><span>HP</span><strong className="numeral">{selected.hp}</strong></div><div className="quad-cell"><span>Max HP</span><strong className="numeral">{selected.maxHp}</strong></div><div className="quad-cell"><span>AC</span><strong className="numeral">{selected.ac}</strong></div><div className="quad-cell"><span>Speed</span><strong className="numeral">{selected.baseSpeed}</strong></div></div><div className="vitalbar"><div className="vitalbar-top"><span>Health</span><strong className="numeral">{selected.hp} / {selected.maxHp}</strong></div><div className="meter"><i style={{ width: `${(selected.hp / selected.maxHp) * 100}%`, background: healthTone(selected.hp, selected.maxHp), boxShadow: `0 0 12px ${healthTone(selected.hp, selected.maxHp)}` }} /></div></div></section>
-              <section className="unit"><div className="unit-top"><span className="unit-label">Conditions</span><span className="tag tag-jade">{selected.conditions.length || "None"}</span></div><div className="afflict">{CONDITIONS.map((condition) => { const on = selected.conditions.includes(condition.id); return <button key={condition.id} type="button" className={`toggle-chip nf-state-condition-chip${on ? " on" : ""}`} style={on ? { "--nf-condition": condition.color } : undefined} onClick={() => changeSelectedCondition(condition.id)} disabled={busy || combatLocked} title={condition.note} aria-pressed={on}>{condition.name}</button>; })}</div><p className="note">Conditions are applied manually. Their movement, action, roll-mode, and automatic-critical effects are enforced immediately.</p></section>
+              <section className="unit"><div className="unit-top"><span className="unit-label">Conditions</span><span className="tag tag-jade">{selected.conditions.length || "None"}</span></div><div className="afflict">{CONDITIONS.map((condition) => { const on = selected.conditions.includes(condition.id); return <button key={condition.id} type="button" className={`toggle-chip nf-state-condition-chip${on ? " on" : ""}`} style={on ? { "--nf-condition": condition.color } : undefined} onClick={() => changeSelectedCondition(condition.id)} disabled={busy || combatLocked || !isActiveBattle} title={condition.note} aria-pressed={on}>{condition.name}</button>; })}</div><p className="note">Conditions are applied manually. Their movement, action, roll-mode, and automatic-critical effects are enforced immediately.</p></section>
+              <section className="unit nf-state-embedded-inspector"><div className="unit-top"><span className="unit-label">Embedded weapons</span><span className="tag tag-brass">{selectedEmbedded.length || "None"}</span></div>{selectedEmbedded.map((battleItem) => { const option = battleRetrievalOptions.find((entry) => entry.battleItem.id === battleItem.id); const weapon = getItem(battleItem.itemId); return <button type="button" className="btn btn-line btn-wide" key={battleItem.id} onClick={() => resolveRetrieval(battleItem.id)} disabled={busy || combatLocked || !option?.availability.ok} title={option?.availability.ok ? `${option.availability.value.cost} retrieval` : option?.availability.message || "Battle is complete"}><ArchiveRestore size={14} /> {weapon?.name || battleItem.itemId}<span className="nf-state-command-reason">{option?.availability.ok ? `${option.availability.value.retrievalKind.replaceAll("-", " ")} · ${option.availability.value.cost}` : option?.availability.message || "Preserved final state"}</span></button>; })}{!selectedEmbedded.length && <p className="note">No thrown weapons are embedded in this token.</p>}</section>
+              <section className="unit nf-state-battle-inventory"><div className="unit-top"><span className="unit-label">Battle inventory</span><span className="tag">{selected.inventory.reduce((total, entry) => total + entry.quantity, 0)} units</span></div><div className="nf-state-table-chest-owned">{selected.inventory.map((entry) => { const item = getItem(entry.itemId); const hands = [selected.loadout.mainHand === entry.itemId ? "Main" : null, selected.loadout.offHand === entry.itemId ? "Off" : null].filter(Boolean); return <span key={entry.itemId}><strong>{item?.name || entry.itemId}{hands.length ? ` · ${hands.join("/")}` : ""}</strong><em className="numeral">×{entry.quantity}</em></span>; })}{!selected.inventory.length && <p className="note">Inventory is empty.</p>}</div><p className="note">Shots consume one matching ammunition unit. Thrown weapons leave inventory until they are retrieved.</p></section>
               <form className="unit" onSubmit={(event) => event.preventDefault()}><div className="unit-top"><span className="unit-label">Adjust stat</span><span className="tag">Locked</span></div><div className="console-row"><select className="sel" defaultValue="hp" disabled><option value="hp">HP</option><option value="maxHp">Max HP</option><option value="ac">AC</option><option value="speed">Speed</option></select><input className="inp" placeholder="+5 / −5" inputMode="numeric" disabled /></div><button className="btn btn-key btn-sm btn-wide" type="submit" disabled>Apply adjustment</button></form>
             </>}
             <button className="btn btn-hazard btn-sm btn-wide" onClick={isPlay ? removeSelectedPlayToken : undefined} disabled={busy || isBattle} title={isBattle ? "Tokens cannot be removed during an active Battle" : undefined}><Trash2 size={15} /> Remove token</button>
           </div>
-        </> : selectedChest ? <><header className="dock-head"><span className="sigil sigil-lg nf-state-table-chest-sigil"><Package size={18} /></span><div><span className="kicker">Selected chest</span><h2>Battle chest</h2></div></header><div className="dock-body"><section className="unit"><div className="unit-top"><span className="unit-label">Contents</span><span className="tag">Locked in Battle</span></div><div className="nf-state-table-chest-owned">{selectedChest.inventory.map((entry) => <span key={entry.itemId}><strong>{getItem(entry.itemId)?.name || entry.itemId}</strong><em className="numeral">×{entry.quantity}</em></span>)}{!selectedChest.inventory.length && <p className="note">This chest is empty.</p>}</div><p className="note">Chest movement and inventory editing are disabled after Battle begins.</p></section></div></> : <div className="void-state"><span className="void-orb"><CircleDot size={26} /></span><h3>Nothing selected</h3><p>Pick a token on the map or in the cast list to inspect it.</p></div>}
+        </> : selectedChest ? <><header className="dock-head"><span className="sigil sigil-lg nf-state-table-chest-sigil"><Package size={18} /></span><div><span className="kicker">Selected chest</span><h2>Battle chest</h2></div></header><div className="dock-body"><section className="unit"><div className="unit-top"><span className="unit-label">Contents</span><span className={`tag ${selectedChest.inventory.length ? "tag-brass" : ""}`}>{selectedChest.inventory.length ? isActiveBattle ? "Bonus Action" : "Final state" : "Empty"}</span></div><div className="nf-state-table-chest-owned">{selectedChest.inventory.map((entry) => <span key={entry.itemId}><strong>{getItem(entry.itemId)?.name || entry.itemId}</strong><em className="numeral">×{entry.quantity}</em></span>)}{!selectedChest.inventory.length && <p className="note">This chest is empty.</p>}</div><p className="note">Chest movement and Setup editing stay locked. An adjacent active token can open it through the Bonus command; depleted contents persist through restart.</p></section></div></> : <div className="void-state"><span className="void-orb"><CircleDot size={26} /></span><h3>Nothing selected</h3><p>Pick a token on the map or in the cast list to inspect it.</p></div>}
       </aside>
 
-      {isBattle && active && <div className="track glass grained"><div className="track-round"><span className="kicker kicker-brass">Round</span><strong className="numeral">{scene.encounter.round}</strong></div><div className="track-div" /><ol className="track-order">{orderedTokens.map((token, index) => <li key={token.id} className={index === scene.encounter.activeIndex ? "now" : ""}><span className="track-face" style={{ background: token.color }}>{initials(token.name)}</span><span className="track-name">{token.name}</span><span className="track-init numeral">{scene.encounter.initiatives[token.id]}</span></li>)}</ol><div className="track-div" /><div className="track-res"><div className="res-move"><span className="kicker"><Wind size={11} style={{ verticalAlign: -1, marginRight: 5 }} />Movement</span><strong className="numeral">{movementLeft} / {movementMax} ft</strong><div className="meter" style={{ marginTop: 6 }}><i style={{ width: `${movementMax ? movementLeft / movementMax * 100 : 0}%` }} /></div></div><div className="res-pips"><button className={`pip-key nf-state-command-pip${activeResources?.actionSpent ? " spent" : ""}`} title="Open Combat Commands" aria-label="Open Combat Commands" onClick={() => { setCommandOpen(true); setBonusOpen(false); }} disabled={combatLocked}><Swords size={13} /><em>{activeResources?.actionSpent ? activeResources.actionType || "Spent" : "Action"}</em></button><button className={`pip-key nf-state-command-pip${activeResources?.bonusActionSpent ? " spent" : ""}`} title="Open Bonus Commands" aria-label="Open Bonus Commands" onClick={() => { setBonusOpen(true); setCommandOpen(false); }} disabled={combatLocked}><ShieldHalf size={13} /><em>{activeResources?.bonusActionSpent ? activeResources.bonusActionType || "Spent" : "Bonus"}</em></button></div></div></div>}
+      {isActiveBattle && active && <div className="track glass grained"><div className="track-round"><span className="kicker kicker-brass">Round</span><strong className="numeral">{scene.encounter.round}</strong></div><div className="track-div" /><ol className="track-order">{orderedTokens.map((token, index) => <li key={token.id} className={index === scene.encounter.activeIndex ? "now" : ""}><span className="track-face" style={{ background: token.color }}>{initials(token.name)}</span><span className="track-name">{token.name}</span><span className="track-init numeral">{scene.encounter.initiatives[token.id]}</span></li>)}</ol><div className="track-div" /><div className="track-res"><div className="res-move"><span className="kicker"><Wind size={11} style={{ verticalAlign: -1, marginRight: 5 }} />Movement</span><strong className="numeral">{movementLeft} / {movementMax} ft</strong><div className="meter" style={{ marginTop: 6 }}><i style={{ width: `${movementMax ? movementLeft / movementMax * 100 : 0}%` }} /></div></div><div className="res-pips"><button className={`pip-key nf-state-command-pip${activeResources?.actionSpent ? " spent" : ""}`} title="Open Combat Commands" aria-label="Open Combat Commands" onClick={() => { setCommandOpen(true); setBonusOpen(false); }} disabled={combatLocked}><Swords size={13} /><em>{activeResources?.actionSpent ? activeResources.actionType || "Spent" : "Action"}</em></button><button className={`pip-key nf-state-command-pip${activeResources?.bonusActionSpent ? " spent" : ""}`} title="Open Bonus Commands" aria-label="Open Bonus Commands" onClick={() => { setBonusOpen(true); setCommandOpen(false); }} disabled={combatLocked}><ShieldHalf size={13} /><em>{activeResources?.bonusActionSpent ? activeResources.bonusActionType || "Spent" : "Bonus"}</em></button></div></div></div>}
+
+      {isCompleteBattle && <BattleCompletion encounter={scene.encounter} tokens={tableTokens} busy={busy || combatLocked} restart={restartBattle} />}
 
       {drawerOpen && <TableToolsDrawer isPlay={isPlay} camera={camera} mapView={mapView} activeTool={activeTool} wallDraft={wallDraft} wallsVisible={wallsVisible} canAdjustArtwork={canAdjustArtwork} busy={busy} error={visibleError} close={() => setDrawerOpen(false)} zoomBy={zoomBy} resetCamera={() => setCamera({ ...DEFAULT_CAMERA })} chooseTool={chooseTool} scaleArtwork={scaleArtwork} resetArtwork={resetArtwork} finishWall={finishWall} cancelWall={cancelWall} toggleWalls={() => savePatch({ wallsVisible: !wallsVisible })} exitTool={exitTool} />}
-      {commandOpen && isBattle && active && <CombatCommandsDrawer token={active} resources={activeResources} dashState={dashState} swapState={swapState} attackState={attackState} busy={busy || combatLocked} error={visibleError} close={() => setCommandOpen(false)} attack={startAttack} dash={useDash} swap={useWeaponSwap} end={finishTurn} initialSwapOpen={initialSwapOpen} initialSwapDraft={initialSwapDraft} initialAttackOpen={initialAttackOpen} />}
-      {bonusOpen && isBattle && active && <BonusCommandsDrawer token={active} resources={activeResources} bonusState={bonusState} busy={busy || combatLocked} error={visibleError} close={() => setBonusOpen(false)} attack={startAttack} />}
+      {commandOpen && isActiveBattle && active && <CombatCommandsDrawer token={active} resources={activeResources} dashState={dashState} swapState={swapState} attackState={attackState} busy={busy || combatLocked} error={visibleError} close={() => setCommandOpen(false)} attack={startAttack} dash={useDash} swap={useWeaponSwap} end={finishTurn} initialSwapOpen={initialSwapOpen} initialSwapDraft={initialSwapDraft} initialAttackOpen={initialAttackOpen} />}
+      {bonusOpen && isActiveBattle && active && <BonusCommandsDrawer token={active} resources={activeResources} bonusState={bonusState} chestOptions={battleChestOptions} retrievalOptions={battleRetrievalOptions} busy={busy || combatLocked} error={visibleError} close={() => setBonusOpen(false)} attack={startAttack} openChest={openBattleChest} retrieve={resolveRetrieval} />}
+      {lootChest && isActiveBattle && <ChestLootDrawer chest={lootChest} busy={busy || combatLocked} error={visibleError} take={takeChestItem} close={() => setLootChestId(null)} />}
       {cinematic && <AttackCinematic cinematic={cinematic} />}
+      {retrievalCinematic && <RetrievalCinematic cinematic={retrievalCinematic} />}
       {abandonOpen && <PortalLayer><div className="veil" onClick={() => setAbandonOpen(false)} /><aside className="drawer" role="dialog" aria-modal="true" aria-labelledby="abandon-battle-title"><div className="drawer-top"><div><span className="kicker">Return to Setup</span><h2 id="abandon-battle-title">Abandon this encounter?</h2></div><button className="glyph" onClick={() => setAbandonOpen(false)} aria-label="Close"><X size={17} /></button></div><div className="drawer-body">{visibleError && <div className="nf-state-inline-error" role="alert"><strong>Battle not abandoned</strong><span>{errorText(visibleError)}</span></div>}<p className="prose">Return <strong>{scene?.name}</strong> to editable Battle Setup?</p><p className="note">Current token HP and positions are preserved. Initiative, turn resources, and physical battle items are cleared.</p></div><div className="drawer-foot"><button className="btn btn-line" onClick={() => setAbandonOpen(false)} autoFocus>Continue Battle</button><button className="btn btn-hazard" onClick={abandonBattle} disabled={busy}><Hammer size={15} /> Abandon Battle</button></div></aside></PortalLayer>}
     </div>
   );

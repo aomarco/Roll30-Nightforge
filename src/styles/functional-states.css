@@ -3,6 +3,197 @@
   opacity: .42;
 }
 
+/* Phase 10 conditional encounter states. Permanent Nightforge composition stays frozen. */
+.nf-state-bonus-command-group {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.nf-state-bonus-command-group > .label {
+  margin-bottom: 0;
+}
+
+.nf-state-table-chest-eligible {
+  box-shadow: 0 0 0 2px rgba(224, 176, 85, 0.5), 0 0 24px rgba(224, 176, 85, 0.32);
+}
+
+.nf-state-table-chest-eligible::after {
+  content: "OPEN";
+  position: absolute;
+  left: 50%;
+  bottom: -18px;
+  transform: translateX(-50%);
+  color: var(--brass);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-shadow: 0 1px 4px #000;
+}
+
+.nf-state-table-chest-empty {
+  opacity: 0.72;
+}
+
+.nf-state-loot-list {
+  display: grid;
+  gap: 8px;
+}
+
+.nf-state-loot-list .btn {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  text-align: left;
+}
+
+.nf-state-loot-list .btn > span {
+  display: grid;
+  min-width: 0;
+}
+
+.nf-state-loot-list .btn small {
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nf-state-loot-list .btn em {
+  color: var(--brass);
+  font-style: normal;
+}
+
+.nf-state-loot-empty {
+  min-height: 190px;
+}
+
+.nf-state-battle-item {
+  position: absolute;
+  z-index: 14;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  padding: 4px 7px;
+  border: 1px solid rgba(224, 176, 85, 0.62);
+  border-radius: 999px;
+  background: rgba(18, 18, 24, 0.92);
+  color: var(--brass);
+  font: 700 8px/1 var(--sans);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.42);
+}
+
+.nf-state-battle-item:disabled {
+  cursor: default;
+}
+
+.nf-state-battle-item-ground {
+  border-style: solid;
+}
+
+.nf-state-battle-item-embedded {
+  margin: -24px 0 0 25px;
+  border-color: rgba(242, 97, 122, 0.66);
+  color: var(--foe);
+}
+
+.nf-state-battle-item-eligible {
+  cursor: pointer;
+  box-shadow: 0 0 0 2px rgba(71, 216, 162, 0.42), 0 0 22px rgba(71, 216, 162, 0.3);
+}
+
+.nf-state-battle-item-eligible:focus-visible {
+  outline: 2px solid var(--jade);
+  outline-offset: 3px;
+}
+
+.nf-state-table-embedded-count {
+  position: absolute;
+  right: -7px;
+  bottom: 2px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 20px;
+  height: 17px;
+  padding: 0 4px;
+  border: 1px solid rgba(242, 97, 122, 0.72);
+  border-radius: 999px;
+  background: rgba(37, 12, 20, 0.94);
+  color: var(--foe);
+  font: 800 9px/1 var(--sans);
+}
+
+.nf-state-embedded-inspector .btn {
+  justify-content: flex-start;
+  margin-top: 7px;
+}
+
+.nf-state-battle-inventory .nf-state-table-chest-owned {
+  max-height: 184px;
+  overflow: auto;
+}
+
+.nf-state-battle-complete {
+  position: fixed;
+  z-index: 44;
+  left: 50%;
+  bottom: 28px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  width: min(720px, calc(100vw - 72px));
+  padding: 15px 17px;
+  transform: translateX(-50%);
+}
+
+.nf-state-battle-complete-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid rgba(224, 176, 85, 0.48);
+  border-radius: 50%;
+  background: rgba(224, 176, 85, 0.12);
+  color: var(--brass);
+}
+
+.nf-state-battle-complete h2 {
+  margin: 2px 0 3px;
+  color: var(--text);
+  font-size: 17px;
+}
+
+.nf-state-battle-complete p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.nf-state-battle-complete-root .nf-state-table-targetable,
+.nf-state-battle-complete-root .nf-state-table-chest-eligible,
+.nf-state-battle-complete-root .nf-state-battle-item-eligible {
+  box-shadow: none;
+}
+
+.nf-state-retrieval-cinematic {
+  width: min(520px, calc(100vw - 44px));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nf-state-table-chest-eligible,
+  .nf-state-battle-item-eligible,
+  .nf-state-battle-complete,
+  .nf-state-retrieval-cinematic {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 .nf-state-busy button[disabled] {
   cursor: wait;
   opacity: .55;

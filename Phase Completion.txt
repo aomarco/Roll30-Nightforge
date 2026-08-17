@@ -3060,3 +3060,264 @@ Every Phase 9 requirement has direct implementation and verification evidence:
 - Phase 10 mutation boundaries: proven.
 
 Phase 9 is complete and ready for Phase 10.
+
+
+117. PHASE 10 RESULT
+--------------------
+
+Phase 10 is complete. Nightforge now supports the complete encounter lifecycle
+from a persisted Battle Setup through active combat, chest looting, ammunition
+use, thrown physical weapons, retrieval, victory, reload, and restart.
+
+The implementation was programmed as clean-room Nightforge behavior from the
+written contract and conceptual behavior only. No Roll30 source, UI, UX,
+layout, browser-save data, character, game, map, or session was imported.
+
+
+118. BATTLE CHESTS AND LOOTING
+------------------------------
+
+- Only a chest adjacent to the active token can be opened.
+- Opening a chest spends the active token's available Bonus Action.
+- An opened chest remains resumable after reload without spending Bonus twice.
+- Loot transfers exactly one unit at a time into the active token's Battle
+  inventory and rechecks adjacency before every transfer.
+- Empty and partially depleted chest contents persist.
+- Chests remain movement obstacles during Battle.
+- Restart preserves the exact depleted chest contents and never refills them.
+- Unavailable commands expose a specific recovery reason and do not mutate the
+  Scene or spend a resource.
+
+
+119. THROWN PHYSICAL WEAPONS
+----------------------------
+
+- Dagger, Dart, Handaxe, Javelin, Spear, and Trident become physical Battle
+  items when thrown; Light Hammer is explicitly non-lodging.
+- A ranged use of a thrown weapon is inferred from grid distance. Adjacent use
+  remains an ordinary melee attack.
+- Throwing removes exactly one inventory copy and clears the throwing hand.
+- A remaining off-hand weapon shifts into the main hand when required, and the
+  legal dual-wield follow-up remains mapped to the correct hand.
+- A lodging-weapon hit embeds a stable physical item in the target.
+- A blunt hit or any thrown miss places the weapon in a deterministic nearby
+  legal cell that excludes tokens, chests, existing physical items, and cells
+  outside the map.
+- Physical-item identity conflicts and fully occupied landing areas fail
+  without committing speculative attack state.
+- Physical items survive active and completed encounter reloads.
+
+
+120. PHYSICAL-WEAPON RETRIEVAL
+------------------------------
+
+- A ground weapon in the same or an adjacent cell costs Bonus and needs no
+  roll.
+- A weapon embedded in a living adjacent carrier, or in the acting token,
+  costs Bonus and rolls d20 + Strength modifier + Dexterity modifier against
+  DC 15.
+- A failed living-carrier check spends Bonus and leaves the weapon embedded.
+- A weapon embedded in an adjacent defeated carrier is recovered freely,
+  without a roll and even when Bonus has already been spent.
+- A recovered weapon enters a legal empty hand where possible; otherwise it
+  returns to Battle inventory without triggering a Swap penalty.
+- Retrieval presents spin, natural roll, modifiers, verdict, impact, and failed
+  persistence stages while locking combat input. Reduced-motion timing retains
+  the complete result information.
+
+
+121. AMMUNITION
+---------------
+
+The exact weapon-to-ammunition map is implemented:
+
+- Light, Hand, and Heavy Crossbow use Crossbow Bolts.
+- Shortbow and Longbow use Arrows.
+- Sling uses Sling Bullets.
+- Blowgun uses Blowgun Needles.
+
+The clean-room catalog bundle sizes remain 20 Arrows, 20 Bolts, 20 Bullets, and
+50 Needles. A shot requires matching ammunition, consumes exactly one unit only
+after a legal target resolves, and records expenditure per token. A weapon with
+no matching ammunition cannot target, roll, or spend Action.
+
+Encounter completion recovers floor(50%) of each token's exact spent amount.
+Recovery is committed once and remains idempotent across reloads.
+
+
+122. COMPLETION AND RESTART
+---------------------------
+
+- An encounter completes immediately when one or zero living tokens remain.
+- One survivor is recorded and presented as the winner; zero survivors produce
+  an explicit no-survivor result.
+- The final attack, including its consumed ammunition, participates in the
+  completion transaction and ammunition recovery.
+- Ordinary movement, attacks, conditions, turn controls, looting, and retrieval
+  are disabled after completion while the final state remains inspectable.
+- The completed encounter and its final physical, inventory, ammunition, chest,
+  winner, and token state survive reload.
+- Restart restores every token to maximum HP, clears conditions, rerolls fresh
+  initiative, starts round one, and creates fresh Action, Bonus, movement, and
+  branch resources.
+- Restart clears transient physical Battle items and ammunition expenditure,
+  while preserving token positions, Scene tools, walls, and depleted chests.
+
+
+123. PERSISTENCE, RESTORATION, AND FAILURE SAFETY
+------------------------------------------------
+
+All Phase 10 mutations use the existing versioned Nightforge Scene repository
+boundary. Encounter normalizers validate opened-chest state, unique physical
+items, nested per-token ammunition ledgers, completion state, and the one-time
+recovery flag.
+
+- Active and completed encounters reopen in Battle mode.
+- Fresh Battle Scenes continue to open in Setup mode.
+- The application still starts at Library while restoring the durable active
+  Scene context.
+- Repository reconstruction preserves every Phase 10 durable field.
+- Injected write failures preserve the complete last valid encounter and expose
+  an actionable error state.
+- Cinematic stages, target highlights, and transient input locks are not saved.
+
+
+124. NIGHTFORGE UI AND CLEAN-ROOM BOUNDARY
+------------------------------------------
+
+The seven permanent Nightforge visual files remain byte-identical to their
+frozen baseline:
+
+- `src/styles/core.css`
+- `src/styles/shell.css`
+- `src/styles/library.css`
+- `src/styles/heroes.css`
+- `src/styles/scene.css`
+- `src/styles/table.css`
+- `src/ui/Glyphs.jsx`
+
+Phase 10 uses the existing Nightforge composition, drawers, HUD, inspectors,
+typography, and control language. All new functional visual states are scoped
+under `.nf-state-` selectors in `src/styles/functional-states.css`. No UI, UX,
+layout, assets, save identifiers, or user data were taken from Roll30.
+
+
+125. FILES ADDED
+----------------
+
+- `src/domain/encounter.js`
+  Clean-room chest, physical-item, retrieval, ammunition, completion, and
+  restart rules.
+
+- `src/screens/ChestLootDrawer.jsx`
+  Persistent one-unit Battle looting and depletion feedback.
+
+- `src/screens/RetrievalCinematic.jsx`
+  Staged DC 15 retrieval-roll and persistence-failure presentation.
+
+- `src/screens/BattleCompletion.jsx`
+  Winner/no-survivor, recovered-ammunition, and restart presentation.
+
+- `src/phase10.test.js`
+  Thirty-one focused Phase 10 domain, persistence, restoration, failure, and
+  complete-lifecycle tests.
+
+- `scripts/phase10-render-smoke.mjs`
+  Server-rendered Phase 10 state matrix.
+
+- `scripts/verify-phase10.mjs`
+  Phase contract, protected-visual, scoped-CSS, structural, clean-room,
+  encoding, and data-isolation verification.
+
+
+126. FILES UPDATED
+------------------
+
+- `src/domain/table.js`
+  Normalizes opened chests, physical items, ammunition ledgers, and recovery.
+
+- `src/domain/attacks.js`
+  Connects ammunition and physical throws to legal attack resolution and
+  immediate encounter completion.
+
+- `src/screens/TableScreen.jsx`
+  Connects chest eligibility, physical markers, contextual retrieval,
+  ammunition feedback, completion, restoration, and restart.
+
+- `src/screens/BonusCommandsDrawer.jsx` and
+  `src/screens/CombatCommandsDrawer.jsx`
+  Replace Phase 10 deferrals with honest real commands and supply availability.
+
+- `src/styles/functional-states.css`
+  Adds only scoped Phase 10 functional and transient states.
+
+- `src/phase2.test.js`, `src/phase9.test.js`,
+  `scripts/phase7-render-smoke.mjs`, `scripts/phase9-render-smoke.mjs`,
+  `scripts/verify-phase8.mjs`, and `scripts/verify-phase9.mjs`
+  Retain earlier-phase coverage alongside the completed encounter integration.
+
+- `package.json`
+  Adds Phase 10 render and structural gates to the complete verifier.
+
+
+127. VERIFICATION EVIDENCE
+--------------------------
+
+Complete command executed:
+
+    npm run verify
+
+Result: PASS.
+
+- Node test suite: 221 passed, 0 failed, 0 skipped.
+- Phase 10 focused suite: 31 passed.
+- Phase 2 through Phase 10 render smoke suites: Pass.
+- Phase 1 through Phase 10 structural verifiers: Pass.
+- Full Setup -> active reload -> completion -> completed reload -> restart ->
+  restarted reload gate: Pass.
+- Exact seven-weapon ammunition mapping and four bundle sizes: Pass.
+- Every chest, throw, landing, retrieval, DC, recovery, winner, no-survivor,
+  restart, and failure branch described above: Pass.
+- Frozen permanent Nightforge visual hashes: Pass.
+- Functional CSS scope audit: Pass.
+- Original Roll30 path/import, storage-identifier, and user-data isolation: Pass.
+- Runtime malformed UTF-8/mojibake scan: Pass.
+- Production Vite build: Pass; 1,824 modules transformed.
+- `git diff --check`: Pass (line-ending conversion notices only).
+- Live development server: HTTP 200 at `http://127.0.0.1:5310/`.
+
+
+128. PHASE BOUNDARY AUDIT
+-------------------------
+
+Phase 10 completes the planned encounter feature set. The remaining Phase 11
+scope is broad hardening: comprehensive keyboard/focus behavior, long names,
+large inventories and token lists, corrupt-data matrices, storage-quota
+failures, responsive verification, and closure of the parity register. Phase 12
+preview, owner acceptance, publication, and production replacement remain
+separate and require explicit approval.
+
+
+129. PHASE 10 COMPLETION STATEMENT
+----------------------------------
+
+Every Phase 10 requirement has direct implementation and verification evidence:
+
+- Adjacent Bonus chest opening, resumable exact-unit looting, persistent
+  depletion, collision behavior, and no refill on restart: proven.
+- Six lodging weapons, one non-lodging hammer, distance-inferred throws, legal
+  hand/inventory mutation, embedded hits, nearby misses, and persistence:
+  proven.
+- Ground, living-carrier, self-carrier, defeated-carrier, failed DC 15, legal
+  hand, and inventory-fallback retrieval branches: proven.
+- Exact ammunition matching, one-unit consumption, per-token expenditure,
+  refusal without supplies, and one-time floor-50% recovery: proven.
+- Winner and no-survivor completion, ordinary-command lockout, preserved final
+  state, and immediate defeating-attack completion: proven.
+- Fresh restart resources, maximum HP, fresh initiative, cleared conditions and
+  physical items, preserved positions/tools/walls, and depleted chests: proven.
+- Active/completed restoration, repository failure safety, Nightforge UI
+  protection, clean-room isolation, no data import, encoding integrity, complete
+  regression suite, and production build: proven.
+
+Phase 10 is complete and ready for Phase 11.

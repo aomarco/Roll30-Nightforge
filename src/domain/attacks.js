@@ -8,6 +8,11 @@ import {
 } from "./conditions.js";
 import { abilityModifier, proficiencyBonus } from "./heroes.js";
 import { effectiveDamageDice, equippedWeapons, weaponMagicBonuses } from "./items.js";
+import {
+  applyAttackSupplyEffects,
+  attackSupplyAvailability,
+  completeEncounterIfNeeded,
+} from "./encounter.js";
 import { activeTurnContext, attackActionAvailability, segmentsIntersect } from "./combat.js";
 import {
   normalizeTableTokens,
@@ -39,6 +44,7 @@ export function attackOptionsForToken(token) {
     weaponId: item.id,
     weapon: item,
     damageDice,
+    supply: attackSupplyAvailability(token, item, { usage: item.propertyIds?.includes("ammunition") ? "ranged" : "melee" }),
     key: `${hand}:${item.id}`,
   }));
 }
@@ -51,6 +57,13 @@ export function mainAttackAvailability(scene) {
     "NO_EQUIPPED_WEAPON",
     `${available.value.token.name} has no equipped weapon available for Attack.`,
     "End the turn or equip a weapon in Battle Setup before the next encounter.",
+  );
+  if (options.every((option) => !option.supply.ok)) return failure(
+    "NO_ATTACK_SUPPLIES",
+    options[0].supply.message,
+    options[0].supply.recovery,
+    true,
+    { options },
   );
   return success({ ...available.value, options });
 }
@@ -98,6 +111,11 @@ const weaponRangeAtDistance = (weapon, distanceFeet) => {
     return { usage: "melee", tier: meleeMaximum > 5 ? "reach" : "melee", distanceFeet, maximumFeet: meleeMaximum, color: "green", disadvantage: false };
   }
   if (weapon.weaponRange === "melee" && weapon.throwRange) {
+    if (distanceFeet <= weapon.throwRange.normal) return { usage: "thrown", tier: "thrown-normal", distanceFeet, maximumFeet: weapon.throwRange.normal, color: "yellow", disadvantage: false };
+    if (distanceFeet <= weapon.throwRange.long) return { usage: "thrown", tier: "thrown-long", distanceFeet, maximumFeet: weapon.throwRange.long, color: "red", disadvantage: true };
+    return null;
+  }
+  if (weapon.weaponRange === "ranged" && hasProperty(weapon, "thrown") && weapon.throwRange) {
     if (distanceFeet <= weapon.throwRange.normal) return { usage: "thrown", tier: "thrown-normal", distanceFeet, maximumFeet: weapon.throwRange.normal, color: "yellow", disadvantage: false };
     if (distanceFeet <= weapon.throwRange.long) return { usage: "thrown", tier: "thrown-long", distanceFeet, maximumFeet: weapon.throwRange.long, color: "red", disadvantage: true };
     return null;
@@ -174,7 +192,9 @@ export function attackTargetEligibility(scene, {
     true,
     { distanceFeet, range, lineOfSight },
   );
-  return success({ ...available.value, option, target, distanceFeet, range, lineOfSight });
+  const supply = attackSupplyAvailability(available.value.token, option.weapon, range);
+  if (!supply.ok) return supply;
+  return success({ ...available.value, option, target, distanceFeet, range, lineOfSight, supply: supply.value });
 }
 
 export function combineAttackModes(sources = []) {
@@ -247,7 +267,10 @@ const dualWieldFollowup = (token, attackedOption) => {
   return options.find(({ hand }) => hand !== attackedOption.hand) || null;
 };
 
-export function performWeaponAttack(scene, specification = {}, { random = Math.random } = {}) {
+export function performWeaponAttack(scene, specification = {}, {
+  random = Math.random,
+  battleItemIdFactory = () => `battle-item-${globalThis.crypto?.randomUUID?.() || Date.now()}`,
+} = {}) {
   const kind = specification.kind === ATTACK_KIND_BONUS ? ATTACK_KIND_BONUS : ATTACK_KIND_ACTION;
   const eligible = attackTargetEligibility(scene, { ...specification, kind });
   if (!eligible.ok) return eligible;
@@ -268,7 +291,9 @@ export function performWeaponAttack(scene, specification = {}, { random = Math.r
   const autoCritical = hit && targetAutoCritical(target.conditions, range.usage === "melee" ? "melee" : "ranged");
   const critical = hit && (naturalRoll === 20 || autoCritical);
   const damage = hit ? rollWeaponDamage({
-    definition: option.damageDice || effectiveDamageDice(attacker, option.weaponId),
+    definition: range.usage === "thrown"
+      ? option.weapon.damageDice
+      : option.damageDice || effectiveDamageDice(attacker, option.weaponId),
     critical,
     ability: ability.modifier,
     magic: magic.damage,
@@ -276,7 +301,7 @@ export function performWeaponAttack(scene, specification = {}, { random = Math.r
     random,
   }) : null;
   const nextTargetHp = hit ? Math.max(0, target.hp - damage.total) : target.hp;
-  const tokens = hit ? updateToken(eligible.value.tokens, target.id, { hp: nextTargetHp }) : eligible.value.tokens;
+  const damagedTokens = hit ? updateToken(eligible.value.tokens, target.id, { hp: nextTargetHp }) : eligible.value.tokens;
   let nextResources;
   if (kind === ATTACK_KIND_BONUS) {
     nextResources = {
@@ -300,11 +325,27 @@ export function performWeaponAttack(scene, specification = {}, { random = Math.r
     };
   }
   const verdict = critical ? "critical" : hit ? "hit" : "miss";
-  const encounter = {
+  const attackEncounter = {
     ...scene.encounter,
     resources: { [attacker.id]: nextResources },
     log: [...(scene.encounter.log || []), `${attacker.name} attacks ${target.name} with ${option.weapon.name}: ${verdict}${hit ? ` for ${damage.total} damage` : ""}.`],
   };
+  const supplied = applyAttackSupplyEffects({
+    scene,
+    tokens: damagedTokens,
+    encounter: attackEncounter,
+    attackerId: attacker.id,
+    targetId: target.id,
+    weapon: option.weapon,
+    hand: option.hand,
+    range,
+    hit,
+    viewport: specification.viewport,
+    battleItemId: range.usage === "thrown" ? battleItemIdFactory() : null,
+  });
+  if (!supplied.ok) return supplied;
+  const completed = completeEncounterIfNeeded(supplied.value.tokens, supplied.value.encounter);
+  if (!completed.ok) return completed;
   const outcome = {
     kind,
     attackerId: attacker.id,
@@ -334,8 +375,13 @@ export function performWeaponAttack(scene, specification = {}, { random = Math.r
     damage,
     previousHp: target.hp,
     nextHp: nextTargetHp,
+    supply: supplied.supply,
+    battleItem: supplied.battleItem || null,
+    completed: completed.completed,
+    winnerTokenId: completed.winnerTokenId || null,
+    ammunitionRecovery: completed.recovery,
   };
-  return success({ tokens, encounter }, { outcome });
+  return success(completed.value, { outcome });
 }
 
 const cellKey = (cell) => `${cell.column}:${cell.row}`;
@@ -382,6 +428,10 @@ const bandDefinitions = (weapon) => {
     { id: "thrown-long", maximumFeet: weapon.throwRange.long, tone: "red", label: `Long throw · ${weapon.throwRange.long} ft` },
     { id: "thrown-normal", maximumFeet: weapon.throwRange.normal, tone: "yellow", label: `Normal throw · ${weapon.throwRange.normal} ft` },
     { id: meleeMaximum > 5 ? "reach" : "melee", maximumFeet: meleeMaximum, tone: "green", label: `${meleeMaximum > 5 ? "Reach" : "Melee"} · ${meleeMaximum} ft` },
+  ];
+  if (weapon.weaponRange === "ranged" && hasProperty(weapon, "thrown") && weapon.throwRange) return [
+    { id: "thrown-long", maximumFeet: weapon.throwRange.long, tone: "red", label: `Long throw · ${weapon.throwRange.long} ft` },
+    { id: "thrown-normal", maximumFeet: weapon.throwRange.normal, tone: "yellow", label: `Normal throw · ${weapon.throwRange.normal} ft` },
   ];
   if (weapon.weaponRange === "ranged") return [
     { id: "ranged-long", maximumFeet: weapon.longRange, tone: "yellow", label: `Long range · ${weapon.longRange} ft` },

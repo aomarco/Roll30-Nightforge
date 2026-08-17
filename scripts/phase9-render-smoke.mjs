@@ -108,7 +108,7 @@ try {
   assert.match(rangeMarkup, /Conditions are applied manually/);
 
   const fullWall = table.createWall({ id: "shot-blocker", type: "full", points: [{ xPercent: 20, yPercent: 0 }, { xPercent: 20, yPercent: 30 }] });
-  const archer = table.createManualToken({ id: "archer", name: "Archer", position: at(1, 1), inventory: [{ itemId: "shortbow", quantity: 1 }], loadout: { mainHand: "shortbow", offHand: null } });
+  const archer = table.createManualToken({ id: "archer", name: "Archer", position: at(1, 1), inventory: [{ itemId: "shortbow", quantity: 1 }, { itemId: "arrow", quantity: 20 }], loadout: { mainHand: "shortbow", offHand: null } });
   const distant = table.createManualToken({ id: "distant", name: "Distant", position: at(4, 1), hp: 20, maxHp: 20 });
   const blockedBattle = makeBattle({ tokens: [archer, distant], resources: table.createTurnResources(archer), walls: [fullWall], wallsVisible: false });
   const blockedRange = attacks.buildAttackRangeBands(blockedBattle, { weaponId: "shortbow", hand: "mainHand", viewport }).value;
@@ -133,8 +133,10 @@ try {
   assert.match(bonusMarkup, /Duelist.*s Bonus Action/);
   assert.match(bonusMarkup, /Off-hand attack/);
   assert.match(bonusMarkup, /Dagger/);
-  assert.match(bonusMarkup, /Open adjacent chest.*Phase 10/s);
-  assert.match(bonusMarkup, /Retrieve weapon.*Phase 10/s);
+  assert.match(bonusMarkup, /Battle chests/);
+  assert.match(bonusMarkup, /No Battle chests are on this Table/);
+  assert.match(bonusMarkup, /Physical weapons/);
+  assert.match(bonusMarkup, /No thrown weapons are present/);
   assert.match(bonusMarkup, /No automatic End Turn/);
   assert.match(bonusMarkup, /aria-label="Open Bonus Commands"/);
 

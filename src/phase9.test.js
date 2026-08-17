@@ -177,7 +177,7 @@ test("grid attack distance charges a diagonal cell as 5 feet", () => {
 test("melee, Reach, ranged, long, thrown-normal, and thrown-long tiers are exact", () => {
   const target = (column) => token("target", column, 1, { hp: 20, maxHp: 20 }, WIDE_VIEWPORT);
   const make = (weaponId, targetColumn) => {
-    const active = token("active", 1, 1, { inventory: [item(weaponId)], loadout: { mainHand: weaponId, offHand: null } }, WIDE_VIEWPORT);
+    const active = token("active", 1, 1, { inventory: [item(weaponId), ...(weaponId === "shortbow" ? [item("arrow", 20)] : [])], loadout: { mainHand: weaponId, offHand: null } }, WIDE_VIEWPORT);
     return battleScene({ tokens: [active, target(targetColumn)] });
   };
   assert.equal(attackTargetEligibility(make("longsword", 2), { weaponId: "longsword", hand: "mainHand", targetId: "target", viewport: WIDE_VIEWPORT }).value.range.tier, "melee");
@@ -199,7 +199,7 @@ test("melee, Reach, ranged, long-range, normal-throw, and long-throw attacks all
     ["dagger", 13, "thrown", "disadvantage"],
   ];
   for (const [weaponId, targetColumn, usage, mode] of scenarios) {
-    const active = token("active", 1, 1, { inventory: [item(weaponId)], loadout: { mainHand: weaponId, offHand: null } }, WIDE_VIEWPORT);
+    const active = token("active", 1, 1, { inventory: [item(weaponId), ...(weaponId === "shortbow" ? [item("arrow", 20)] : [])], loadout: { mainHand: weaponId, offHand: null } }, WIDE_VIEWPORT);
     const targetToken = token("target", targetColumn, 1, { ac: 1, hp: 40, maxHp: 40 }, WIDE_VIEWPORT);
     const resolved = performWeaponAttack(battleScene({ tokens: [active, targetToken] }), { weaponId, hand: "mainHand", targetId: "target", viewport: WIDE_VIEWPORT }, { random: sequence(0.5, 0.5, 0.5) });
     assert.equal(resolved.ok, true, weaponId);
@@ -211,7 +211,7 @@ test("melee, Reach, ranged, long-range, normal-throw, and long-throw attacks all
 });
 
 test("full walls block ranged and thrown attacks while half-walls impose cover", () => {
-  const active = token("active", 1, 1, { inventory: [item("shortbow")], loadout: { mainHand: "shortbow", offHand: null } });
+  const active = token("active", 1, 1, { inventory: [item("shortbow"), item("arrow", 20)], loadout: { mainHand: "shortbow", offHand: null } });
   const targetToken = token("target", 4, 1);
   const wallPoints = [{ xPercent: 30, yPercent: 0 }, { xPercent: 30, yPercent: 30 }];
   const fullScene = battleScene({ tokens: [active, targetToken], walls: [createWall({ id: "full", type: "full", points: wallPoints })], wallsVisible: false });
@@ -222,7 +222,7 @@ test("full walls block ranged and thrown attacks while half-walls impose cover",
 });
 
 test("full-wall refusal spends nothing while a half-wall attack resolves at disadvantage", () => {
-  const active = token("active", 1, 1, { inventory: [item("shortbow")], loadout: { mainHand: "shortbow", offHand: null } });
+  const active = token("active", 1, 1, { inventory: [item("shortbow"), item("arrow", 20)], loadout: { mainHand: "shortbow", offHand: null } });
   const targetToken = token("target", 4, 1, { ac: 1, hp: 30, maxHp: 30 });
   const points = [{ xPercent: 30, yPercent: 0 }, { xPercent: 30, yPercent: 30 }];
   const full = battleScene({ tokens: [active, targetToken], walls: [createWall({ id: "full", type: "full", points })] });
@@ -297,7 +297,7 @@ test("normal Attack uses ability, proficiency, and magic bonuses and preserves m
 
 test("Finesse uses the better ability and ranged attacks use Dexterity", () => {
   const finesse = token("active", 1, 1, { strength: 8, dexterity: 18, inventory: [item("rapier")], loadout: { mainHand: "rapier", offHand: null } });
-  const ranged = token("active", 1, 1, { strength: 18, dexterity: 12, inventory: [item("shortbow")], loadout: { mainHand: "shortbow", offHand: null } });
+  const ranged = token("active", 1, 1, { strength: 18, dexterity: 12, inventory: [item("shortbow"), item("arrow", 20)], loadout: { mainHand: "shortbow", offHand: null } });
   const targetToken = token("target", 2, 1, { ac: 1, hp: 20, maxHp: 20 });
   assert.equal(performWeaponAttack(battleScene({ tokens: [finesse, targetToken] }), { weaponId: "rapier", hand: "mainHand", targetId: "target", viewport: VIEWPORT }, { random: sequence(0.5, 0) }).outcome.ability.modifier, 4);
   assert.equal(performWeaponAttack(battleScene({ tokens: [ranged, targetToken] }), { weaponId: "shortbow", hand: "mainHand", targetId: "target", viewport: VIEWPORT }, { random: sequence(0.5, 0) }).outcome.ability.modifier, 1);

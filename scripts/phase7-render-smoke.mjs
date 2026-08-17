@@ -120,8 +120,9 @@ try {
     initialSelectedId: null,
     initialSelectedChestId: chest.id,
   }));
-  assert.match(lockedChestMarkup, /Locked in Battle/);
-  assert.match(lockedChestMarkup, /Chest movement and inventory editing are disabled/);
+  assert.match(lockedChestMarkup, /Bonus Action/);
+  assert.match(lockedChestMarkup, /depleted contents persist through restart/);
+  assert.match(lockedChestMarkup, /Chest movement and Setup editing stay locked/);
   assert.match(lockedChestMarkup, /Dagger/);
 
   const abandonMarkup = renderToStaticMarkup(React.createElement(TableScreen, {

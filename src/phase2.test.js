@@ -78,6 +78,7 @@ test("Library presentation helpers are stable and respect Scene kind and encount
   assert.equal(tableModeForScene({ kind: "play" }), "play");
   assert.equal(tableModeForScene({ kind: "battle", encounter: null }), "setup");
   assert.equal(tableModeForScene({ kind: "battle", encounter: { status: "active" } }), "battle");
+  assert.equal(tableModeForScene({ kind: "battle", encounter: { status: "complete" } }), "battle");
   assert.equal(accentForScene({ id: "stable", name: "Scene" }), accentForScene({ id: "stable", name: "Scene" }));
 });
 
@@ -190,4 +191,3 @@ test("A failed deletion leaves the Scene visible and selected", () => {
   assert.equal(app.state.scenes.some((item) => item.id === scene.id), true);
   assert.equal(app.state.activeSceneId, scene.id);
 });
-
