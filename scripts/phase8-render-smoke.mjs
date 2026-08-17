@@ -71,7 +71,7 @@ try {
   assert.ok(routeMarkup.indexOf("Vanguard") < routeMarkup.indexOf("Rival"));
   assert.match(routeMarkup, />18<.*>13</s);
   assert.match(routeMarkup, /<button class="pip-key nf-state-command-pip"[^>]*aria-label="Open Combat Commands"/);
-  assert.match(routeMarkup, /aria-label="Bonus Commands — Phase 9" disabled=""/);
+  assert.match(routeMarkup, /aria-label="Open Bonus Commands"/);
 
   const commandMarkup = renderToStaticMarkup(React.createElement(TableScreen, {
     ...handlers,
@@ -85,7 +85,7 @@ try {
   assert.match(commandMarkup, /combat-commands-title/);
   assert.match(commandMarkup, /Vanguard.*s turn/);
   assert.match(commandMarkup, /10 \/ 10 ft/);
-  assert.match(commandMarkup, /Attack.*Phase 9/s);
+  assert.match(commandMarkup, /Attack.*1 equipped/s);
   assert.match(commandMarkup, /Dash.*Add 10 ft/s);
   assert.match(commandMarkup, /Swap weapons.*Once this turn/s);
   assert.match(commandMarkup, /Swap draft/);

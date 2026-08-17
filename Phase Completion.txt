@@ -2748,3 +2748,315 @@ Every Phase 8 requirement has direct implementation and verification evidence:
   isolation, encoding integrity, full regressions, and production build: proven.
 
 Phase 8 is complete and ready for Phase 9.
+
+
+103. PHASE 9 RESULT
+-------------------
+
+Phase 9 is complete as a clean-room Nightforge combat implementation. It adds
+weapon attacks, bounded range visualization, line of sight, attack modes,
+damage, dual-wield Bonus attacks, the complete fifteen-condition model, and
+staged attack cinematics while retaining Nightforge's existing visual system.
+
+No Roll30 source code, UI, UX, layout, storage, characters, games, maps, saves,
+or other user data was imported. The original Roll30 project remained a
+read-only behavior and documentation reference.
+
+
+104. ATTACK SELECTION AND TARGETING
+-----------------------------------
+
+The Action drawer now exposes only weapons actually equipped in a token's main
+or off hand. Every option retains its stable item and hand identity. Attack
+availability reports exact reasons for missing equipment, spent Action,
+incapacitation, defeat, or an incompatible Swap branch.
+
+Selecting a weapon enters an explicit targeting mode:
+
+- Legal enemy tokens receive semantic target controls and a Nightforge-native
+  target state.
+- Escape, the targeting legend, or the existing veil cancels without spending
+  a resource.
+- Out-of-range and full-wall-blocked targets cannot resolve and spend nothing.
+- Input is locked during a resolving cinematic so one resource cannot be spent
+  twice.
+- A successful main-hand attack spends Action only. It never spends movement,
+  never spends Bonus, and never advances initiative.
+- Normal Attack permits any remaining movement. Attack after Swap preserves the
+  Phase 8 rule that later movement is locked.
+- Attack blocks later Dash and Swap as required by the active-turn branch.
+
+
+105. RANGE AND LINE OF SIGHT
+----------------------------
+
+The attack overlay is one bounded SVG aligned to the Table grid. It produces
+one stair-stepped region path per active range tier rather than one rendered
+node per cell.
+
+- Melee and Reach use the green tier.
+- Ranged normal range is green and long range is yellow.
+- Thrown melee distance is green, normal thrown range is yellow, and long
+  thrown range is red.
+- Diagonal attack distance follows the existing Battle grid convention: one
+  diagonal cell costs five feet.
+- Full walls block ranged and thrown line of sight.
+- Half walls permit ranged and thrown attacks with disadvantage.
+- Melee attacks ignore walls for line-of-sight purposes.
+- Hidden walls retain their mechanical effect without becoming visible.
+- Out-of-range or blocked clicks never mutate the Scene or spend Action.
+
+
+106. ATTACK ROLLS AND DAMAGE
+----------------------------
+
+The attack engine uses an injectable random source and returns explicit Scene
+patches plus a presentation outcome. It implements:
+
+- One d20 for normal, two keep-high for advantage, and two keep-low for
+  disadvantage.
+- Cancellation when at least one advantage and one disadvantage source oppose
+  one another.
+- Strength for melee, Dexterity for ranged, and the better modifier for
+  Finesse; thrown melee weapons retain their normal melee ability rule.
+- Proficiency and the equipped weapon's magic bonus.
+- Natural 1 as an automatic miss and natural 20 as an automatic hit and
+  critical.
+- Critical damage that doubles dice only, never fixed damage or modifiers.
+- Ability damage applied once and a final damage floor of zero.
+- Long range, long thrown range, Small creatures using Heavy weapons, a Lance
+  at five feet, Attack after Swap, half-wall cover, and applicable conditions
+  as named roll-mode sources.
+
+Resolved hit-point changes, spent resources, attack branch state, and the
+dual-wield follow-up are persisted together as one Scene update.
+
+
+107. DUAL WIELDING AND BONUS ATTACK
+-----------------------------------
+
+A main Action attack unlocks exactly one off-hand follow-up only when both
+equipped weapons are Light melee weapons and neither violates two-hand or
+shield legality. The unlocked weapon is always the other equipped hand.
+
+- A Swap-branch attack never unlocks the off-hand follow-up.
+- The Bonus drawer reports the exact legal weapon and unavailable reason.
+- The off-hand attack uses the normal attack ability, proficiency, and magic
+  calculations.
+- A positive ability modifier is omitted from off-hand damage.
+- A negative ability modifier is retained in off-hand damage.
+- The Bonus attack spends Bonus only and never ends the turn.
+- Chest interaction and physical weapon retrieval remain visibly deferred to
+  Phase 10.
+
+
+108. CONDITIONS
+---------------
+
+Nightforge now has one stable catalog containing exactly these fifteen manual
+conditions: Blinded, Charmed, Deafened, Frightened, Grappled, Incapacitated,
+Invisible, Paralyzed, Petrified, Poisoned, Prone, Restrained, Stunned,
+Unconscious, and Exhaustion.
+
+The selected-token inspector provides reversible manual toggles and explanatory
+notes without changing the established inspector layout. Active conditions are
+persisted on the Battle token and displayed as compact badges on the Table.
+
+Structured effects cover attacker advantage/disadvantage, incoming melee and
+ranged advantage/disadvantage, immobility, incapacitation, and automatic melee
+critical hits against Paralyzed or Unconscious targets. Opposing sources cancel
+normally. Charmed, Deafened, and level-unspecified Exhaustion remain tracked
+manual states without inventing unsupported automation. Conditions are never
+automatically inflicted by attacks.
+
+
+109. ATTACK CINEMATICS AND FEEDBACK
+-----------------------------------
+
+The attack presentation is a staged Nightforge-native overlay with explicit
+spin, natural-roll, modifier, verdict, damage, and impact states.
+
+- Advantage and disadvantage show both dice and de-emphasize the rejected die.
+- The selected natural result, ability/proficiency/magic modifier total, target
+  AC, hit/miss/critical verdict, damage dice, damage modifier, and HP impact are
+  all exposed.
+- Hits receive a brief target impact state and floating damage feedback.
+- One newly authored procedural impact sound plays on a successful hit only;
+  misses are silent and no external media asset was copied.
+- Reduced-motion preference shortens or suppresses nonessential movement while
+  retaining the complete result information.
+- Persistence failure enters a visible failed stage and does not apply the
+  speculative attack state.
+
+
+110. PERSISTENCE AND FAILURE SAFETY
+-----------------------------------
+
+Attack and condition commands use the existing Nightforge Scene repository
+boundary. The domain layer creates deterministic patches and the interface
+commits them only through the application command surface.
+
+- Attack results, hit points, resources, branch state, off-hand unlocks, and
+  conditions survive repository reconstruction.
+- Invalid targets and unavailable commands are pure refusals.
+- A failed attack write preserves the entire last valid Battle.
+- Cinematic state, range geometry, target hover/selection, impact animation,
+  floating damage, and procedural audio are transient.
+- No original Roll30 key, path, runtime, or user record is read or written.
+
+
+111. NIGHTFORGE UI AND CLEAN-ROOM BOUNDARY
+------------------------------------------
+
+The seven permanent Nightforge visual files remain byte-identical to their
+frozen baseline:
+
+- `src/styles/core.css`
+- `src/styles/shell.css`
+- `src/styles/library.css`
+- `src/styles/heroes.css`
+- `src/styles/scene.css`
+- `src/styles/table.css`
+- `src/ui/Glyphs.jsx`
+
+All Phase 9 visual states are conditional selectors rooted beneath
+`.nf-state-` in `src/styles/functional-states.css`. The two-dock composition,
+HUD landmarks, turn track, typography, palette, map layout, inspectors, and
+existing Nightforge interaction structure were not replaced by Roll30 UI or UX.
+
+
+112. FILES ADDED
+----------------
+
+- `src/domain/attacks.js`
+  Clean-room selection, distance, range tiers, line of sight, roll modes,
+  attack/damage resolution, dual wielding, condition integration, and bounded
+  range-path generation.
+
+- `src/domain/conditions.js`
+  Stable fifteen-condition catalog, normalization, toggle behavior, and
+  structured combat effects.
+
+- `src/screens/AttackCinematic.jsx`
+  Staged and failure-safe Nightforge attack result presentation.
+
+- `src/screens/BonusCommandsDrawer.jsx`
+  Real off-hand Bonus attack drawer with honest Phase 10 deferrals.
+
+- `src/phase9.test.js`
+  Thirty-one focused attack, range, line-of-sight, roll, damage, condition,
+  dual-wield, persistence, and failed-write tests.
+
+- `scripts/phase9-render-smoke.mjs`
+  Server-rendered matrices for Action/Bonus drawers, the range SVG, targeting,
+  all conditions, cinematic stages, impact, and failure states.
+
+- `scripts/verify-phase9.mjs`
+  Phase contract, protected-visual, scoped-CSS, structural, clean-room,
+  encoding, storage-isolation, and Phase 10 boundary verification.
+
+
+113. FILES UPDATED
+------------------
+
+- `src/domain/combat.js`
+  Shares canonical condition immobility and incapacitation behavior.
+
+- `src/domain/table.js`
+  Normalizes the stable condition IDs on persisted Battle tokens.
+
+- `src/screens/CombatCommandsDrawer.jsx`
+  Replaces the Phase 9 Attack placeholder with equipped-weapon selection.
+
+- `src/screens/TableScreen.jsx`
+  Connects targeting, bounded range rendering, attack resolution, conditions,
+  Bonus commands, cinematics, impact feedback, sound, and failure handling.
+
+- `src/styles/functional-states.css`
+  Adds only scoped Phase 9 functional and transient states.
+
+- `scripts/phase7-render-smoke.mjs`, `scripts/phase8-render-smoke.mjs`, and
+  `scripts/verify-phase8.mjs`
+  Update later-phase integration expectations now that Attack, Bonus, and
+  Conditions are real while retaining all earlier regression assertions.
+
+- `package.json`
+  Adds the Phase 9 render and structural gates to the complete verifier.
+
+
+114. VERIFICATION EVIDENCE
+--------------------------
+
+Complete command executed:
+
+    npm run verify
+
+Result: PASS.
+
+- Node test suite: 190 passed, 0 failed, 0 skipped.
+- Phase 9 focused suite: 31 passed.
+- Phase 2 through Phase 9 render smoke suites: Pass.
+- Phase 1 through Phase 9 structural verifiers: Pass.
+- Frozen permanent Nightforge visual hashes: Pass.
+- Functional CSS scope audit: Pass.
+- Original Roll30 runtime path/import scan: Pass.
+- Original Roll30 save-identifier and user-data isolation scan: Pass.
+- Runtime malformed UTF-8/mojibake scan: Pass.
+- Repository reload and injected write-failure coverage: Pass.
+- Phase 10 mutation-boundary scan: Pass.
+- Production Vite build: Pass; 1,820 modules transformed.
+- `git diff --check`: Pass.
+- Live development server: HTTP 200 at `http://127.0.0.1:5310/`.
+
+The in-app browser control surface was unavailable in this session. Interactive
+coverage is therefore evidenced by pure domain tests, persisted-command tests,
+server-rendered state matrices, structural verification, production compilation,
+and the running-server response. No automated browser click-through or
+screenshot comparison is claimed.
+
+
+115. PHASE BOUNDARY AUDIT
+-------------------------
+
+Phase 9 implements weapon attacks and their direct combat state only. The
+following remain deliberately deferred:
+
+- Chest looting and inventory transfer.
+- Physical thrown-weapon placement, persistence, and retrieval.
+- Ammunition consumption, recovery, and depleted-ammunition rules.
+- Winner resolution, restart, and completed-encounter restoration.
+- Broad responsive, corrupt-data, accessibility, and reduced-motion hardening
+  beyond the Phase 9 cinematic requirement.
+
+The inactive chest and retrieval entries communicate that boundary without
+pretending the commands work. Attack resolution does not mutate ammunition,
+chests, encounter physical items, or inventory quantities.
+
+
+116. PHASE 9 COMPLETION STATEMENT
+---------------------------------
+
+Every Phase 9 requirement has direct implementation and verification evidence:
+
+- Equipped-only Action attack selection and resource-accurate targeting:
+  proven.
+- Exact melee, Reach, ranged, long, thrown-normal, and thrown-long tiers:
+  proven.
+- One bounded, grid-aligned range SVG with one path per tier: proven.
+- Full-wall blocking, half-wall disadvantage, hidden-wall mechanics, and melee
+  wall independence: proven.
+- Normal, advantage, disadvantage, opposing-source cancellation, natural 1,
+  natural 20, and automatic melee critical branches: proven.
+- Ability, proficiency, magic, Finesse, fixed damage, critical dice, and minimum
+  damage calculations: proven.
+- Dual-wield unlock legality and exact off-hand damage behavior: proven.
+- All fifteen manual conditions, badges, toggles, and combat effects: proven.
+- Complete staged cinematics, rejected-die treatment, hit-only impact sound,
+  input locking, failure state, and reduced-motion timing: proven.
+- Movement retention, Swap interaction, no auto-end, reload survival, and
+  failed-write preservation: proven.
+- Nightforge UI protection, clean-room isolation, no data import, encoding
+  integrity, complete regressions, and production build: proven.
+- Phase 10 mutation boundaries: proven.
+
+Phase 9 is complete and ready for Phase 10.

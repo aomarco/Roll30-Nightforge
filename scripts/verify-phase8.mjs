@@ -90,20 +90,20 @@ for (const integration of [
   "nf-state-table-movement-start",
   "nf-state-table-arriving",
   "Open Combat Commands",
-  "Bonus Commands — Phase 9",
+  "Open Bonus Commands",
   "CombatCommandsDrawer",
   "returnTo: { page: \"board\", mode }",
 ]) if (!table.includes(integration)) failures.push(`Table screen is missing Phase 8 integration ${integration}.`);
 if (!table.includes("token.id === active?.id")) failures.push("The Table does not restrict Battle dragging to the active token.");
 if (!table.includes("kind: isBattle ? \"movement\" : \"token\"")) failures.push("Battle pointer input is not isolated from Setup and Play dragging.");
 if (!/<button className=\{`pip-key nf-state-command-pip/.test(table)) failures.push("The Action resource is not a semantic command button.");
-if (!table.includes("disabled><ShieldHalf")) failures.push("The deferred Bonus command is not honestly disabled.");
+if (!table.includes("aria-label=\"Open Bonus Commands\"")) failures.push("The Bonus resource is not a semantic command button.");
 
 const drawer = await read("src/screens/CombatCommandsDrawer.jsx");
 for (const control of [
   "Turn resources",
   "Action commands",
-  "Attack arrives in Phase 9",
+  "Choose attack weapon",
   "Dash",
   "Swap weapons",
   "Swap draft",
@@ -114,7 +114,7 @@ for (const control of [
   "validateSwapLoadout",
 ]) if (!drawer.includes(control)) failures.push(`Combat Commands drawer is missing ${control}.`);
 if (!/<button className="btn btn-key" onClick=\{end\} disabled=\{busy\}/.test(drawer)) failures.push("End Turn is not independently reachable after Action is spent.");
-if (!/<button className="btn btn-line btn-wide" disabled/.test(drawer)) failures.push("The Phase 9 Attack control is not disabled.");
+if (!drawer.includes("onClick={toggleAttack}")) failures.push("The later Phase 9 Attack integration is not connected through the existing command drawer.");
 
 const functionalCss = (await read("src/styles/functional-states.css")).replace(/\/\*[\s\S]*?\*\//g, "");
 for (const requiredClass of [

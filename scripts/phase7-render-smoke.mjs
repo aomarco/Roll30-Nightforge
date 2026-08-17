@@ -109,7 +109,7 @@ try {
   assert.match(battleMarkup, /track-order/);
   assert.match(battleMarkup, new RegExp(`>${active.encounter.initiatives[manual.id]}<`));
   assert.match(battleMarkup, /Tokens cannot be removed during an active Battle/);
-  assert.match(battleMarkup, /Condition controls arrive in Phase 9/);
+  assert.match(battleMarkup, /Conditions.*None/s);
   assert.doesNotMatch(battleMarkup, /Save token details|Open chest inventory/);
 
   const lockedChestMarkup = renderToStaticMarkup(React.createElement(TableScreen, {

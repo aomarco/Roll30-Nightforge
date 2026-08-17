@@ -1,4 +1,5 @@
 import { ITEM_BY_ID } from "./catalog.js";
+import { normalizeConditions } from "./conditions.js";
 import { computeArmorClass, deriveHero } from "./heroes.js";
 import {
   changeInventory,
@@ -143,7 +144,7 @@ export function normalizeTableToken(input = {}, { id, ordinal = 0 } = {}) {
     shieldId: typeof input.shieldId === "string" ? input.shieldId : null,
     enchantments: input.enchantments && typeof input.enchantments === "object" ? input.enchantments : {},
     wornItemIds: Array.isArray(input.wornItemIds) ? [...new Set(input.wornItemIds.filter((value) => typeof value === "string"))] : [],
-    conditions: Array.isArray(input.conditions) ? [...new Set(input.conditions.filter((value) => typeof value === "string" && value.trim()))] : [],
+    conditions: normalizeConditions(input.conditions),
   };
   return { ...token, ...normalizeEquipment(token, token.inventory) };
 }

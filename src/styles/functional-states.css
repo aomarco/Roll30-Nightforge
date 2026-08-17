@@ -799,9 +799,413 @@
   border-radius: var(--r-md);
 }
 
+.nf-state-combat-attack-draft {
+  padding: 14px;
+  background: rgba(0, 0, 0, .18);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+
+.nf-state-combat-weapon-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nf-state-combat-weapon-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  text-align: left;
+}
+
+.nf-state-combat-weapon-copy strong,
+.nf-state-combat-weapon-copy small {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nf-state-combat-weapon-copy small {
+  color: var(--ink-4);
+  font-size: 9px;
+  font-weight: 500;
+}
+
+.nf-state-table-attack-range {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.nf-state-table-attack-grid-line {
+  stroke: rgba(236, 242, 237, .16);
+  stroke-width: 1;
+}
+
+.nf-state-table-attack-band {
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.nf-state-table-attack-green {
+  stroke: var(--jade);
+}
+
+.nf-state-table-attack-yellow {
+  stroke: var(--brass);
+}
+
+.nf-state-table-attack-red {
+  stroke: var(--foe);
+  stroke-dasharray: 6 4;
+}
+
+.nf-state-table-attack-mode {
+  cursor: crosshair;
+}
+
+.nf-state-table-map .piece.nf-state-table-targetable {
+  z-index: 8;
+  cursor: crosshair;
+}
+
+.nf-state-table-map .piece.nf-state-table-targetable .piece-disc {
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.42),
+    inset 0 -3px 10px rgba(0,0,0,.4),
+    0 0 0 3px var(--jade),
+    0 0 22px rgba(71,216,162,.55),
+    0 12px 30px -6px rgba(0,0,0,.8);
+}
+
+.nf-state-table-attack-status {
+  max-width: min(760px, calc(100vw - 80px));
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.nf-state-table-range-key {
+  background: rgba(3, 9, 10, .78);
+}
+
+.nf-state-table-range-key-green {
+  color: var(--jade);
+  border-color: var(--jade-edge);
+}
+
+.nf-state-table-range-key-yellow {
+  color: var(--brass-hi);
+  border-color: var(--brass-edge);
+}
+
+.nf-state-table-range-key-red {
+  color: var(--foe);
+  border-color: var(--foe-edge);
+}
+
+.nf-state-table-condition-badges {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 13px);
+  display: flex;
+  max-width: 132px;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 3px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.nf-state-table-condition-badges i {
+  display: grid;
+  place-items: center;
+  min-width: 22px;
+  height: 17px;
+  padding: 0 4px;
+  color: #fff;
+  font-family: var(--mono);
+  font-size: 7px;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: .04em;
+  background: var(--nf-condition);
+  border: 1px solid rgba(255,255,255,.3);
+  border-radius: var(--r-full);
+  box-shadow: 0 3px 9px rgba(0,0,0,.52);
+}
+
+.nf-state-condition-chip.on {
+  color: #fff;
+  background: color-mix(in srgb, var(--nf-condition) 72%, var(--deep));
+  border-color: var(--nf-condition);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--nf-condition) 32%, transparent);
+}
+
+.nf-state-table-map .piece.nf-state-table-hit .piece-disc {
+  transform: scale(1.13) rotate(-4deg);
+  filter: brightness(1.28) saturate(1.2);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.42),
+    inset 0 -3px 10px rgba(0,0,0,.4),
+    0 0 0 3px var(--foe),
+    0 0 28px rgba(242,97,122,.7),
+    0 12px 30px -6px rgba(0,0,0,.8);
+}
+
+.nf-state-table-map .piece.nf-state-table-critical .piece-disc {
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.42),
+    inset 0 -3px 10px rgba(0,0,0,.4),
+    0 0 0 3px var(--brass-hi),
+    0 0 34px var(--brass-glow),
+    0 12px 30px -6px rgba(0,0,0,.8);
+}
+
+.nf-state-table-damage-float {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 42px);
+  transform: translateX(-50%);
+  color: var(--foe);
+  font-family: var(--serif);
+  font-size: 21px;
+  font-weight: 700;
+  text-shadow: 0 2px 8px rgba(0,0,0,.9), 0 0 14px rgba(242,97,122,.65);
+  white-space: nowrap;
+  pointer-events: none;
+  animation: rise var(--bounce) both;
+}
+
+.nf-state-cinematic-veil {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  background: radial-gradient(circle at center, rgba(6, 15, 17, .36), rgba(2, 5, 6, .88));
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+}
+
+.nf-state-cinematic {
+  position: fixed;
+  z-index: 101;
+  left: 50%;
+  top: 50%;
+  display: flex;
+  width: min(620px, calc(100vw - 36px));
+  max-height: calc(100vh - 36px);
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: 30px;
+  transform: translate(-50%, -50%);
+  overflow-y: auto;
+  color: var(--ink);
+  text-align: center;
+  background: linear-gradient(180deg, rgba(18,31,33,.98), rgba(5,12,14,.98));
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-xl);
+  box-shadow: var(--lift-4), inset 0 1px 0 rgba(255,255,255,.05);
+  animation: fade var(--ease) both;
+}
+
+.nf-state-cinematic-heading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+}
+
+.nf-state-cinematic-heading h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--serif);
+  font-size: clamp(23px, 4vw, 34px);
+  font-weight: 600;
+}
+
+.nf-state-cinematic-heading p {
+  color: var(--ink-3);
+  font-size: 11px;
+  text-transform: capitalize;
+}
+
+.nf-state-cinematic-dice {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+}
+
+.nf-state-cinematic-die {
+  display: grid;
+  place-items: center;
+  width: 82px;
+  height: 82px;
+  color: var(--brass-hi);
+  font-family: var(--mono);
+  font-size: 30px;
+  font-weight: 700;
+  background: radial-gradient(circle at 35% 25%, rgba(224,176,85,.18), rgba(0,0,0,.36));
+  border: 1px solid var(--brass-edge);
+  border-radius: 24px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 14px 30px -16px rgba(0,0,0,.9);
+  transition: transform var(--bounce), opacity var(--ease), filter var(--ease), border-color var(--ease);
+}
+
+.nf-state-cinematic-die small {
+  margin-top: -22px;
+  color: var(--ink-4);
+  font-size: 8px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.nf-state-cinematic-spin .nf-state-cinematic-die {
+  transform: rotate(12deg) scale(.94);
+  filter: blur(1px);
+  animation: pulse-ring .42s ease-in-out infinite;
+}
+
+.nf-state-cinematic-die.rejected {
+  opacity: .3;
+  filter: grayscale(.8);
+  transform: scale(.9);
+}
+
+.nf-state-cinematic-die.selected {
+  border-color: var(--jade);
+  box-shadow: 0 0 0 2px var(--jade-edge), 0 0 25px rgba(71,216,162,.24);
+}
+
+.nf-state-cinematic-readout {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.nf-state-cinematic-readout p {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 39px;
+  padding: 9px 11px;
+  color: var(--ink-3);
+  font-size: 11px;
+  background: rgba(0,0,0,.2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+
+.nf-state-cinematic-readout p:only-child {
+  grid-column: 1 / -1;
+}
+
+.nf-state-cinematic-verdict {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 5px;
+  padding: 14px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+
+.nf-state-cinematic-verdict strong {
+  font-family: var(--serif);
+  font-size: 25px;
+}
+
+.nf-state-cinematic-verdict span {
+  color: var(--ink-3);
+  font-size: 11px;
+}
+
+.nf-state-cinematic-verdict-hit {
+  color: var(--jade);
+  background: var(--jade-tint);
+  border-color: var(--jade-edge);
+}
+
+.nf-state-cinematic-verdict-critical {
+  color: var(--brass-hi);
+  background: var(--brass-tint);
+  border-color: var(--brass-edge);
+}
+
+.nf-state-cinematic-verdict-miss {
+  color: var(--ink-3);
+  background: rgba(255,255,255,.025);
+}
+
+.nf-state-cinematic-damage {
+  display: grid;
+  place-items: center;
+  min-width: 150px;
+  padding: 13px 24px;
+  background: var(--foe-tint);
+  border: 1px solid var(--foe-edge);
+  border-radius: var(--r-md);
+}
+
+.nf-state-cinematic-damage strong {
+  color: var(--foe);
+  font-size: 38px;
+  line-height: 1;
+}
+
+.nf-state-cinematic-damage small {
+  margin-top: 7px;
+  color: var(--ink-3);
+  font-family: var(--mono);
+  font-size: 9px;
+}
+
+.nf-state-cinematic-impact-copy {
+  color: var(--ink-2);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.nf-state-cinematic-sources {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+
+.nf-state-combat-locked .track,
+.nf-state-combat-locked .dock,
+.nf-state-combat-locked .hud {
+  pointer-events: none;
+}
+
 @media (max-width: 720px) {
   .nf-state-table-tools-grid { grid-template-columns: 1fr; }
   .nf-state-table-tools-wide { grid-column: auto; }
   .nf-state-table-snapshot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .nf-state-combat-resource-grid { grid-template-columns: 1fr; }
+  .nf-state-cinematic { padding: 22px 16px; }
+  .nf-state-cinematic-readout { grid-template-columns: 1fr; }
+  .nf-state-cinematic-readout p { grid-column: auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nf-state-cinematic,
+  .nf-state-cinematic-die,
+  .nf-state-table-damage-float,
+  .nf-state-table-map .piece.nf-state-table-hit .piece-disc {
+    animation: none;
+    transition-duration: .01ms;
+  }
 }

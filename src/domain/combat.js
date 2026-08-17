@@ -1,4 +1,5 @@
 import { ITEM_BY_ID } from "./catalog.js";
+import { CONDITIONS, isImmobilized, isIncapacitated } from "./conditions.js";
 import { setMainHand, setOffHand } from "./items.js";
 import {
   createTurnResources,
@@ -15,22 +16,9 @@ import {
 export const MOVEMENT_FEET_PER_CELL = 5;
 export const PATH_SEARCH_LIMIT = 4000;
 
-export const IMMOBILIZING_CONDITIONS = Object.freeze([
-  "grappled",
-  "paralyzed",
-  "petrified",
-  "restrained",
-  "stunned",
-  "unconscious",
-]);
+export const IMMOBILIZING_CONDITIONS = Object.freeze(CONDITIONS.filter((condition) => condition.immobile).map((condition) => condition.id));
 
-export const INCAPACITATING_CONDITIONS = Object.freeze([
-  "incapacitated",
-  "paralyzed",
-  "petrified",
-  "stunned",
-  "unconscious",
-]);
+export const INCAPACITATING_CONDITIONS = Object.freeze(CONDITIONS.filter((condition) => condition.incapacitated).map((condition) => condition.id));
 
 const success = (value, metadata = {}) => ({ ok: true, value, ...metadata });
 const failure = (code, message, recovery, retryable = false, metadata = {}) => ({
@@ -47,19 +35,9 @@ const finite = (value, fallback = 0) => {
   return Number.isFinite(number) ? number : fallback;
 };
 
-const conditionSet = (token) => new Set(
-  (token?.conditions || []).map((condition) => String(condition).trim().toLowerCase()),
-);
+export const tokenIsImmobilized = (token) => isImmobilized(token?.conditions);
 
-export const tokenIsImmobilized = (token) => {
-  const active = conditionSet(token);
-  return IMMOBILIZING_CONDITIONS.some((condition) => active.has(condition));
-};
-
-export const tokenIsIncapacitated = (token) => {
-  const active = conditionSet(token);
-  return INCAPACITATING_CONDITIONS.some((condition) => active.has(condition));
-};
+export const tokenIsIncapacitated = (token) => isIncapacitated(token?.conditions);
 
 export const movementMaximum = (resources, token) =>
   normalizeTurnResources(resources, token).movementBase;

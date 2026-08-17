@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { Footprints, Gauge, RefreshCw, Swords, X } from "lucide-react";
 
-import { ITEM_BY_ID } from "../domain/catalog.js";
+import { ITEM_BY_ID, itemSubtitle } from "../domain/catalog.js";
 import { movementMaximum, movementRemaining, validateSwapLoadout } from "../domain/combat.js";
 
 const errorText = (error) => error ? `${error.message} ${error.recovery || "Retry the command."}` : "";
@@ -20,13 +20,16 @@ export default function CombatCommandsDrawer({
   busy = false,
   error = null,
   close,
+  attack,
   dash,
   swap,
   end,
   initialSwapOpen = false,
   initialSwapDraft = null,
+  initialAttackOpen = false,
 }) {
   const [swapOpen, setSwapOpen] = useState(initialSwapOpen);
+  const [attackOpen, setAttackOpen] = useState(initialAttackOpen);
   const [draft, setDraft] = useState(() => initialSwapDraft || { ...token.loadout });
   const weapons = useMemo(() => token.inventory
     .map((entry) => ({ item: ITEM_BY_ID[entry.itemId], quantity: entry.quantity }))
@@ -44,6 +47,11 @@ export default function CombatCommandsDrawer({
   const toggleSwap = () => {
     setDraft({ ...token.loadout });
     setSwapOpen((current) => !current);
+    setAttackOpen(false);
+  };
+  const toggleAttack = () => {
+    setAttackOpen((current) => !current);
+    setSwapOpen(false);
   };
   const updateDraft = (field) => (event) => setDraft((current) => ({ ...current, [field]: event.target.value || null }));
 
@@ -66,10 +74,25 @@ export default function CombatCommandsDrawer({
 
           <section className="unit">
             <div className="unit-top"><span className="unit-label">Action commands</span><span className="tag">End Turn stays available</span></div>
-            <button className="btn btn-line btn-wide" disabled title={attackState.ok ? "Attack arrives in Phase 9" : attackState.message}><Swords size={15} /> Attack <span className="nf-state-command-reason">{attackState.ok ? "Phase 9" : attackState.message}</span></button>
+            <button className={`btn btn-wide ${attackOpen ? "btn-key" : "btn-line"}`} onClick={toggleAttack} disabled={busy || !attackState.ok} title={attackState.ok ? "Choose an equipped weapon and enter targeting mode" : attackState.message}><Swords size={15} /> Attack <span className="nf-state-command-reason">{attackState.ok ? `${attackState.value.options.length} equipped` : attackState.message}</span></button>
             <button className="btn btn-line btn-wide" onClick={dash} disabled={busy || !dashState.ok} title={dashState.ok ? "Spend Action and add one complete Speed" : dashState.message}><Gauge size={15} /> Dash <span className="nf-state-command-reason">{dashState.ok ? `Add ${token.baseSpeed} ft` : dashState.message}</span></button>
             <button className={`btn btn-wide ${swapOpen ? "btn-key" : "btn-line"}`} onClick={toggleSwap} disabled={busy || !swapState.ok} title={swapState.ok ? "Choose a legal per-Battle weapon loadout" : swapState.message}><RefreshCw size={15} /> Swap weapons <span className="nf-state-command-reason">{swapState.ok ? "Once this turn" : swapState.message}</span></button>
           </section>
+
+          {attackOpen && attackState.ok && (
+            <section className="unit nf-state-combat-attack-draft">
+              <div className="unit-top"><span className="unit-label">Choose attack weapon</span><span className="tag tag-jade">Equipped only</span></div>
+              <div className="nf-state-combat-weapon-list">
+                {attackState.value.options.map((option) => (
+                  <button className="btn btn-line btn-wide" key={option.key} onClick={() => attack({ kind: "action", weaponId: option.weaponId, hand: option.hand })} disabled={busy}>
+                    <Swords size={15} />
+                    <span className="nf-state-combat-weapon-copy"><strong>{option.weapon.name}</strong><small>{option.hand === "mainHand" ? "Main hand" : "Off hand"} · {itemSubtitle(option.weapon)}</small></span>
+                  </button>
+                ))}
+              </div>
+              <p className="note">Choose a weapon, then select a living token inside the highlighted range. Blocked and out-of-range attempts do not spend Action.</p>
+            </section>
+          )}
 
           {swapOpen && swapState.ok && (
             <section className="unit nf-state-combat-swap-draft">
