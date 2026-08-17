@@ -286,7 +286,7 @@ export default function LibraryScreen({
       {forging && (
         <>
           <div className="veil" onClick={() => setForging(false)} />
-          <aside ref={forgeDialogRef} className="drawer" role="dialog" aria-modal="true" aria-label="Forge a scene" tabIndex={-1}>
+          <aside ref={forgeDialogRef} className="drawer nf-state-dialog" role="dialog" aria-modal="true" aria-label="Forge a scene" tabIndex={-1}>
             <form className="nf-state-drawer-form" onSubmit={forge}>
               <div className="drawer-top">
                 <div><span className="kicker kicker-jade">New scene</span><h2>The Forge</h2></div>
@@ -329,7 +329,7 @@ export default function LibraryScreen({
       {deleting && (
         <>
           <div className="veil" onClick={() => setDeleting(null)} />
-          <aside ref={deleteDialogRef} className="drawer" role="dialog" aria-modal="true" aria-labelledby="delete-scene-title" aria-describedby="delete-scene-description" tabIndex={-1}>
+          <aside ref={deleteDialogRef} className="drawer nf-state-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-scene-title" aria-describedby="delete-scene-description" tabIndex={-1}>
             <div className="drawer-top">
               <div><span className="kicker">Remove scene</span><h2 id="delete-scene-title">Close this chapter?</h2></div>
               <button className="glyph" onClick={() => setDeleting(null)} aria-label="Close"><X size={17} /></button>

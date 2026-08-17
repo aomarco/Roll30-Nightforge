@@ -114,6 +114,22 @@ export const normalizePosition = (position = {}) => ({
 const colorPattern = /^#[0-9a-f]{6}$/i;
 const TOKEN_COLORS = Object.freeze(["#d9803f", "#5fa8f5", "#7fb356", "#a77be8", "#e0b055", "#d75f79"]);
 
+const uniqueNormalizedRecords = (records, normalize) => {
+  const seen = new Set();
+  const normalized = [];
+  for (const [ordinal, record] of (Array.isArray(records) ? records : []).entries()) {
+    try {
+      const value = normalize(record, ordinal);
+      if (!value || seen.has(value.id)) continue;
+      seen.add(value.id);
+      normalized.push(value);
+    } catch {
+      // Invalid persisted records are dropped while the remaining collection is recovered.
+    }
+  }
+  return normalized;
+};
+
 export function normalizeTableToken(input = {}, { id, ordinal = 0 } = {}) {
   const tokenId = typeof input.id === "string" && input.id.trim()
     ? input.id.trim()
@@ -150,12 +166,8 @@ export function normalizeTableToken(input = {}, { id, ordinal = 0 } = {}) {
 }
 
 export const normalizeTableTokens = (tokens) =>
-  Array.isArray(tokens)
-    ? tokens.flatMap((token, ordinal) => {
-        try { return [normalizeTableToken(token, { id: token?.id, ordinal })]; }
-        catch { return []; }
-      })
-    : [];
+  uniqueNormalizedRecords(tokens, (token, ordinal) =>
+    normalizeTableToken(token, { id: token?.id, ordinal }));
 
 export function createPlayToken({ id, ordinal = 0, name } = {}) {
   const angle = ordinal * 0.9;
@@ -254,12 +266,8 @@ export function normalizeChest(input = {}, { id } = {}) {
 }
 
 export const normalizeChests = (chests) =>
-  Array.isArray(chests)
-    ? chests.flatMap((chest) => {
-        try { return [normalizeChest(chest, { id: chest?.id })]; }
-        catch { return []; }
-      })
-    : [];
+  uniqueNormalizedRecords(chests, (chest) =>
+    normalizeChest(chest, { id: chest?.id }));
 
 export const createChest = ({ id, position, inventory = [] } = {}) =>
   normalizeChest({ id, position, inventory }, { id });
@@ -456,6 +464,23 @@ export function normalizeAmmoSpentByToken(input, tokens = []) {
   }));
 }
 
+export const MAX_ENCOUNTER_LOG_ENTRIES = 500;
+export const MAX_ENCOUNTER_LOG_ENTRY_LENGTH = 500;
+
+export function normalizeEncounterLog(log) {
+  if (!Array.isArray(log)) return [];
+  const normalized = [];
+  for (let index = log.length - 1; index >= 0 && normalized.length < MAX_ENCOUNTER_LOG_ENTRIES; index -= 1) {
+    if (typeof log[index] === "string") {
+      normalized.push(log[index].slice(0, MAX_ENCOUNTER_LOG_ENTRY_LENGTH));
+    }
+  }
+  return normalized.reverse();
+}
+
+export const appendEncounterLog = (log, entry) =>
+  normalizeEncounterLog([...normalizeEncounterLog(log), String(entry)]);
+
 export function normalizeEncounter(encounter, tokens = []) {
   if (!encounter || !["active", "complete"].includes(encounter.status)) return null;
   const tokenIds = new Set(normalizeTableTokens(tokens).map((token) => token.id));
@@ -483,7 +508,7 @@ export function normalizeEncounter(encounter, tokens = []) {
     ammoSpentByToken: normalizeAmmoSpentByToken(encounter.ammoSpentByToken, tokens),
     ammunitionRecovered: Boolean(encounter.ammunitionRecovered),
     winnerTokenId: tokenIds.has(encounter.winnerTokenId) ? encounter.winnerTokenId : null,
-    log: Array.isArray(encounter.log) ? encounter.log.filter((entry) => typeof entry === "string") : [],
+    log: normalizeEncounterLog(encounter.log),
   };
 }
 
@@ -576,7 +601,7 @@ export function normalizeWall(wall) {
 }
 
 export const normalizeWalls = (walls) =>
-  Array.isArray(walls) ? walls.map(normalizeWall).filter(Boolean) : [];
+  uniqueNormalizedRecords(walls, (wall) => normalizeWall(wall));
 
 export function createWall({ id, type, points }) {
   const wall = normalizeWall({ id, type, points });

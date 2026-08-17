@@ -44,9 +44,23 @@ for (const contract of [
   "npm run verify",
   "aomarco/Roll30",
   "npm run build:preview",
-  "actions/upload-pages-artifact@v3",
-  "actions/deploy-pages@v4",
+  "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1",
+  "actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0",
+  "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1",
+  "actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0",
+  "actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0",
 ]) if (!workflow.includes(contract)) failures.push(`Pages workflow is missing ${contract}.`);
+const actionReferences = [...workflow.matchAll(/^\s*-?\s*uses:\s*[^@\s]+@([^\s#]+)/gm)].map((match) => match[1]);
+if (!actionReferences.length || actionReferences.some((reference) => !/^[0-9a-f]{40}$/.test(reference))) {
+  failures.push("Every Pages workflow action must be pinned to an immutable full commit SHA.");
+}
+if ((workflow.match(/pages: write/g) || []).length !== 1 || (workflow.match(/id-token: write/g) || []).length !== 1) {
+  failures.push("Pages and identity-token write permissions must exist only on the deploy job.");
+}
+const deployJob = workflow.slice(workflow.indexOf("\n  deploy:"));
+if (!deployJob.includes("permissions:\n      pages: write\n      id-token: write")) {
+  failures.push("The deploy job does not own its narrowly scoped Pages permissions.");
+}
 
 const constants = await read("src/storage/constants.js");
 for (const key of [

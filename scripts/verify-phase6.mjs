@@ -34,7 +34,7 @@ if (table.includes("const TOKENS =")) failures.push("The original all-mode Table
 if (table.includes("BATTLE_PROTOTYPE_TOKENS")) failures.push("A deferred Battle fixture remains after real Scene-token integration.");
 
 const app = await read("src/App.jsx");
-for (const integration of ["onUpdate={runtime.commands.updateScene}", "artworkRepository={runtime.artworkRepository}", "persistence={state.persistence}"]) {
+for (const integration of ["onUpdate={updateScene}", "runtime.commands.updateScene", "artworkRepository={runtime.artworkRepository}", "persistence={state.persistence}"]) {
   if (!app.includes(integration)) failures.push(`App is missing Table integration ${integration}.`);
 }
 

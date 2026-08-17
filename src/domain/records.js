@@ -27,6 +27,11 @@ const finiteNumber = (value, fallback) => {
 const nullableId = (value) =>
   typeof value === "string" && value.trim() ? value.trim() : null;
 
+const timestamp = (value, fallback, { nullable = false } = {}) => {
+  if (typeof value === "string" && Number.isFinite(Date.parse(value))) return value;
+  return nullable ? null : fallback;
+};
+
 const cleanIdList = (value) =>
   Array.isArray(value)
     ? [...new Set(value.filter((item) => typeof item === "string" && item.trim()))]
@@ -75,9 +80,9 @@ export function createSceneRecord(
     chests: normalizeChests(input.chests),
     tokens,
     encounter: kind === "play" ? null : normalizeEncounter(input.encounter, tokens),
-    createdAt: input.createdAt || now,
-    updatedAt: input.updatedAt || now,
-    lastOpenedAt: input.lastOpenedAt || null,
+    createdAt: timestamp(input.createdAt, now),
+    updatedAt: timestamp(input.updatedAt, now),
+    lastOpenedAt: timestamp(input.lastOpenedAt, now, { nullable: true }),
     schemaVersion: 1,
   };
 }
@@ -133,8 +138,8 @@ export function createHeroRecord(
         ...inventoryResult.unknownItemIds,
       ])],
     },
-    createdAt: input.createdAt || now,
-    updatedAt: input.updatedAt || now,
+    createdAt: timestamp(input.createdAt, now),
+    updatedAt: timestamp(input.updatedAt, now),
     schemaVersion: 1,
   };
   return { ...hero, ...normalizeEquipment(hero, hero.inventory, ITEM_BY_ID) };

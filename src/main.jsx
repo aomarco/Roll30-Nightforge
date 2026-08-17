@@ -9,5 +9,10 @@ import "./styles/table.css";
 import "./styles/functional-states.css";
 
 import App from "./App.jsx";
+import ApplicationErrorBoundary from "./ui/ApplicationErrorBoundary.jsx";
 
-createRoot(document.getElementById("root")).render(<App />);
+createRoot(document.getElementById("root")).render(
+  <ApplicationErrorBoundary>
+    <App />
+  </ApplicationErrorBoundary>,
+);

@@ -77,6 +77,47 @@ function sceneFixture({ kind = "battle", active = false, tokens = 3, empty = fal
   }, { now: NOW });
 }
 
+function durableAttackScene() {
+  const attacker = createManualToken({
+    id: "durable-attacker",
+    name: "Durable Attacker",
+    position: { xPercent: 48, yPercent: 50 },
+    inventory: [{ itemId: "dagger", quantity: 1 }],
+    loadout: { mainHand: "dagger", offHand: null },
+  });
+  const target = createManualToken({
+    id: "durable-target",
+    name: "Durable Target",
+    position: { xPercent: 50, yPercent: 50 },
+    hp: 20,
+    maxHp: 20,
+  });
+  return createSceneRecord({
+    id: "scene-durable-attack",
+    name: "Durable Attack Test",
+    kind: "battle",
+    blankCanvas: true,
+    tokens: [attacker, target],
+    encounter: {
+      version: 1,
+      status: "active",
+      initiativeOrder: [attacker.id, target.id],
+      initiatives: { [attacker.id]: 20, [target.id]: 10 },
+      activeIndex: 0,
+      round: 1,
+      resources: { [attacker.id]: createTurnResources(attacker) },
+      battleItems: [],
+      ammoSpentByToken: {},
+      ammunitionRecovered: false,
+      winnerTokenId: null,
+      log: [],
+    },
+    createdAt: NOW,
+    updatedAt: NOW,
+    lastOpenedAt: NOW,
+  }, { now: NOW });
+}
+
 async function seed(page, { scenes = [], heroes = [] } = {}) {
   const envelope = sealEnvelope({
     ...createEmptyEnvelope(NOW),
@@ -154,6 +195,22 @@ async function expectNoHardClip(page) {
   });
   expect(audit.horizontalOverflow).toBeLessThanOrEqual(1);
   expect(audit.clipped).toEqual([]);
+}
+
+async function expectEveryEnabledFormControlNamed(page) {
+  const unnamed = await page.locator("input:not([disabled]), select:not([disabled]), textarea:not([disabled])").evaluateAll((controls) =>
+    controls.flatMap((control) => {
+      const ariaLabel = control.getAttribute("aria-label")?.trim();
+      const labelledBy = (control.getAttribute("aria-labelledby") || "")
+        .split(/\s+/)
+        .filter(Boolean)
+        .map((id) => document.getElementById(id)?.textContent?.trim() || "")
+        .join(" ")
+        .trim();
+      const labels = [...(control.labels || [])].map((label) => label.textContent?.trim() || "").join(" ").trim();
+      return ariaLabel || labelledBy || labels ? [] : [control.outerHTML.slice(0, 180)];
+    }));
+  expect(unnamed).toEqual([]);
 }
 
 test("managed-screen visual baselines remain deterministic", async ({ page }) => {
@@ -247,6 +304,174 @@ test("primary Library actions are keyboard reachable with a visible focus indica
   for (const expected of ["Roll30", "Library", "Heroes", "Scene", "Jump to the table", "Party roster", "Forge a scene"]) {
     expect(visited.some((name) => name.includes(expected)), `${expected} must be in the keyboard sequence`).toBe(true);
   }
+});
+
+test("every enabled form control has a programmatic accessible name", async ({ page }) => {
+  const scene = sceneFixture();
+  await open(page, { scenes: [scene], heroes: [heroFixture()] });
+  await expectEveryEnabledFormControlNamed(page);
+
+  await page.getByRole("button", { name: "Heroes", exact: true }).click();
+  await expectEveryEnabledFormControlNamed(page);
+  await page.getByRole("button", { name: "Gear", exact: true }).click();
+  await expectEveryEnabledFormControlNamed(page);
+  await page.getByRole("button", { name: "Add item", exact: true }).click();
+  await expectEveryEnabledFormControlNamed(page);
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("navigation").getByRole("button", { name: "Library", exact: true }).click();
+  await page.getByRole("button", { name: `Settings for ${scene.name}` }).click();
+  await expectEveryEnabledFormControlNamed(page);
+  await page.locator(".crumb").click();
+  await page.getByRole("main").getByRole("button", { name: "Enter the table", exact: true }).click();
+  await expectEveryEnabledFormControlNamed(page);
+  await page.getByRole("button", { name: /Chest with \d+ items, use arrow keys to move/ }).click();
+  await page.getByRole("button", { name: "Open chest inventory", exact: true }).click();
+  await expectEveryEnabledFormControlNamed(page);
+});
+
+test("owned equipment records open from the keyboard without nested controls", async ({ page }) => {
+  await open(page, { heroes: [heroFixture()] });
+  await page.getByRole("button", { name: "Heroes", exact: true }).click();
+  await page.getByRole("button", { name: "Gear", exact: true }).click();
+  const openItem = page.getByRole("button", { name: /^Open .+ equipment record$/ }).first();
+  await openItem.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("dialog", { name: /.+/ })).toContainText("Equipment record");
+});
+
+test("focused Play, Setup, and active-Battle pieces move with arrow keys", async ({ page }) => {
+  const storedPosition = (sceneId, entity, id) => page.evaluate(({ stateKey, sceneId: targetScene, entity: collection, id: targetId }) => {
+    const envelope = JSON.parse(localStorage.getItem(stateKey));
+    return envelope.scenes.find((scene) => scene.id === targetScene)[collection].find((item) => item.id === targetId).position;
+  }, { stateKey: STORAGE_KEYS.state, sceneId, entity, id });
+
+  const play = sceneFixture({ kind: "play", name: "Keyboard Play" });
+  await open(page, { scenes: [play] });
+  await page.getByRole("main").getByRole("button", { name: "Enter the table", exact: true }).click();
+  const playToken = page.getByRole("button", { name: new RegExp(`${LONG_NAME}, use arrow keys to move`) });
+  const playBefore = await storedPosition(play.id, "tokens", "token-0");
+  await playToken.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(() => storedPosition(play.id, "tokens", "token-0")).not.toEqual(playBefore);
+
+  const setup = sceneFixture({ name: "Keyboard Setup" });
+  await open(page, { scenes: [setup] });
+  await page.getByRole("main").getByRole("button", { name: "Enter the table", exact: true }).click();
+  const setupChest = page.getByRole("button", { name: /Chest with \d+ items, use arrow keys to move/ });
+  const chestBefore = await storedPosition(setup.id, "chests", "chest-phase11");
+  await setupChest.focus();
+  await page.keyboard.press("ArrowUp");
+  await expect.poll(() => storedPosition(setup.id, "chests", "chest-phase11")).not.toEqual(chestBefore);
+
+  const battle = sceneFixture({ active: true, name: "Keyboard Battle" });
+  await open(page, { scenes: [battle] });
+  await page.getByRole("main").getByRole("button", { name: "Enter the table", exact: true }).click();
+  const activeToken = page.getByRole("button", { name: new RegExp(`${LONG_NAME}, use arrow keys to move`) });
+  await activeToken.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(() => page.evaluate((stateKey) => {
+    const envelope = JSON.parse(localStorage.getItem(stateKey));
+    return envelope.scenes[0].encounter.resources["token-0"].movementSpent;
+  }, STORAGE_KEYS.state)).toBe(5);
+});
+
+test("a rolled attack is durably saved before its cinematic can be interrupted", async ({ page }) => {
+  const scene = durableAttackScene();
+  await open(page, { scenes: [scene] });
+  await page.getByRole("main").getByRole("button", { name: "Enter the table", exact: true }).click();
+  const beforeRevision = await page.evaluate((stateKey) => JSON.parse(localStorage.getItem(stateKey)).revision, STORAGE_KEYS.state);
+  await page.getByRole("button", { name: "Open Combat Commands", exact: true }).click();
+  const commands = page.getByRole("dialog");
+  await commands.getByRole("button", { name: /^Attack\b/ }).click();
+  await commands.getByRole("button", { name: /Dagger/ }).click();
+  await page.getByRole("button", { name: "Attack Durable Target", exact: true }).click();
+  await expect(page.getByRole("status", { name: "Attack result" })).toBeVisible();
+
+  const saved = await page.evaluate((stateKey) => {
+    const envelope = JSON.parse(localStorage.getItem(stateKey));
+    const persistedScene = envelope.scenes.find((entry) => entry.id === "scene-durable-attack");
+    return {
+      revision: envelope.revision,
+      actionSpent: persistedScene.encounter.resources["durable-attacker"].actionSpent,
+      logLength: persistedScene.encounter.log.length,
+    };
+  }, STORAGE_KEYS.state);
+  expect(saved.revision).toBe(beforeRevision + 1);
+  expect(saved.actionSpent).toBe(true);
+  expect(saved.logLength).toBe(1);
+
+  const context = page.context();
+  await page.close();
+  const restoredPage = await context.newPage();
+  await restoredPage.goto("/");
+  await restoredPage.evaluate(() => document.fonts.ready);
+  await expect(restoredPage.getByText("Gathering your scenes…")).toHaveCount(0);
+  await restoredPage.getByRole("main").getByRole("button", { name: "Enter the table", exact: true }).click();
+  await expect(restoredPage.getByRole("button", { name: "Open Combat Commands", exact: true })).toContainText(/attack/i);
+  await restoredPage.close();
+});
+
+test("pagehide flushes the final queued Hero draft", async ({ page }) => {
+  await open(page, { heroes: [heroFixture()] });
+  await page.getByRole("button", { name: "Heroes", exact: true }).click();
+  await page.getByLabel("Character name").fill("Pagehide-Safe Hero Name");
+  await page.evaluate(() => dispatchEvent(new PageTransitionEvent("pagehide")));
+  await expect.poll(() => page.evaluate((stateKey) => {
+    const envelope = JSON.parse(localStorage.getItem(stateKey));
+    return envelope.heroes[0].name;
+  }, STORAGE_KEYS.state)).toBe("Pagehide-Safe Hero Name");
+});
+
+test("another tab synchronizes newer Nightforge state into the current view", async ({ page }) => {
+  const scene = sceneFixture({ name: "Before External Save" });
+  await open(page, { scenes: [scene], heroes: [heroFixture()] });
+  const secondPage = await page.context().newPage();
+  await secondPage.goto("/");
+  await secondPage.evaluate(() => document.fonts.ready);
+  await expect(secondPage.locator(".nf-state-screen-root")).toBeVisible();
+  await secondPage.getByRole("button", { name: `Settings for ${scene.name}` }).click();
+  await secondPage.getByLabel("Map name").fill("After External Save");
+  await secondPage.getByLabel("Map name").blur();
+  await expect(page.getByText("After External Save", { exact: true }).first()).toBeVisible();
+
+  await page.getByRole("button", { name: "Settings for After External Save" }).click();
+  await page.getByLabel("Map name").fill("After Synchronized Follow-up");
+  await page.getByLabel("Map name").blur();
+  await expect(secondPage.getByLabel("Map name")).toHaveValue("After Synchronized Follow-up");
+
+  await page.getByRole("button", { name: "Heroes", exact: true }).click();
+  await secondPage.getByRole("button", { name: "Heroes", exact: true }).click();
+  await secondPage.getByLabel("Character name").fill("Externally Synchronized Hero");
+  await secondPage.getByLabel("Character name").blur();
+  await expect(page.getByLabel("Character name")).toHaveValue("Externally Synchronized Hero");
+  await secondPage.close();
+});
+
+test("Nightforge renders exclusively from bundled local fonts", async ({ page }) => {
+  await open(page, { scenes: [sceneFixture()], heroes: [heroFixture()] });
+  const result = await page.evaluate(() => ({
+    remoteFonts: performance.getEntriesByType("resource")
+      .map((entry) => entry.name)
+      .filter((url) => /fonts\.(?:googleapis|gstatic)\.com/.test(url)),
+    family: getComputedStyle(document.querySelector(".nf-state-responsive-shell")).fontFamily,
+    sansReady: document.fonts.check('14px "Nightforge Plus Jakarta Sans"'),
+    serifReady: document.fonts.check('14px "Nightforge Fraunces"'),
+    monoReady: document.fonts.check('500 14px "Nightforge IBM Plex Mono"', "0123456789"),
+  }));
+  expect(result.remoteFonts).toEqual([]);
+  expect(result.family).toContain("Nightforge Plus Jakarta Sans");
+  expect(result.sansReady).toBe(true);
+  expect(result.serifReady).toBe(true);
+  expect(result.monoReady).toBe(true);
+});
+
+test("a thrown child renders the top-level recovery surface and reload action", async ({ page }) => {
+  await page.goto("/tests/error-boundary-harness.html");
+  const recovery = page.getByRole("alert");
+  await expect(recovery).toContainText("The forge lost its footing");
+  await recovery.getByRole("button", { name: "Reload Nightforge" }).click();
+  await expect.poll(() => page.evaluate(() => document.body.dataset.recoveryInvoked)).toBe("true");
 });
 
 test("destructive confirmations identify their exact target", async ({ page }) => {

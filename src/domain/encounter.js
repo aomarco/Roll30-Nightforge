@@ -9,6 +9,7 @@ import {
   setOffHand,
 } from "./items.js";
 import {
+  appendEncounterLog,
   createTurnResources,
   normalizeBattleItems,
   normalizeChests,
@@ -279,7 +280,7 @@ export function completeEncounterIfNeeded(tokens, encounter) {
       status: "complete",
       winnerTokenId,
       ammunitionRecovered: true,
-      log: [...(encounter.log || []), `${resultText}${recoveryText}`],
+      log: appendEncounterLog(encounter.log, `${resultText}${recoveryText}`),
     },
   }, { completed: true, winnerTokenId, recovery: recovered.recovery });
 }
@@ -340,7 +341,7 @@ export function openAdjacentChest(scene, chestId, viewport) {
           openedChestId: chest.id,
         },
       },
-      log: [...(scene.encounter.log || []), `${token.name} opens a chest.`],
+      log: appendEncounterLog(scene.encounter.log, `${token.name} opens a chest.`),
     },
   }, { chest, resumed: false });
 }
@@ -372,7 +373,7 @@ export function takeOneFromOpenChest(scene, chestId, itemId, viewport) {
     encounter: {
       ...scene.encounter,
       resources: { [token.id]: resources },
-      log: [...(scene.encounter.log || []), `${token.name} takes 1 ${item.name} from the chest.`],
+      log: appendEncounterLog(scene.encounter.log, `${token.name} takes 1 ${item.name} from the chest.`),
     },
   }, { chestId, item, quantityRemaining: inventoryQuantity(chestInventory, itemId) });
 }
@@ -484,7 +485,7 @@ export function retrieveBattleItem(scene, battleItemId, viewport, { random = Mat
     ...scene.encounter,
     resources: { [token.id]: nextResources },
     battleItems,
-    log: [...(scene.encounter.log || []), `${token.name} ${verdict} ${weapon.name}${total === null ? "" : ` (${total} vs DC 15)`}.`],
+    log: appendEncounterLog(scene.encounter.log, `${token.name} ${verdict} ${weapon.name}${total === null ? "" : ` (${total} vs DC 15)`}.`),
   };
   const outcome = {
     actorId: token.id,

@@ -15,6 +15,7 @@ import {
 } from "./encounter.js";
 import { activeTurnContext, attackActionAvailability, segmentsIntersect } from "./combat.js";
 import {
+  appendEncounterLog,
   normalizeTableTokens,
   normalizeWalls,
   setupCellForPosition,
@@ -328,7 +329,7 @@ export function performWeaponAttack(scene, specification = {}, {
   const attackEncounter = {
     ...scene.encounter,
     resources: { [attacker.id]: nextResources },
-    log: [...(scene.encounter.log || []), `${attacker.name} attacks ${target.name} with ${option.weapon.name}: ${verdict}${hit ? ` for ${damage.total} damage` : ""}.`],
+    log: appendEncounterLog(scene.encounter.log, `${attacker.name} attacks ${target.name} with ${option.weapon.name}: ${verdict}${hit ? ` for ${damage.total} damage` : ""}.`),
   };
   const supplied = applyAttackSupplyEffects({
     scene,

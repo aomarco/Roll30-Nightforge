@@ -66,12 +66,12 @@ function ManualTokenFields({ token, save, busy }) {
         {numericFields.map(([field, label, minimum, maximum]) => (
           <div className="micro" key={field}>
             <label>{label}</label>
-            <input className="inp" type="number" min={minimum ?? undefined} max={maximum ?? undefined} value={draft[field]} onChange={change(field)} disabled={busy} />
+            <input className="inp" type="number" aria-label={label} min={minimum ?? undefined} max={maximum ?? undefined} value={draft[field]} onChange={change(field)} disabled={busy} />
           </div>
         ))}
         <div className="micro wide">
           <label>Creature size</label>
-          <select className="sel" value={draft.size} onChange={change("size")} disabled={busy}>
+          <select className="sel" aria-label="Creature size" value={draft.size} onChange={change("size")} disabled={busy}>
             <option value="small">Small</option>
             <option value="medium">Medium</option>
             <option value="large">Large</option>
@@ -112,11 +112,11 @@ function ChestInventoryDrawer({ chest, busy, error, close, changeItem }) {
   return (
     <PortalLayer>
       <div className="veil" onClick={close} />
-      <aside ref={dialogRef} className="drawer nf-state-table-chest-drawer" role="dialog" aria-modal="true" aria-labelledby="chest-inventory-title" tabIndex={-1}>
+      <aside ref={dialogRef} className="drawer nf-state-dialog nf-state-table-chest-drawer" role="dialog" aria-modal="true" aria-labelledby="chest-inventory-title" tabIndex={-1}>
         <div className="drawer-top"><div><span className="kicker kicker-brass">Battle cache</span><h2 id="chest-inventory-title">Fill chest</h2></div><button className="glyph" onClick={close} aria-label="Close"><X size={17} /></button></div>
         <div className="drawer-body">
           {error && <div className="nf-state-inline-error" role="alert"><strong>Chest unchanged</strong><span>{errorText(error)}</span></div>}
-          <div className="seek"><Search size={16} /><input className="inp" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search the complete catalog…" autoFocus /></div>
+          <div className="seek"><Search size={16} /><input className="inp" aria-label="Search the chest item catalog" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search the complete catalog…" autoFocus /></div>
           <div className="unit-top"><span className="unit-label">Catalog</span><span className="tag numeral">{visible.length} results</span></div>
           <div className="hoard nf-state-table-chest-catalog">
             {visible.map((item) => {

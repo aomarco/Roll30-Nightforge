@@ -31,8 +31,13 @@ const requiredFiles = [
   "scripts/nightforge-phase11-screenshot-hashes.json",
   "scripts/phase11-render-smoke.mjs",
   "scripts/verify-phase11.mjs",
+  "src/application/generatedId.js",
+  "src/audit-regressions.test.js",
   "src/phase11.test.js",
+  "src/ui/ApplicationErrorBoundary.jsx",
   "src/ui/useDialogA11y.js",
+  "tests/error-boundary-harness.html",
+  "tests/error-boundary-harness.jsx",
   "tests/phase11.spec.js",
 ];
 for (const file of requiredFiles) {
@@ -124,6 +129,49 @@ if (/savePatch|onUpdate|Repository|localStorage/.test(pointerMove)) failures.pus
 for (const integration of ["nf-state-table-root", "useDialogA11y", "aria-describedby=\"abandon-battle-description\"", "title={scene?.name", "AttackRangeLayer"]) {
   if (!table.includes(integration)) failures.push(`Table hardening integration is missing ${integration}.`);
 }
+const attackDurability = table.slice(table.indexOf("const resolveAttackTarget"), table.indexOf("const openBattleChest"));
+const attackSaveIndex = attackDurability.indexOf("savePatch(resolved.value)");
+const attackCinematicIndex = attackDurability.indexOf("setCinematic({");
+if (attackSaveIndex < 0 || attackCinematicIndex < 0 || attackSaveIndex > attackCinematicIndex) {
+  failures.push("Attack persistence occurs after its cinematic begins.");
+}
+const retrievalDurability = table.slice(table.indexOf("const resolveRetrieval"), table.indexOf("const restartBattle"));
+const retrievalSaveIndex = retrievalDurability.lastIndexOf("savePatch(resolved.value)");
+const retrievalCinematicIndex = retrievalDurability.indexOf("setRetrievalCinematic({");
+if (retrievalSaveIndex < 0 || retrievalCinematicIndex < 0 || retrievalSaveIndex > retrievalCinematicIndex) {
+  failures.push("Rolled retrieval persistence occurs after its cinematic begins.");
+}
+for (const contract of ["onTokenKeyDown", "onChestKeyDown", "aria-label=\"Token to summon\""]) {
+  if (!table.includes(contract)) failures.push(`Table keyboard/accessibility hardening is missing ${contract}.`);
+}
+
+const applicationSource = await read("src/App.jsx");
+for (const contract of ["STORAGE_KEYS.state", "runtime.commands.synchronize()", "pagehide", "state.persistence.revision", "revisionRef", "recordRevision"]) {
+  if (!applicationSource.includes(contract)) failures.push(`Application persistence hardening is missing ${contract}.`);
+}
+for (const file of ["src/screens/SceneScreen.jsx", "src/screens/HeroesScreen.jsx"]) {
+  const contents = await read(file);
+  if (!contents.includes("dirtyRef.current.has") || !contents.includes("activeHero?.name") && !contents.includes("scene?.name")) {
+    failures.push(`${file}: dirty-aware external-state reconciliation is missing.`);
+  }
+}
+
+const main = await read("src/main.jsx");
+const errorBoundary = await read("src/ui/ApplicationErrorBoundary.jsx");
+if (!main.includes("<ApplicationErrorBoundary>")) failures.push("The application root is not protected by its render error boundary.");
+for (const contract of ["getDerivedStateFromError", "componentDidCatch", "Reload Nightforge"]) {
+  if (!errorBoundary.includes(contract)) failures.push(`Application error recovery is missing ${contract}.`);
+}
+
+const viteConfig = await read("vite.config.js");
+const indexHtml = await read("index.html");
+for (const contract of ["nightforge-local-fonts", "frozenRemoteFontImport", "codeSplitting", "node_modules"]) {
+  if (!viteConfig.includes(contract)) failures.push(`Local font build hardening is missing ${contract}.`);
+}
+if (/fonts\.(?:googleapis|gstatic)\.com/.test(indexHtml)) failures.push("index.html still connects to a remote font origin.");
+for (const family of ["Nightforge Fraunces", "Nightforge Plus Jakarta Sans", "Nightforge IBM Plex Mono"]) {
+  if (!functionalCss.includes(family)) failures.push(`Bundled font family is missing: ${family}.`);
+}
 
 const library = await read("src/screens/LibraryScreen.jsx");
 for (const state of ["lifecycle === \"booting\"", "persistence.recovered", "persistence.recoverySource === \"empty\"", "role=\"alert\"", "role=\"status\"", "lifecycle === \"booting\" || persistence.status === \"saving\""]) {
@@ -163,6 +211,8 @@ for (const contract of ["phase11.spec.js", "browserName: \"chromium\"", "animati
 }
 if (!playwrightConfig.includes("__screenshots__/linux")) failures.push("Playwright must use a separate pinned Linux screenshot baseline.");
 const browserSpec = await read("tests/phase11.spec.js");
+const browserJourneys = (browserSpec.match(/^test\(/gm) || []).length;
+if (browserJourneys !== 23) failures.push(`Phase 11 must contain exactly 23 browser journeys; found ${browserJourneys}.`);
 for (const contract of [
   "document.fonts.ready",
   "[1920, 1080]", "[1600, 900]", "[1440, 900]", "[1280, 800]", "[1180, 820]", "[1024, 768]",
@@ -172,6 +222,7 @@ for (const contract of [
   "tokens: 180", "ITEM_CATALOG.length", "reducedMotion: \"reduce\"", "FORBIDDEN_LEGACY_STORAGE_IDENTIFIERS",
   "keyboard reachable", "outlineStyle",
   "document.getAnimations()", "animation.finished",
+  "After Synchronized Follow-up", "a thrown child renders the top-level recovery surface",
 ]) if (!browserSpec.includes(contract)) failures.push(`Browser acceptance suite is missing ${contract}.`);
 
 const packageJson = JSON.parse(await read("package.json"));

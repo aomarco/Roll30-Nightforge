@@ -91,6 +91,19 @@ export default function SceneScreen({
     setCleanupIssue(null);
   }, [scene?.id]);
 
+  useEffect(() => {
+    if (!scene?.id) return;
+    if (!dirtyRef.current.has("name")) {
+      setName(scene.name || "Untitled scene");
+      draftRef.current.name = scene.name || "Untitled scene";
+    }
+    if (!dirtyRef.current.has("gridSize")) {
+      setGridSize(scene.gridSize || 44);
+      draftRef.current.gridSize = scene.gridSize || 44;
+    }
+    setMode(scene.kind || "battle");
+  }, [scene?.id, scene?.name, scene?.kind, scene?.gridSize]);
+
   const flushDraft = () => {
     if (timerRef.current) {
       clearTimeout(timerRef.current);
@@ -354,6 +367,7 @@ export default function SceneScreen({
                 <input
                   className="slider"
                   type="range"
+                  aria-label="Battle grid cell size"
                   min="24"
                   max="80"
                   value={gridSize}

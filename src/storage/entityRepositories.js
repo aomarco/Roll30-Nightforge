@@ -8,6 +8,14 @@ import {
 
 const defaultIdFactory = () => crypto.randomUUID();
 
+const revisionConflict = (expectedRevision, actualRevision) =>
+  failure("storage-revision-conflict", "Nightforge state changed in another browser context.", {
+    recovery: "Review the latest state and retry your change. No newer data was overwritten.",
+    retryable: true,
+    expectedRevision,
+    actualRevision,
+  });
+
 function createCollectionRepository({
   stateRepository,
   collection,
@@ -49,6 +57,12 @@ function createCollectionRepository({
     if (!loaded.ok) return loaded;
     const now = clock();
     const record = createRecord(input, { id: idFactory(), now });
+    if (loaded.value[collection].some((item) => item.id === record.id)) {
+      return failure(`${collection}-id-conflict`, `A ${singular} already exists with id ${record.id}.`, {
+        recovery: `Retry creating the ${singular}; no existing record was changed.`,
+        retryable: true,
+      });
+    }
     const saved = stateRepository.save({
       ...loaded.value,
       [collection]: [...loaded.value[collection], record],
@@ -58,9 +72,12 @@ function createCollectionRepository({
       : saved;
   };
 
-  const update = (id, patch = {}) => {
+  const update = (id, patch = {}, { expectedRevision } = {}) => {
     const loaded = stateRepository.load();
     if (!loaded.ok) return loaded;
+    if (expectedRevision !== undefined && expectedRevision !== loaded.value.revision) {
+      return revisionConflict(expectedRevision, loaded.value.revision);
+    }
     const index = loaded.value[collection].findIndex((item) => item.id === id);
     if (index < 0) {
       return failure(`${collection}-not-found`, `No ${singular} exists with id ${id}.`, {
@@ -152,6 +169,12 @@ export const createSceneRepository = (stateRepository, options = {}) => {
     const now = options.clock?.() || new Date().toISOString();
     const id = options.idFactory?.() || defaultIdFactory();
     const scene = createSceneRecord({ ...input, lastOpenedAt: now }, { id, now });
+    if (loaded.value.scenes.some((item) => item.id === scene.id)) {
+      return failure("scenes-id-conflict", `A Scene already exists with id ${scene.id}.`, {
+        recovery: "Retry forging the Scene; no existing Scene was changed.",
+        retryable: true,
+      });
+    }
     const saved = stateRepository.save({
       ...loaded.value,
       scenes: [...loaded.value.scenes, scene],

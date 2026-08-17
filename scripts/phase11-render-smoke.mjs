@@ -17,6 +17,7 @@ try {
     { default: LibraryScreen },
     { default: HeroesScreen },
     { default: TableScreen },
+    { default: ApplicationErrorBoundary },
     { ITEM_CATALOG },
     { createHeroRecord, createSceneRecord },
     { createManualToken, createTurnResources },
@@ -24,6 +25,7 @@ try {
     vite.ssrLoadModule("/src/screens/LibraryScreen.jsx"),
     vite.ssrLoadModule("/src/screens/HeroesScreen.jsx"),
     vite.ssrLoadModule("/src/screens/TableScreen.jsx"),
+    vite.ssrLoadModule("/src/ui/ApplicationErrorBoundary.jsx"),
     vite.ssrLoadModule("/src/domain/catalog.js"),
     vite.ssrLoadModule("/src/domain/records.js"),
     vite.ssrLoadModule("/src/domain/table.js"),
@@ -39,6 +41,13 @@ try {
     onDelete: okay,
   };
   const persistence = { status: "saved", error: null };
+
+  const recoveryBoundary = new ApplicationErrorBoundary({ children: null });
+  recoveryBoundary.state = ApplicationErrorBoundary.getDerivedStateFromError(new Error("render failed"));
+  const fatalMarkup = renderToStaticMarkup(recoveryBoundary.render());
+  assert.match(fatalMarkup, /role="alert"/);
+  assert.match(fatalMarkup, /The forge lost its footing/);
+  assert.match(fatalMarkup, /Reload Nightforge/);
 
   const loadingMarkup = renderToStaticMarkup(React.createElement(LibraryScreen, {
     ...handlers,
@@ -168,13 +177,14 @@ try {
     quotaMarkup,
     backupRecoveryMarkup,
     cleanRecoveryMarkup,
+    fatalMarkup,
     gearMarkup,
     tableMarkup,
   ]) {
     assert.doesNotMatch(markup, /[\u00c2\u00c3\ufffd]|\u00e2[^\s]/u);
   }
 
-  console.log("Phase 11 render smoke passed for loading, empty, success, error, recovery, long-content, complete-inventory, and 180-token states.");
+  console.log("Phase 11 render smoke passed for loading, empty, success, error-boundary, recovery, long-content, complete-inventory, and 180-token states.");
 } finally {
   await vite.close();
 }

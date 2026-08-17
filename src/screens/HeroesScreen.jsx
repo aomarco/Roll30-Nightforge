@@ -87,6 +87,15 @@ export default function HeroesScreen({
     setLocalError(null);
   }, [activeHero?.id]);
 
+  useEffect(() => {
+    if (!activeHero) return;
+    const next = { ...draftRef.current };
+    if (!dirtyRef.current.has("name")) next.name = activeHero.name;
+    if (!dirtyRef.current.has("background")) next.background = activeHero.background || "";
+    draftRef.current = next;
+    setDrafts(next);
+  }, [activeHero?.id, activeHero?.name, activeHero?.background]);
+
   const retireDialogRef = useDialogA11y({ open: Boolean(retiring), onClose: () => setRetiring(null) });
 
   useEffect(
@@ -500,7 +509,7 @@ export default function HeroesScreen({
       {retiring && (
         <>
           <div className="veil" onClick={() => setRetiring(null)} />
-          <aside ref={retireDialogRef} className="drawer" role="dialog" aria-modal="true" aria-labelledby="retire-hero-title" aria-describedby="retire-hero-description" tabIndex={-1}>
+          <aside ref={retireDialogRef} className="drawer nf-state-dialog" role="dialog" aria-modal="true" aria-labelledby="retire-hero-title" aria-describedby="retire-hero-description" tabIndex={-1}>
             <div className="drawer-top">
               <div><span className="kicker">Retire hero</span><h2 id="retire-hero-title">Close this legend?</h2></div>
               <button className="glyph" onClick={() => setRetiring(null)} aria-label="Close"><X size={17} /></button>
