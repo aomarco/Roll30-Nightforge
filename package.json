@@ -37,11 +37,11 @@
     "verify": "npm test && npm run test:phase2:render && npm run test:phase3:render && npm run test:phase4:render && npm run test:phase5:render && npm run test:phase6:render && npm run test:phase7:render && npm run test:phase8:render && npm run test:phase9:render && npm run test:phase10:render && npm run test:phase11:render && npm run verify:phase1 && npm run verify:phase2 && npm run verify:phase3 && npm run verify:phase4 && npm run verify:phase5 && npm run verify:phase6 && npm run verify:phase7 && npm run verify:phase8 && npm run verify:phase9 && npm run verify:phase10 && npm run test:phase11:browser && npm run verify:phase11 && npm run verify:phase12 && npm run verify:dependencies && npm run build"
   },
   "dependencies": {
-    "@vitejs/plugin-react": "latest",
-    "lucide-react": "latest",
-    "react": "latest",
-    "react-dom": "latest",
-    "vite": "latest"
+    "@vitejs/plugin-react": "6.0.4",
+    "lucide-react": "1.27.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "vite": "8.1.5"
   },
   "devDependencies": {
     "@playwright/test": "1.62.1"
