@@ -1,5 +1,9 @@
 import { defineConfig } from "@playwright/test";
 
+const snapshotPathTemplate = process.platform === "win32"
+  ? "{testDir}/__screenshots__/{arg}{ext}"
+  : "{testDir}/__screenshots__/linux/{arg}{ext}";
+
 export default defineConfig({
   testDir: "./tests",
   testMatch: "phase11.spec.js",
@@ -14,7 +18,7 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   reporter: "line",
-  snapshotPathTemplate: "{testDir}/__screenshots__/{arg}{ext}",
+  snapshotPathTemplate,
   use: {
     baseURL: "http://127.0.0.1:5311",
     browserName: "chromium",

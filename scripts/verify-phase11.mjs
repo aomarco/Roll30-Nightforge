@@ -160,6 +160,7 @@ const playwrightConfig = await read("playwright.config.js");
 for (const contract of ["phase11.spec.js", "browserName: \"chromium\"", "animations: \"disabled\"", "workers: 1", "Australia/Sydney", "maxDiffPixelRatio: process.platform === \"win32\" ? 0 : 0.001"]) {
   if (!playwrightConfig.includes(contract)) failures.push(`Playwright determinism configuration is missing ${contract}.`);
 }
+if (!playwrightConfig.includes("__screenshots__/linux")) failures.push("Playwright must use a separate pinned Linux screenshot baseline.");
 const browserSpec = await read("tests/phase11.spec.js");
 for (const contract of [
   "document.fonts.ready",
