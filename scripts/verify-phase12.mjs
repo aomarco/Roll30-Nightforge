@@ -22,6 +22,17 @@ const packageJson = JSON.parse(await read("package.json"));
 if (packageJson.scripts?.build !== "vite build --base=/Roll30/") failures.push("Production build must use the exact /Roll30/ base.");
 if (packageJson.scripts?.["build:preview"] !== "vite build --base=/Roll30-Nightforge/") failures.push("Preview build must use the exact /Roll30-Nightforge/ base.");
 if (!packageJson.scripts?.verify?.includes("verify:phase12")) failures.push("The full verification gate omits Phase 12.");
+if (packageJson.scripts?.["acceptance:phase12"] !== "node scripts/phase12-live-acceptance.mjs") failures.push("The repeatable Phase 12 live-acceptance command is missing.");
+
+const liveAcceptance = await read("scripts/phase12-live-acceptance.mjs");
+for (const contract of [
+  "FORBIDDEN_LEGACY_STORAGE_IDENTIFIERS",
+  "roll30-assets",
+  "originalStorage",
+  "databaseRecord",
+  "malformedMarkers",
+  "assetPaths.every",
+]) if (!liveAcceptance.includes(contract)) failures.push(`Live acceptance coverage is missing ${contract}.`);
 
 const workflow = await read(".github/workflows/deploy-pages.yml");
 for (const contract of [
