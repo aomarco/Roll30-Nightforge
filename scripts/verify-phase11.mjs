@@ -27,6 +27,7 @@ for (const file of protectedVisuals) {
 const requiredFiles = [
   "PARITY_REGISTER.md",
   "playwright.config.js",
+  "scripts/nightforge-phase11-linux-screenshot-hashes.json",
   "scripts/nightforge-phase11-screenshot-hashes.json",
   "scripts/phase11-render-smoke.mjs",
   "scripts/verify-phase11.mjs",
@@ -197,6 +198,14 @@ if (actualScreenshots.length !== 21 || JSON.stringify(actualScreenshots) !== JSO
 for (const [file, expected] of Object.entries(screenshotManifest)) {
   if (await hash(file) !== expected) failures.push(`${file}: deterministic screenshot hash changed.`);
 }
+const linuxScreenshotManifest = JSON.parse(await read("scripts/nightforge-phase11-linux-screenshot-hashes.json"));
+const linuxScreenshotDirectory = resolve(screenshotDirectory, "linux");
+const actualLinuxScreenshots = (await readdir(linuxScreenshotDirectory)).filter((name) => name.endsWith(".png")).sort();
+const expectedLinuxScreenshots = Object.keys(linuxScreenshotManifest).map((file) => file.split("/").at(-1)).sort();
+if (actualLinuxScreenshots.length !== 21 || JSON.stringify(actualLinuxScreenshots) !== JSON.stringify(expectedLinuxScreenshots)) failures.push("Pinned Linux screenshot set must contain exactly the 21 manifested baselines.");
+for (const [file, expected] of Object.entries(linuxScreenshotManifest)) {
+  if (await hash(file) !== expected) failures.push(`${file}: pinned Linux screenshot hash changed.`);
+}
 
 if (failures.length) {
   console.error("Phase 11 verification failed:\n" + failures.map((failure) => `- ${failure}`).join("\n"));
@@ -205,5 +214,5 @@ if (failures.length) {
 
 console.log(`All ${protectedVisuals.length} permanent Nightforge visual files match the frozen baseline.`);
 console.log(`Phase 11 purity and interaction contracts pass across ${sourceFiles.length} runtime source files and ${dialogCount} managed dialogs.`);
-console.log("All 47 parity journeys are resolved; 21 deterministic screenshots cover required states, viewports, zoom, and compact Table layouts.");
+console.log("All 47 parity journeys are resolved; 21 deterministic screenshots per platform cover required states, viewports, zoom, and compact Table layouts.");
 console.log("Corruption, quota, long-content, large-list, reduced-motion, accessibility, and performance hardening contracts are present.");
