@@ -22,6 +22,25 @@ const checksumFor = (value) => {
   return (hash >>> 0).toString(16).padStart(8, "0");
 };
 
+const nonNegativeSafeInteger = (value) => {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) return 0;
+  return Math.min(Number.MAX_SAFE_INTEGER, Math.floor(number));
+};
+
+const uniqueRecords = (records, normalize) => {
+  const seen = new Set();
+  const normalized = [];
+  for (const record of Array.isArray(records) ? records : []) {
+    if (!record?.id) continue;
+    const value = normalize(record);
+    if (seen.has(value.id)) continue;
+    seen.add(value.id);
+    normalized.push(value);
+  }
+  return normalized;
+};
+
 export function createEmptyEnvelope(now = new Date().toISOString()) {
   return {
     schemaVersion: NIGHTFORGE_SCHEMA_VERSION,
@@ -35,22 +54,16 @@ export function createEmptyEnvelope(now = new Date().toISOString()) {
 }
 
 export function normalizeEnvelope(value = {}, now = new Date().toISOString()) {
-  const scenes = Array.isArray(value.scenes)
-    ? value.scenes
-        .filter((scene) => scene?.id)
-        .map((scene) => normalizeSceneRecord(scene, { now }))
-    : [];
-  const heroes = Array.isArray(value.heroes)
-    ? value.heroes
-        .filter((hero) => hero?.id)
-        .map((hero) => normalizeHeroRecord(hero, { now }))
-    : [];
+  const scenes = uniqueRecords(value.scenes, (scene) => normalizeSceneRecord(scene, { now }));
+  const heroes = uniqueRecords(value.heroes, (hero) => normalizeHeroRecord(hero, { now }));
   const sceneIds = new Set(scenes.map((scene) => scene.id));
 
   return {
     schemaVersion: NIGHTFORGE_SCHEMA_VERSION,
-    revision: Math.max(0, Math.floor(Number(value.revision) || 0)),
-    savedAt: value.savedAt || now,
+    revision: nonNegativeSafeInteger(value.revision),
+    savedAt: typeof value.savedAt === "string" && Number.isFinite(Date.parse(value.savedAt))
+      ? value.savedAt
+      : now,
     scenes,
     heroes,
     lastActiveSceneId: sceneIds.has(value.lastActiveSceneId)
@@ -128,4 +141,3 @@ export function inspectEnvelope(raw) {
 }
 
 export const serializeEnvelope = (envelope) => JSON.stringify(envelope);
-

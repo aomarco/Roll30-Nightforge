@@ -2,6 +2,7 @@ import { ITEM_BY_ID } from "./catalog.js";
 import { CONDITIONS, isImmobilized, isIncapacitated } from "./conditions.js";
 import { setMainHand, setOffHand } from "./items.js";
 import {
+  appendEncounterLog,
   createTurnResources,
   normalizeChests,
   normalizeTableTokens,
@@ -316,7 +317,7 @@ export function moveActiveToken(scene, tokenId, destination, viewport, options =
   const encounter = {
     ...scene.encounter,
     resources: { [tokenId]: resources },
-    log: [...(scene.encounter.log || []), `${context.token.name} moves ${plan.value.costFeet} feet.`],
+    log: appendEncounterLog(scene.encounter.log, `${context.token.name} moves ${plan.value.costFeet} feet.`),
   };
   return success({ tokens, encounter }, { plan: plan.value });
 }
@@ -355,7 +356,7 @@ export function activateDash(scene) {
     encounter: {
       ...scene.encounter,
       resources: { [token.id]: next },
-      log: [...(scene.encounter.log || []), `${token.name} uses Dash.`],
+      log: appendEncounterLog(scene.encounter.log, `${token.name} uses Dash.`),
     },
   });
 }
@@ -438,7 +439,7 @@ export function performWeaponSwap(scene, loadout) {
     encounter: {
       ...scene.encounter,
       resources: { [token.id]: nextResources },
-      log: [...(scene.encounter.log || []), `${token.name} swaps to ${names.join(" and ") || "empty hands"}.`],
+      log: appendEncounterLog(scene.encounter.log, `${token.name} swaps to ${names.join(" and ") || "empty hands"}.`),
     },
   });
 }
@@ -472,7 +473,7 @@ export function endTurn(scene) {
       activeIndex: nextIndex,
       round: Math.max(1, Math.floor(finite(scene.encounter.round, 1))) + (wrapped ? 1 : 0),
       resources: { [nextToken.id]: createTurnResources(nextToken) },
-      log: [...(scene.encounter.log || []), `${token.name} ends the turn. ${nextToken.name} is active.`],
+      log: appendEncounterLog(scene.encounter.log, `${token.name} ends the turn. ${nextToken.name} is active.`),
     },
   }, { activeTokenId: nextToken.id, wrapped });
 }

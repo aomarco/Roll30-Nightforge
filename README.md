@@ -50,8 +50,8 @@ Production rollback is anchored by the annotated tag
 npm run verify
 ```
 
-The complete gate runs **229 domain/repository/integration tests**, every render
-smoke suite, all phase purity verifiers, **15 pinned-Chromium browser journeys**,
+The complete gate runs **241 domain/repository/integration tests**, every render
+smoke suite, all phase purity verifiers, **23 pinned-Chromium browser journeys**,
 21 deterministic visual baselines per platform, dependency audit, and the
 production build.
 
@@ -60,14 +60,36 @@ Useful focused commands:
 | Command | Coverage |
 |---|---|
 | `npm run test:phase11` | Corrupt data, quota failures, long content, and large collections |
-| `npm run test:phase11:render` | Loading, empty, success, error, recovery, and extreme-content markup |
-| `npm run test:phase11:browser` | Keyboard dialogs, responsive layouts, zoom, large lists, storage isolation, and screenshots |
+| `npm run test:phase11:render` | Loading, empty, success, error-boundary, recovery, and extreme-content markup |
+| `npm run test:phase11:browser` | Keyboard interaction, durable cinematics, cross-tab synchronization, local fonts, responsive layouts, zoom, large lists, storage isolation, and screenshots |
 | `npm run verify:phase11` | Phase 11 purity, accessibility, performance, parity, and baseline contracts |
 | `npm run verify:phase12` | Release bases, Pages workflow, protected UI, and storage-isolation contracts |
 | `npm run acceptance:phase12 -- <url> </base/>` | Live Pages journey, asset-base, Unicode, persistence, and original-save isolation |
 
 The [parity register](./PARITY_REGISTER.md) maps all 47 planned acceptance
 journeys to their authoritative evidence.
+
+### Regenerating the clean-room catalog
+
+The checked-in catalog is generated only from a caller-supplied public SRD 5.1
+directory. Nightforge does not read the original Roll30 project or user data.
+The directory must contain:
+
+- `5e-SRD-Equipment.json`
+- `5e-SRD-Magic-Items.json`
+- `MAGIC_ITEM_FILE_SYSTEM.txt`
+
+Regenerate into the default tracked output with:
+
+```bash
+npm run catalog:generate -- <path-to-srd-directory>
+```
+
+The generator refuses missing records or unexpected catalog counts. After an
+intentional regeneration, review the output, update the SHA-256 values in
+`scripts/phase5-catalog-manifest.json` from the exact three inputs and generated
+file, then run `npm run verify:phase5` and the complete `npm run verify` gate.
+SRD inputs remain external and are never bundled as application or user data.
 
 ## The design language
 

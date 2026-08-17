@@ -135,7 +135,7 @@ for (const match of functionalCss.matchAll(/([^{}]+)\{/g)) {
 }
 
 const app = await read("src/App.jsx");
-for (const integration of ["onUpdate={runtime.commands.updateScene}", "persistence={state.persistence}"]) {
+for (const integration of ["onUpdate={updateScene}", "runtime.commands.updateScene", "persistence={state.persistence}"]) {
   if (!app.includes(integration)) failures.push(`App is missing persisted Phase 8 integration ${integration}.`);
 }
 

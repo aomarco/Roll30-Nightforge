@@ -91,6 +91,26 @@ export function createApplicationCommands({
     );
   };
 
+  const synchronize = () => {
+    const scenes = sceneRepository.list();
+    const heroes = heroRepository.list();
+    const failed = [scenes, heroes].find((result) => !result.ok);
+    if (failed) {
+      dispatch({ type: "persistence-failed", error: failed });
+      return failed;
+    }
+    dispatch({
+      type: "external-state-synchronized",
+      scenes: scenes.value,
+      heroes: heroes.value,
+      activeSceneId: scenes.envelope?.lastActiveSceneId || null,
+      revision: scenes.envelope?.revision || 0,
+    });
+    return success({ scenes: scenes.value, heroes: heroes.value }, {
+      revision: scenes.envelope?.revision || 0,
+    });
+  };
+
   const navigate = (route, activeSceneId = null) => {
     if (!ROUTES.includes(route?.page)) {
       return failure("route-invalid", "Nightforge cannot navigate to that destination.", {
@@ -112,6 +132,7 @@ export function createApplicationCommands({
     const scene = sceneRepository.setActive(sceneId);
     if (!scene.ok) return scene;
     const session = sessionRepository.save({ activeSceneId: sceneId });
+    dispatch({ type: "persistence-saved", revision: scene.revision || 0 });
     dispatch({ type: "set-active-scene", sceneId });
     return success(scene.value, {
       revision: scene.revision,
@@ -184,7 +205,7 @@ export function createApplicationCommands({
     return result;
   };
 
-  const updateHero = (id, patch = {}) => {
+  const updateHero = (id, patch = {}, expectedRevision) => {
     const current = heroRepository.get(id);
     if (!current.ok) return persist(() => current, refreshHeroes);
     let normalizedPatch = { ...patch };
@@ -219,11 +240,12 @@ export function createApplicationCommands({
       };
     }
 
-    return persist(() => heroRepository.update(id, normalizedPatch), refreshHeroes);
+    return persist(() => heroRepository.update(id, normalizedPatch, { expectedRevision }), refreshHeroes);
   };
 
   return {
     initialize,
+    synchronize,
     navigate,
     selectScene,
     forgeScene: (input, route = { page: "board", mode: "setup" }) =>
@@ -231,7 +253,8 @@ export function createApplicationCommands({
     openScene: (id, route = { page: "board", mode: "setup" }) =>
       enterScene(() => sceneRepository.open(id), route),
     createScene: (input) => persist(() => sceneRepository.create(input), refreshScenes),
-    updateScene: (id, patch) => persistScene(() => sceneRepository.update(id, patch)),
+    updateScene: (id, patch, expectedRevision) =>
+      persistScene(() => sceneRepository.update(id, patch, { expectedRevision })),
     replaceSceneArtwork: async (id, blob) => {
       if (!artworkRepository || !artworkDecoder) {
         const unavailable = failure(

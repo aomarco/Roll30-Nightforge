@@ -111,12 +111,14 @@ function OwnedItemRow({ hero, item, run, open, busy }) {
   const worn = hero.wornItemIds.includes(item.id);
   const bonus = hero.enchantments?.[item.id] || 0;
   return (
-    <article className={`loot loot-${item.kind} nf-state-loot-button`} onClick={() => open(item.id)}>
-      <span className="loot-ico"><Icon size={18} /></span>
-      <div className="loot-meta">
-        <strong>{item.name}{enchantable && bonus ? ` +${bonus}` : ""}</strong>
-        <small>{itemSubtitle(item)}</small>
-      </div>
+    <article className={`loot loot-${item.kind} nf-state-loot-button`}>
+      <button type="button" className="nf-state-loot-open" onClick={() => open(item.id)} aria-label={`Open ${item.name} equipment record`}>
+        <span className="loot-ico"><Icon size={18} /></span>
+        <span className="loot-meta">
+          <strong>{item.name}{enchantable && bonus ? ` +${bonus}` : ""}</strong>
+          <small>{itemSubtitle(item)}</small>
+        </span>
+      </button>
       <div className="loot-acts">
         {enchantable && <EnchantmentControl hero={hero} item={item} run={run} busy={busy} />}
         {wearable && (
@@ -174,10 +176,10 @@ function CatalogDrawer({ hero, filters, setFilters, run, close, busy }) {
   return (
     <PortalLayer>
       <div className="veil" onClick={close} />
-      <aside ref={dialogRef} className="drawer nf-state-gear-drawer" role="dialog" aria-modal="true" aria-labelledby="catalog-title" tabIndex={-1}>
+      <aside ref={dialogRef} className="drawer nf-state-dialog nf-state-gear-drawer" role="dialog" aria-modal="true" aria-labelledby="catalog-title" tabIndex={-1}>
         <div className="drawer-top"><div><span className="kicker kicker-brass">The equipment ledger</span><h2 id="catalog-title">Add an item</h2></div><button className="glyph" onClick={close} aria-label="Close"><X size={17} /></button></div>
         <div className="drawer-body">
-          <div className="seek"><Search size={16} /><input className="inp" value={filters.text} onChange={update("text")} placeholder="Search all 355 items…" autoFocus /></div>
+          <div className="seek"><Search size={16} /><input className="inp" aria-label="Search the complete equipment catalog" value={filters.text} onChange={update("text")} placeholder="Search all 355 items…" autoFocus /></div>
           <div className="nf-state-catalog-filters">
             <label className="field"><span className="label">Item type</span><select className="sel" value={filters.kind} onChange={update("kind")}>{TYPE_OPTIONS.map(([value, label]) => <option value={value} key={label}>{label}</option>)}</select></label>
             <label className="field"><span className="label">Sort</span><select className="sel" value={filters.sort} onChange={update("sort")}><option value="name">Name A–Z</option><option value="cost-asc">Cost low–high</option><option value="cost-desc">Cost high–low</option></select></label>
@@ -217,7 +219,7 @@ function ItemDrawer({ hero, item, run, close, error, busy }) {
   return (
     <PortalLayer>
       <div className="veil" onClick={close} />
-      <aside ref={dialogRef} className="drawer nf-state-gear-drawer" role="dialog" aria-modal="true" aria-labelledby="item-title" tabIndex={-1}>
+      <aside ref={dialogRef} className="drawer nf-state-dialog nf-state-gear-drawer" role="dialog" aria-modal="true" aria-labelledby="item-title" tabIndex={-1}>
         <div className="drawer-top"><div><span className="kicker">Equipment record</span><h2 id="item-title">{item.name}</h2></div><button className="glyph" onClick={close} aria-label="Close"><X size={17} /></button></div>
         <div className="drawer-body">
           <div className={`nf-state-item-hero loot-${item.kind}`}><span className="loot-ico"><Icon size={20} /></span><div><strong>{item.typeLabel}</strong><p className="note">{itemSubtitle(item)}</p></div></div>
@@ -268,7 +270,7 @@ export default function GearChapter({
     <>
       <section className="sheet enter" key="gear">
         <header className="sheet-head"><div><span className="kicker">Inventory</span><h3>Gear &amp; treasures</h3></div><div className="row"><span className="tag numeral">{hero.inventory.length} unique · {hero.inventory.reduce((total, entry) => total + entry.quantity, 0)} total</span><button className="btn btn-key btn-sm" onClick={() => { setGearError(""); setDrawer({ mode: "catalog" }); }}><Plus size={15} strokeWidth={2.4} /> Add item</button></div></header>
-        <div className="seek" style={{ marginBottom: 18 }}><Search size={16} /><input className="inp" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search your inventory…" /></div>
+        <div className="seek" style={{ marginBottom: 18 }}><Search size={16} /><input className="inp" aria-label="Search owned inventory" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search your inventory…" /></div>
         <div className="hoard">
           {owned.map(({ item }) => <OwnedItemRow key={item.id} hero={hero} item={item} run={run} open={(itemId) => { setGearError(""); setDrawer({ mode: "item", itemId }); }} busy={busy} />)}
           {!owned.length && <div className="nf-state-catalog-empty"><strong>{hero.inventory.length ? "No owned items match" : "This pack is empty"}</strong><span>{hero.inventory.length ? "Try another inventory search." : "Open Add item to choose from the Nightforge catalogs."}</span></div>}

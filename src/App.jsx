@@ -4,6 +4,7 @@ import { Compass, ScrollText, SlidersHorizontal, Swords } from "lucide-react";
 import { createBrowserRuntime } from "./application/browserRuntime.js";
 import { tableModeForScene } from "./application/library.js";
 import { applicationReducer, createInitialApplicationState } from "./application/state.js";
+import { STORAGE_KEYS } from "./storage/constants.js";
 import { D20 } from "./ui/Glyphs.jsx";
 import LibraryScreen from "./screens/LibraryScreen.jsx";
 import HeroesScreen from "./screens/HeroesScreen.jsx";
@@ -68,10 +69,50 @@ export default function App({ browser = window, runtimeFactory = createBrowserRu
   const runtime = runtimeRef.current;
   const workbenchFlushRef = useRef(null);
   const heroFlushRef = useRef(null);
+  const revisionRef = useRef(state.persistence.revision);
+  revisionRef.current = state.persistence.revision;
+
+  const recordRevision = (result) => {
+    if (result?.ok && Number.isSafeInteger(result.revision)) {
+      revisionRef.current = result.revision;
+    }
+    return result;
+  };
+
+  const trackRevision = (operation) => {
+    const result = operation();
+    return result && typeof result.then === "function"
+      ? result.then(recordRevision)
+      : recordRevision(result);
+  };
+
+  const updateScene = (id, patch) => trackRevision(() =>
+    runtime.commands.updateScene(id, patch, revisionRef.current));
+  const updateHero = (id, patch) => trackRevision(() =>
+    runtime.commands.updateHero(id, patch, revisionRef.current));
 
   useEffect(() => {
     runtime.commands.initialize();
   }, [runtime]);
+
+  useEffect(() => {
+    if (typeof browser.addEventListener !== "function") return undefined;
+    const synchronize = (event) => {
+      if (event?.key === STORAGE_KEYS.state) recordRevision(runtime.commands.synchronize());
+    };
+    browser.addEventListener("storage", synchronize);
+    return () => browser.removeEventListener?.("storage", synchronize);
+  }, [browser, runtime]);
+
+  useEffect(() => {
+    if (typeof browser.addEventListener !== "function") return undefined;
+    const flushActiveDraft = () => {
+      if (state.route.page === "settings") workbenchFlushRef.current?.();
+      if (state.route.page === "characters") heroFlushRef.current?.();
+    };
+    browser.addEventListener("pagehide", flushActiveDraft);
+    return () => browser.removeEventListener?.("pagehide", flushActiveDraft);
+  }, [browser, state.route.page]);
 
   const activeScene = state.scenes.find((scene) => scene.id === state.activeSceneId) || null;
   const go = (route) => {
@@ -86,15 +127,15 @@ export default function App({ browser = window, runtimeFactory = createBrowserRu
     return runtime.commands.navigate(route, state.activeSceneId);
   };
   const openScene = (scene, page) =>
-    runtime.commands.openScene(
+    trackRevision(() => runtime.commands.openScene(
       scene.id,
       page === "board" ? { page: "board", mode: tableModeForScene(scene) } : { page },
-    );
+    ));
   const forgeScene = (input) =>
-    runtime.commands.forgeScene(input, {
+    trackRevision(() => runtime.commands.forgeScene(input, {
       page: "board",
       mode: tableModeForScene(input),
-    });
+    }));
 
   if (state.route.page === "board") {
     return (
@@ -104,7 +145,7 @@ export default function App({ browser = window, runtimeFactory = createBrowserRu
         mode={state.route.mode || tableModeForScene(activeScene)}
         go={go}
         setMode={(mode) => go({ page: "board", mode })}
-        onUpdate={runtime.commands.updateScene}
+        onUpdate={updateScene}
         artworkRepository={runtime.artworkRepository}
         persistence={state.persistence}
       />
@@ -119,9 +160,9 @@ export default function App({ browser = window, runtimeFactory = createBrowserRu
         lifecycle={state.lifecycle}
         persistence={state.persistence}
         go={go}
-        onCreate={runtime.commands.createHero}
-        onUpdate={runtime.commands.updateHero}
-        onRetire={runtime.commands.removeHero}
+        onCreate={(input) => trackRevision(() => runtime.commands.createHero(input))}
+        onUpdate={updateHero}
+        onRetire={(id) => trackRevision(() => runtime.commands.removeHero(id))}
         flushRef={heroFlushRef}
       />
     );
@@ -134,9 +175,9 @@ export default function App({ browser = window, runtimeFactory = createBrowserRu
         returnTo={state.route.returnTo || { page: "home" }}
         persistence={state.persistence}
         artworkRepository={runtime.artworkRepository}
-        onUpdate={runtime.commands.updateScene}
-        onReplaceArtwork={runtime.commands.replaceSceneArtwork}
-        onUseWhiteCanvas={runtime.commands.useWhiteCanvas}
+        onUpdate={updateScene}
+        onReplaceArtwork={(id, blob) => trackRevision(() => runtime.commands.replaceSceneArtwork(id, blob))}
+        onUseWhiteCanvas={(id) => trackRevision(() => runtime.commands.useWhiteCanvas(id))}
         flushRef={workbenchFlushRef}
         confirmChange={(message) => browser.confirm(message)}
       />
@@ -158,7 +199,7 @@ export default function App({ browser = window, runtimeFactory = createBrowserRu
             returnTo: { page: "home" },
           })
         }
-        onDelete={(scene) => runtime.commands.removeScene(scene.id)}
+        onDelete={(scene) => trackRevision(() => runtime.commands.removeScene(scene.id))}
       />
     );
   }

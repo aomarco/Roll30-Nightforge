@@ -2,7 +2,16 @@ import { ITEM_BY_ID, ITEM_CATALOG, getItem } from "./catalog.js";
 
 const success = (value, metadata = {}) => ({ ok: true, value, ...metadata });
 const failure = (code, message) => ({ ok: false, code, message });
-const positiveInteger = (value) => Math.max(0, Math.floor(Number(value) || 0));
+export const MAX_INVENTORY_QUANTITY = Number.MAX_SAFE_INTEGER;
+
+export const positiveInteger = (value) => {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) return 0;
+  return Math.min(MAX_INVENTORY_QUANTITY, Math.floor(number));
+};
+
+const addQuantities = (left, right) =>
+  Math.min(MAX_INVENTORY_QUANTITY, left + right);
 
 export function normalizeInventoryEntries(entries, catalogById = ITEM_BY_ID) {
   const quantities = new Map();
@@ -16,7 +25,7 @@ export function normalizeInventoryEntries(entries, catalogById = ITEM_BY_ID) {
         unknownItemIds.add(itemId);
         continue;
       }
-      quantities.set(itemId, (quantities.get(itemId) || 0) + quantity);
+      quantities.set(itemId, addQuantities(quantities.get(itemId) || 0, quantity));
     }
   }
   return {

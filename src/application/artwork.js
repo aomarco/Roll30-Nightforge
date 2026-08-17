@@ -6,6 +6,29 @@ const invalidArtwork = (message) =>
     retryable: false,
   });
 
+export const MAX_ARTWORK_BYTES = 25 * 1024 * 1024;
+export const MAX_ARTWORK_DIMENSION = 16_384;
+export const MAX_ARTWORK_PIXELS = 40_000_000;
+
+const oversizedArtwork = (message) =>
+  failure("artwork-too-large", message, {
+    recovery: "Resize or compress the image, then retry. The previous Scene artwork was preserved.",
+    retryable: false,
+  });
+
+const validateDimensions = ({ width, height }) => {
+  if (width <= 0 || height <= 0) {
+    return invalidArtwork("Nightforge could not decode usable dimensions from that image.");
+  }
+  if (width > MAX_ARTWORK_DIMENSION || height > MAX_ARTWORK_DIMENSION) {
+    return oversizedArtwork(`Scene artwork cannot exceed ${MAX_ARTWORK_DIMENSION.toLocaleString()} pixels on either side.`);
+  }
+  if (width * height > MAX_ARTWORK_PIXELS) {
+    return oversizedArtwork(`Scene artwork cannot exceed ${MAX_ARTWORK_PIXELS.toLocaleString()} decoded pixels.`);
+  }
+  return success({ width, height });
+};
+
 export function createBrowserArtworkDecoder(browser = globalThis) {
   return async (blob) => {
     if (!(blob instanceof Blob) || !blob.type?.toLowerCase().startsWith("image/")) {
@@ -14,15 +37,18 @@ export function createBrowserArtworkDecoder(browser = globalThis) {
     if (blob.size <= 0) {
       return invalidArtwork("Nightforge cannot use an empty image as Scene artwork.");
     }
+    if (blob.size > MAX_ARTWORK_BYTES) {
+      return oversizedArtwork("Scene artwork cannot exceed 25 MiB.");
+    }
 
     try {
       if (typeof browser.createImageBitmap === "function") {
         const bitmap = await browser.createImageBitmap(blob);
-        const dimensions = { width: bitmap.width, height: bitmap.height };
-        bitmap.close?.();
-        return dimensions.width > 0 && dimensions.height > 0
-          ? success(dimensions)
-          : invalidArtwork("Nightforge could not decode usable dimensions from that image.");
+        try {
+          return validateDimensions({ width: bitmap.width, height: bitmap.height });
+        } finally {
+          bitmap.close?.();
+        }
       }
 
       if (browser.Image && browser.URL?.createObjectURL) {
@@ -37,9 +63,7 @@ export function createBrowserArtworkDecoder(browser = globalThis) {
             image.onerror = () => reject(new Error("The browser rejected the image data."));
             image.src = objectUrl;
           });
-          return dimensions.width > 0 && dimensions.height > 0
-            ? success(dimensions)
-            : invalidArtwork("Nightforge could not decode usable dimensions from that image.");
+          return validateDimensions(dimensions);
         } finally {
           browser.URL.revokeObjectURL?.(objectUrl);
         }

@@ -64,11 +64,26 @@ export function createStateRepository(
     const currentPrimary = inspectEnvelope(primaryRead.value);
     const loaded = load();
     if (!loaded.ok) return loaded;
+    const proposedRevision = Number(proposed?.revision);
+    if (!Number.isSafeInteger(proposedRevision) || proposedRevision < 0 || proposedRevision !== loaded.value.revision) {
+      return failure("storage-revision-conflict", "Nightforge state changed before this save could complete.", {
+        recovery: "Review the latest state and retry your change. No newer data was overwritten.",
+        retryable: true,
+        expectedRevision: proposedRevision,
+        actualRevision: loaded.value.revision,
+      });
+    }
+    if (loaded.value.revision === Number.MAX_SAFE_INTEGER) {
+      return failure("storage-revision-exhausted", "Nightforge cannot safely assign another storage revision.", {
+        recovery: "Export your current data and begin with a fresh Nightforge storage envelope.",
+        retryable: false,
+      });
+    }
 
     const next = sealEnvelope(
       {
         ...proposed,
-        revision: Math.max(loaded.value.revision, Number(proposed?.revision) || 0) + 1,
+        revision: loaded.value.revision + 1,
       },
       clock(),
     );

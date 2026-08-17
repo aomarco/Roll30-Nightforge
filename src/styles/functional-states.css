@@ -1,3 +1,53 @@
+@font-face {
+  font-family: "Nightforge Fraunces";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("../../node_modules/@fontsource-variable/fraunces/files/fraunces-latin-full-normal.woff2") format("woff2-variations");
+}
+
+@font-face {
+  font-family: "Nightforge Plus Jakarta Sans";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 800;
+  src: url("../../node_modules/@fontsource-variable/plus-jakarta-sans/files/plus-jakarta-sans-latin-wght-normal.woff2") format("woff2-variations");
+}
+
+@font-face {
+  font-family: "Nightforge IBM Plex Mono";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url("../../node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Nightforge IBM Plex Mono";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500;
+  src: url("../../node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-500-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Nightforge IBM Plex Mono";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600;
+  src: url("../../node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-600-normal.woff2") format("woff2");
+}
+
+.nf-state-responsive-shell,
+.nf-state-table-root,
+.nf-state-dialog,
+.nf-state-cinematic {
+  --sans: "Nightforge Plus Jakarta Sans", sans-serif;
+  --serif: "Nightforge Fraunces", Georgia, serif;
+  --mono: "Nightforge IBM Plex Mono", monospace;
+  font-family: var(--sans);
+}
+
 .nf-state-disabled[disabled] {
   cursor: not-allowed;
   opacity: .42;
@@ -587,11 +637,47 @@
 }
 
 .nf-state-loot-button {
-  cursor: pointer;
+  cursor: default;
 }
 
 .nf-state-loot-button:focus-within {
   border-color: var(--jade);
+}
+
+.nf-state-loot-open {
+  align-items: center;
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  flex: 1;
+  font: inherit;
+  gap: 14px;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+}
+
+.nf-state-loot-open .loot-meta {
+  flex: 1;
+}
+
+.nf-state-fatal-root .viewport {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+}
+
+.nf-state-fatal-error {
+  margin: auto;
+  max-width: 560px;
+  padding: 48px 28px;
+  text-align: center;
+}
+
+.nf-state-fatal-error .btn {
+  margin-top: 8px;
 }
 
 .nf-state-gear-continuation {

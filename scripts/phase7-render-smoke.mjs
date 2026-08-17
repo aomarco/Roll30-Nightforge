@@ -58,7 +58,7 @@ try {
   assert.match(manualMarkup, /Gear &amp; treasures/);
   assert.match(manualMarkup, /Loadout/);
   assert.match(manualMarkup, /Chest 1/);
-  assert.match(manualMarkup, /aria-label="Chest with 2 items"/);
+  assert.match(manualMarkup, /aria-label="Chest with 2 items, use arrow keys to move"/);
   assert.doesNotMatch(manualMarkup, /Thorin|Elara|Goblin/);
 
   const heroMarkup = renderToStaticMarkup(React.createElement(TableScreen, {

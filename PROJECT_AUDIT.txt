@@ -1,0 +1,1188 @@
+NIGHTFORGE PROJECT AUDIT
+========================
+
+Audit date: 17 August 2026 (Australia/Sydney)
+Audited worktree: C:\Users\Marcelo\Documents\Roll30 UI Rebuild
+Pre-fix commit: 7e803ee46d4f739c5d12a97e82f510bed4ac5dfa
+Audit scope: the complete tracked project, generated catalog, documentation,
+configuration, dependency graph, build and deployment scripts, automated tests,
+browser baselines, ignored build output, and runtime execution paths.
+
+
+1. EXECUTIVE ASSESSMENT
+=======================
+
+Nightforge is a clean-room, browser-local virtual tabletop and character manager.
+It implements Scene and Hero management, Scene artwork, free-play tokens, Battle
+Setup, initiative and movement, attacks and conditions, physical thrown weapons,
+ammunition, chests and loot, encounter completion, restart, and recovery-aware
+browser persistence. Its permanent visual design is deliberately frozen and is
+kept separate from the original Roll30 implementation and save keys.
+
+The project is substantially implemented and unusually well tested for its size.
+The pre-fix baseline passed all 229 unit tests, every server-render smoke suite,
+all phase verifiers that were run independently, the dependency vulnerability
+audit, and the production build. Fourteen of fifteen Playwright tests passed in
+the first complete run. The remaining screenshot test passed when rerun alone;
+comparison showed that its intermittent failure was caused by remote web-font
+availability rather than a persistent layout change.
+
+Despite that strong baseline, the project is NOT production-ready at this exact
+pre-fix checkpoint. Two defects can silently lose or ambiguously mutate durable
+game state: attack and rolled-retrieval results are not saved until their
+cinematic reaches its impact timer, and duplicate stable IDs are accepted in
+otherwise valid state. Additional confirmed issues affect corrupt-value safety,
+unbounded storage growth, upload resource limits, keyboard/accessibility support,
+cross-tab consistency, final debounced edits, crash recovery, deterministic font
+delivery, CI supply-chain hardening, package maintenance, and verification depth.
+
+No evidence was found that Nightforge imports original Roll30 code, UI, UX,
+layout, save data, characters, games, maps, or storage keys. The legacy Roll30
+worktree was not modified during this audit.
+
+
+2. AUDIT METHOD AND COVERAGE
+============================
+
+The audit was performed before making runtime changes.
+
+Coverage completed:
+
+- Enumerated all tracked and relevant ignored files and directories.
+- Read every tracked source, test, script, configuration, generated-data,
+  manifest, and documentation file in full.
+- Read the 5,227-line generated catalog in chunks and followed its generator,
+  manifest, and integrity verifier.
+- Followed imports and calls from main.jsx through React screens, application
+  commands, repositories, normalization, storage, combat, and artwork adapters.
+- Read all 229 unit tests, all render-smoke scripts, all phase verifiers, the
+  434-line Playwright suite, the implementation plan, parity register, phase
+  completion record, README, package lock, and Pages workflow.
+- Inspected all 42 committed browser baseline PNG files across Windows and Linux,
+  plus the available Phase 12 acceptance captures.
+- Checked every tracked text file for invalid UTF-8, byte-order marks, and line
+  ending anomalies. None was invalid; apparent "Â"/"â" terminal output was a
+  PowerShell display-decoding problem, not malformed source.
+- Checked relative import resolution. The only apparent miss was text embedded
+  in a verifier test, not a runtime import.
+- Reinstalled dependencies from package-lock.json and confirmed the clean tree.
+- Ran npm audit: zero known vulnerabilities at all severities.
+- Ran the official verification pipeline and isolated stages after its one flaky
+  screenshot interruption.
+- Ran targeted probes for duplicate IDs, non-finite values, integer overflow,
+  and encounter-log growth.
+- Compared expected, actual, and diff images for the browser failure and reran
+  the exact failing test.
+- Inspected accessibility semantics for every input, select, textarea, dialog,
+  pointer-driven control, and non-semantic click target in the JSX source.
+- Checked current GitHub Actions release tags against official upstream action
+  repositories and resolved their immutable commit identities.
+
+Inventory at the audited commit:
+
+- 140 tracked files.
+- 98 tracked text/configuration/code/document files.
+- 42 committed PNG browser baselines: 21 Windows and 21 Linux.
+- 46 runtime JavaScript/JSX/CSS source files counted by the phase verifier.
+- 11 managed modal/drawer dialogs.
+- 229 Node unit tests.
+- 15 Playwright browser tests.
+- 47 clean-room parity journeys recorded as resolved.
+- Six frozen Nightforge stylesheets plus the protected Glyphs component and the
+  scoped functional-states stylesheet.
+
+
+3. WHAT THE PROJECT DOES
+========================
+
+Nightforge provides four primary destinations:
+
+1. Library
+   Creates, opens, orders, configures, and deletes Play or Battle Scenes.
+
+2. Heroes
+   Creates and retires Heroes; edits identity, race, class, level, point-buy
+   abilities, languages, saves, skills, equipment, enchantments, and implemented
+   worn magic. Fighter rules and a Wizard calculation scaffold are implemented.
+
+3. Scene workbench
+   Edits Scene identity and type, accepts verified artwork or a white canvas,
+   changes Battle grid scale, previews the Scene, and safely stages artwork
+   replacement and cleanup.
+
+4. Table
+   In Play mode it provides unconstrained tokens, camera control, artwork
+   alignment, walls, and a ruler. In Battle Setup it provides manual combatants,
+   Hero snapshots, equipment, chests, snapped placement, and collision rules. In
+   active Battle it provides initiative, movement, Dash, weapon Swap, attacks,
+   conditions, chests, ammunition, thrown-item state, retrieval, victory, and
+   restart.
+
+All durable application data is local to the browser. There is no server API,
+account system, cloud synchronization, telemetry, or imported Roll30 data.
+
+
+4. ARCHITECTURE
+===============
+
+4.1 Presentation layer
+----------------------
+
+- src/main.jsx imports the visual system and mounts React.
+- src/App.jsx owns the reducer-backed application shell, routing, active Scene,
+  screen composition, and navigation-time draft flushing.
+- src/screens contains Library, Heroes, Scene, Table, Battle Setup, command,
+  loot, cinematic, and completion interfaces.
+- src/ui contains shared glyphs, portal rendering, and the dialog focus manager.
+- Six permanent CSS files preserve the Nightforge visual system byte-for-byte.
+- src/styles/functional-states.css contains later runtime, responsive, error,
+  large-data, and conditional styling under the nf-state namespace.
+
+The application intentionally uses internal reducer routing rather than a URL
+router. Startup always opens Library, while the active Scene context remains
+durable.
+
+4.2 Application layer
+---------------------
+
+- application/state.js defines the reducer, lifecycle, route, collections,
+  active Scene, and persistence status.
+- application/commands.js is the transaction boundary used by screens. It
+  coordinates repositories, dispatches saving/saved/error state, implements
+  Scene/Hero workflows, and stages artwork changes.
+- application/browserRuntime.js constructs browser adapters and injects them
+  into commands.
+- application/result.js provides the stable success/failure result contract.
+- application/library.js provides ordering and presentation decisions.
+- application/artwork.js validates image blobs through browser decoding.
+
+4.3 Domain layer
+----------------
+
+- domain/records.js owns canonical Scene and Hero record creation.
+- domain/heroes.js contains class, race, point-buy, skill/save, HP, AC, speed,
+  initiative, and Wizard-scaffold derivations.
+- domain/catalog.generated.js is the immutable generated item dataset.
+- domain/catalog.js exposes lookups, formatting, filters, sorting, and facets.
+- domain/items.js normalizes inventory and enforces equipment, hand, shield,
+  two-handed, Light, Versatile, enchantment, and worn-item rules.
+- domain/table.js owns cameras, artwork transforms, tokens, chests, grid
+  geometry, collision, turn resources, encounter normalization, walls, and ruler.
+- domain/combat.js owns active-turn context, A* movement, wall/obstacle routing,
+  movement currency, Dash, Swap, and End Turn.
+- domain/attacks.js owns range tiers, line of sight, roll modes, attacks, damage,
+  criticals, dual wielding, and condition changes.
+- domain/conditions.js owns the 15-condition catalog and effect flags.
+- domain/encounter.js owns ammunition supply, thrown items, chest interaction,
+  retrieval, completion, ammunition recovery, and restart.
+
+Domain operations are mostly pure and accept injected ID/random sources, which
+makes the rules deterministic and independently testable.
+
+4.4 Persistence layer
+---------------------
+
+- storage/envelope.js normalizes the top-level schema, creates an FNV-1a-style
+  corruption checksum, seals state, and diagnoses invalid JSON, shapes, versions,
+  records, or checksums.
+- storage/stateRepository.js reads primary and backup LocalStorage envelopes,
+  chooses the newest valid revision, performs verified writes, preserves prior
+  state on failure, and distinguishes quota exhaustion.
+- storage/entityRepositories.js provides Scene and Hero CRUD, active-Scene
+  behavior, recency, and pending artwork deletion.
+- storage/sessionRepository.js stores only convenience active-Scene context in
+  SessionStorage.
+- storage/artworkRepository.js stores binary artwork in an isolated IndexedDB
+  object store and maps request/transaction failures into stable results.
+- storage/constants.js owns the isolated schema, keys, IndexedDB names, and the
+  forbidden legacy key list.
+
+Nightforge keys are isolated under roll30-nightforge-v1:* and artwork is isolated
+under roll30-nightforge-assets. The checksum is for accidental corruption, not
+authentication or tamper resistance; that is appropriate for a local-only app.
+
+4.5 Generated data and release tooling
+--------------------------------------
+
+- scripts/generate-phase5-catalogs.mjs reads three explicitly named local SRD
+  inputs and refuses incomplete counts.
+- scripts/phase5-catalog-manifest.json records SHA-256 identities for generator
+  inputs and output.
+- Phase-specific render and verification scripts guard behavior, purity, static
+  contracts, catalog integrity, and frozen visual files.
+- Playwright owns browser baselines for Windows and Linux.
+- Vite builds root development, /Roll30-Nightforge/ preview, and /Roll30/
+  production paths.
+- GitHub Pages CI installs dependencies and Chromium, verifies, builds, uploads,
+  and deploys the appropriate repository-specific artifact.
+
+
+5. COMPONENT INTERACTIONS
+=========================
+
+The normal write path is:
+
+Screen event
+  -> application command
+  -> Scene/Hero repository
+  -> record/domain normalization
+  -> StateRepository sealed LocalStorage write
+  -> read-back checksum and revision verification
+  -> reducer collection replacement
+  -> React render
+
+The artwork replacement path is deliberately two-phase:
+
+Decode candidate
+  -> write new IndexedDB blob
+  -> read it back
+  -> update Scene artwork reference in LocalStorage
+  -> delete prior blob
+  -> if cleanup fails, retain a durable pending-delete key
+
+The Battle path is:
+
+Persisted Setup Scene
+  -> validate roster/grid/collisions
+  -> snap entities and roll stable initiative
+  -> create encounter and first-turn resources
+  -> restore active turn from persisted initiative
+  -> pure domain command returns a complete Scene patch
+  -> command/repository persists the patch atomically
+  -> only End Turn advances initiative
+  -> defeating state completes the encounter and recovers ammunition once
+  -> restart restores HP, initiative, resources, conditions, and physical items
+     while preserving deliberately depleted chests
+
+
+6. STEP-BY-STEP EXECUTION FLOW
+==============================
+
+1. The browser loads index.html and the Vite module entry.
+2. main.jsx imports CSS in the defined order and mounts App.
+3. App constructs one browser runtime with LocalStorage, SessionStorage,
+   IndexedDB, repository, decoder, and command instances.
+4. An effect calls commands.initialize().
+5. Scene and Hero repositories load the best valid envelope. Primary and backup
+   checksums are inspected; the newest valid revision wins. If both are unusable,
+   an empty in-memory vault is returned without overwriting damaged evidence.
+6. Session context is used only if it references a real Scene; otherwise the
+   durable active Scene is considered. The reducer still routes to Library.
+7. Pending or orphaned artwork cleanup begins asynchronously.
+8. User navigation selects a screen. Guarded destinations require an active
+   Scene. Navigation away from Scene/Hero editors flushes queued drafts.
+9. User operations call commands; commands expose saving, saved, or actionable
+   failure state and refresh reducer collections from verified repository data.
+10. Scene artwork uses the staged transaction described above.
+11. Play Table state stores tokens, map transforms, walls, and ruler-independent
+    map geometry while camera state remains transient.
+12. Battle Setup stores tokens, Hero snapshots, equipment, chests, grid placement,
+    and then atomically creates encounter initiative/resources.
+13. Active Battle derives legal commands from the persisted active token and
+    resources. Movement uses bounded eight-direction A* and wall/obstacle checks.
+14. Attack/retrieval domain calls calculate deterministic result objects. At the
+    audited checkpoint, rolled results are incorrectly persisted only at a later
+    cinematic impact timer; this is issue AUD-01.
+15. Completion stores final state and ammunition recovery; restart creates a
+    fresh active encounter while preserving chest depletion.
+16. Vite builds a static Pages application with a repository-specific base path.
+
+
+7. IMPORTANT ASSUMPTIONS AND INTENTIONAL BOUNDARIES
+===================================================
+
+- The application is single-user and browser-local; it has no authentication or
+  server trust boundary.
+- Modern browser APIs are available: ES modules, React 19 support, LocalStorage,
+  SessionStorage, IndexedDB, Blob/image decoding, crypto.randomUUID, SVG, and
+  Pointer Events.
+- Browser storage may fail or fill; failures must preserve the last valid state.
+- Primary/backup checksums detect accidental damage only.
+- Startup must always show Library, even when active context is restored.
+- Scene kind and encounter status are separate. Play never has an encounter.
+- Hero tokens are snapshots; later Hero edits or retirement do not mutate them.
+- Wizard spells are a visible scaffold, not a spell-economy implementation.
+- Most magic items are intentionally inert; six worn effects are implemented.
+- Network/cloud multiplayer, accounts, permissions, and data import are outside
+  the approved scope.
+- No original Roll30 data is imported or migrated.
+- Play token coordinates and artwork offsets are intentionally unbounded.
+- Both full and half walls block movement. Full walls block ranged/thrown line of
+  sight; half walls impose disadvantage. Melee intentionally ignores wall LOS.
+- Diagonal movement costs one five-foot cell by the written Nightforge contract.
+- "Enemy" means another targetable token; no faction/team subsystem is specified.
+- Hidden walls remain mechanically active by design.
+- The complete catalog and very long user-facing names are intentionally retained,
+  so hardening must not arbitrarily truncate legitimate content.
+- The frozen Nightforge UI, UX, layout, protected stylesheets, and Glyphs source
+  must remain visually unchanged during functional repair.
+
+
+8. CONFIRMED ISSUES AND REQUIRED FIXES
+======================================
+
+AUD-01 - HIGH - Rolled combat results are not durable until cinematic impact
+----------------------------------------------------------------------------
+
+Evidence:
+
+- TableScreen.resolveAttackTarget computes the random attack immediately, starts
+  the cinematic, and waits 420 ms under reduced motion or 1,980 ms normally
+  before calling savePatch.
+- Rolled retrieval similarly waits 340 ms or 1,640 ms.
+- Component cleanup cancels every pending timer on unmount.
+- Reloading, closing the tab, or otherwise unmounting before impact discards the
+  already-rolled attack/retrieval, resource expenditure, HP, ammunition, thrown
+  item, or completion result.
+
+Why this matters:
+
+The animation becomes an unintended durability boundary. A result visibly begins
+but can vanish, enabling accidental loss and rerolling. This contradicts the
+atomic persistence contract.
+
+Required fix:
+
+Persist the complete resolved Scene synchronously before beginning the cinematic.
+Only start a success cinematic after verified persistence. If saving fails, show
+the existing Nightforge-native failure state and do not present an unsaved success.
+Add tests that prove persistence occurs before any cinematic timer and survives an
+immediate reload/unmount.
+
+
+AUD-02 - HIGH - Duplicate stable IDs survive normalization and creation collisions
+-------------------------------------------------------------------------------
+
+Evidence:
+
+- normalizeEnvelope retains duplicate Scene and Hero IDs.
+- normalizeTableTokens, normalizeChests, and normalizeWalls retain duplicate IDs.
+- updateToken/updateChest modify every duplicate; collection update changes the
+  first, while collection removal removes all matching records.
+- React keys, selection, initiative, resources, and references become ambiguous.
+- Repository create/createActive do not reject an injected ID collision.
+- Table token/chest/wall creation does not reject a generated collision.
+
+Why this matters:
+
+Stable identity is a core invariant. Duplicate IDs can render unpredictably,
+mutate the wrong logical record, collapse combat resources, or delete more data
+than the user selected.
+
+Required fix:
+
+Deterministically retain the first valid record for each ID during corrupt-state
+normalization; normalize encounter references against that repaired collection.
+Reject creation-time collisions with an actionable, non-mutating result. Add tests
+for top-level and nested collections and every creation path.
+
+
+AUD-03 - HIGH - Non-finite and overflowing integers can become persisted null
+---------------------------------------------------------------------------
+
+Evidence:
+
+- The shared inventory positiveInteger calculation lets Infinity through.
+- Duplicate quantities can sum beyond Number.MAX_SAFE_INTEGER.
+- Top-level revision normalization lets Infinity through.
+- JSON.stringify converts Infinity to null, silently changing meaning.
+- A targeted probe produced revision:null and quantity:null from accepted input.
+
+Why this matters:
+
+Corrupt but parseable inputs can cross normalization, then mutate during
+serialization. Revisions may stop ordering correctly and inventory quantities may
+be lost or misread.
+
+Required fix:
+
+Use finite, non-negative safe-integer normalization. Saturate accumulated
+quantities at Number.MAX_SAFE_INTEGER and normalize revisions the same way. Test
+NaN, infinities, numeric strings, negative values, and overflow sums.
+
+
+AUD-04 - MEDIUM - Encounter logs grow without a bound
+-----------------------------------------------------
+
+Evidence:
+
+- normalizeEncounter accepts every string in encounter.log.
+- Movement, turn, attack, chest, loot, retrieval, and other commands append logs.
+- A targeted probe retained 50,000 entries.
+- The log is persisted but is not currently displayed.
+
+Why this matters:
+
+Long campaigns can progressively increase serialization, normalization, render
+state, and LocalStorage size until otherwise valid saves fail with quota errors.
+
+Required fix:
+
+Keep only a documented recent-history window and bound each persisted log entry.
+Centralize or normalize the cap so every command path is protected. Preserve the
+most recent entries and test oversized legacy logs and ongoing appends.
+
+
+AUD-05 - MEDIUM - Artwork accepts unbounded file and decoded image sizes
+------------------------------------------------------------------------
+
+Evidence:
+
+- The decoder verifies image MIME, non-empty data, and positive dimensions.
+- It has no byte-size, dimension, or decoded-pixel limit before IndexedDB storage.
+
+Why this matters:
+
+A huge or decompression-heavy image can consume excessive memory during decode,
+freeze the page, exhaust IndexedDB quota, or make future Table rendering unstable.
+
+Required fix:
+
+Reject files above a documented byte limit before decoding and reject excessive
+dimensions/pixel area immediately after decode. Close decoded bitmaps in all
+branches and return a specific actionable failure while preserving prior artwork.
+Add boundary tests for bytes, dimensions, and pixels.
+
+
+AUD-06 - MEDIUM - Several controls have no programmatic accessible name
+------------------------------------------------------------------------
+
+Evidence:
+
+- The Scene grid-size range is adjacent to text but has no label association or
+  aria-label.
+- Battle Setup numeric fields and creature-size select use sibling label elements
+  with no htmlFor/id association.
+- Gear catalog, inventory, and chest catalog search fields rely on placeholders.
+- The Table summon select is adjacent to a heading but is not labelled.
+- The verifier checks button behavior, dialog focus, and Library tab order, but
+  does not assert accessible names for all form controls.
+
+Why this matters:
+
+Screen-reader users receive unnamed sliders, edits, searches, and selects, making
+core Scene, setup, inventory, and token operations difficult to understand.
+
+Required fix:
+
+Add semantic label associations or stable aria-label values without changing
+visual layout. Add a browser assertion that every enabled form control has a
+non-empty accessible name.
+
+
+AUD-07 - MEDIUM - Some pointer actions lack equivalent keyboard operation
+------------------------------------------------------------------------
+
+Evidence:
+
+- OwnedItemRow is a clickable article. Its child quantity/removal controls are
+  keyboard-accessible, but opening the item record itself is not.
+- Token and chest placement/movement is performed by pointer dragging. The
+  elements can receive focus, but arrow keys do not move them.
+- The existing keyboard browser test covers primary Library actions, not the
+  complete application despite the broad Phase 11 accessibility claim.
+
+Why this matters:
+
+Keyboard-only users cannot open an owned item through its primary affordance and
+cannot perform endpoint-based token/chest positioning.
+
+Required fix:
+
+Use a genuine button for the owned-item open affordance while preserving the
+pixel layout. Add arrow-key movement for focused tokens/chests in Play and Setup,
+and legal active-token movement in Battle, with collision/resource rules reused
+rather than bypassed. Freehand/path-dependent wall and ruler input may remain a
+pointer interaction under the path-dependent-input exception. Add browser tests.
+
+
+AUD-08 - MEDIUM - Remote fonts make runtime appearance and screenshots nondeterministic
+-----------------------------------------------------------------------------------
+
+Evidence:
+
+- core.css imports Fraunces, Plus Jakarta Sans, and IBM Plex Mono from Google at
+  runtime; index.html also preconnects to Google font origins.
+- The first complete Playwright run failed one stable screenshot with 9,014
+  different pixels. The diff outlined nearly every glyph while preserving layout.
+- The exact isolated test passed on rerun, demonstrating network/cache dependence.
+
+Why this matters:
+
+Offline, filtered, privacy-restricted, or transient networks silently substitute
+fallback fonts and alter the frozen UI. CI screenshot gates become flaky and the
+application has a third-party runtime request.
+
+Required fix:
+
+Bundle the exact open-licensed font files locally, retain their licenses, and
+apply them through the allowed scoped functional-state layer without changing any
+protected file. Remove unnecessary font-origin preconnects. Verify computed visual
+output and rerun every screenshot twice from clean browser contexts.
+
+
+AUD-09 - MEDIUM - Concurrent tabs can silently overwrite stale whole-Scene patches
+-------------------------------------------------------------------------------
+
+Evidence:
+
+- Repositories reload before mutations, but Table domain commands return broad
+  Scene patches computed from the React screen's earlier Scene snapshot.
+- updateScene merges that broad patch onto the current record without checking
+  the UI revision that produced it.
+- There is no storage-event synchronization or expected-revision conflict result.
+
+Why this matters:
+
+Two Nightforge tabs can edit the same Scene. A later stale Table action may replace
+arrays or encounter state written by the other tab without warning.
+
+Required fix:
+
+Add optimistic revision checks from application state through update commands and
+repository writes, return an actionable conflict rather than saving stale data,
+and synchronize reducer collections on external Nightforge storage events while
+preserving the current route when safe. Add two-runtime conflict tests.
+
+
+AUD-10 - MEDIUM - The final debounced text edit can be lost on hard unload
+-------------------------------------------------------------------------
+
+Evidence:
+
+- Scene and Hero text drafts save after a 450 ms debounce and flush on blur or
+  internal navigation.
+- App has no pagehide/beforeunload/visibility flush path.
+
+Why this matters:
+
+A reload or tab close immediately after typing can occur before blur/debounce and
+discard the final characters.
+
+Required fix:
+
+Flush the active editor synchronously on pagehide (and test the registered cleanup)
+without adding unload confirmation UI.
+
+
+AUD-11 - MEDIUM - An unexpected render exception can blank the entire application
+-------------------------------------------------------------------------------
+
+Evidence:
+
+- React is mounted directly with <App />.
+- No error boundary, componentDidCatch, or equivalent top-level recovery surface
+  exists.
+
+Why this matters:
+
+Handled repository errors are strong, but an unanticipated render defect leaves a
+blank root with no explanation or reload path.
+
+Required fix:
+
+Add a small top-level React error boundary with a Nightforge-native, conditional
+recovery screen and reload action. It must not affect normal rendering or frozen
+visual files. Add a focused test for thrown child rendering.
+
+
+AUD-12 - MEDIUM - Pages workflow has avoidable permission and supply-chain risk
+-----------------------------------------------------------------------------
+
+Evidence:
+
+- pages:write and id-token:write are granted globally, including the verification
+  job and pull-request runs that do not deploy.
+- Action references use mutable major tags rather than immutable commit SHAs.
+- The configured majors are behind current upstream releases: checkout v4,
+  setup-node v4, upload-artifact v4, upload-pages-artifact v3, deploy-pages v4.
+
+Why this matters:
+
+The verification job has broader credentials than it needs, and mutable/outdated
+action references increase maintenance and upstream supply-chain exposure.
+
+Required fix:
+
+Keep contents:read at workflow/job verification scope; grant pages/id-token only
+to the deploy job. Update official actions and pin their reviewed releases by full
+commit SHA with version comments. Update the Phase 12 verifier to validate the
+stronger contract.
+
+
+AUD-13 - LOW - Package metadata and dependency roles are stale
+--------------------------------------------------------------
+
+Evidence:
+
+- package name remains roll30-ui-redesign-test and version remains 0.0.0 although
+  the project is a completed Nightforge application.
+- Vite and @vitejs/plugin-react are build-only packages listed as production
+  dependencies.
+- Patch/minor updates are available for Vite, the React plugin, and lucide-react.
+
+Why this matters:
+
+Incorrect identity confuses artifacts and logs; dependency roles overstate the
+runtime install surface; skipped compatible maintenance accumulates avoidable
+upgrade risk.
+
+Required fix:
+
+Rename the private package to roll30-nightforge, set a truthful initial version,
+move build tooling to devDependencies, apply compatible reviewed updates, refresh
+the lockfile, and run the entire verification pipeline.
+
+
+AUD-14 - LOW - Catalog regeneration is not discoverable from normal maintainer docs
+-------------------------------------------------------------------------------
+
+Evidence:
+
+- The generator has a clear CLI usage error and the Phase Completion document
+  names the three source files and manifest.
+- package.json has no generator/check script and README does not provide the
+  command, input expectations, or manifest refresh workflow.
+
+Why this matters:
+
+The generated catalog is verifiable but a new maintainer cannot reproduce it from
+the normal README/package workflow without mining historical completion notes.
+
+Required fix:
+
+Document the generator inputs, invocation, output, and manifest integrity process
+in README and expose an explicit package script that requires a caller-supplied
+SRD directory. Do not bundle or import original Roll30 data.
+
+
+AUD-15 - LOW - Verification overclaims several properties it does not test
+--------------------------------------------------------------------------
+
+Evidence:
+
+- Phase 11 reports accessibility hardening, but its keyboard browser test covers
+  only primary Library actions and it does not check all form-control names.
+- No test asserts that rolled combat persistence precedes cinematics.
+- No tests cover duplicate top-level/nested stable IDs, non-finite revision and
+  quantity serialization, log caps, upload resource limits, or cross-tab conflict.
+- The zero-diff Windows screenshots are exposed to remote-font timing.
+
+Why this matters:
+
+Green verification can coexist with the confirmed defects above, creating false
+confidence in broad completion statements.
+
+Required fix:
+
+Add behavioral tests for every repaired invariant, make accessibility checks
+application-wide, make fonts local, and extend verifiers to inspect the stronger
+CI and runtime contracts. Treat static string checks as supporting evidence, not
+proof of behavior.
+
+
+9. WELL-DESIGNED PARTS
+======================
+
+The following areas are especially strong:
+
+- Clean-room isolation is explicit, automated, and supported by runtime key
+  boundaries rather than documentation alone.
+- The permanent Nightforge visual files have hash-based protection, while new
+  runtime styling is isolated under a dedicated namespace.
+- Domain rules are mostly pure and deterministic. Injected random and ID sources
+  make initiative, attacks, thrown landing, and restart testable.
+- The success/failure result shape is consistent and carries code, message,
+  recovery, retryability, and underlying cause without relying on thrown errors
+  for normal control flow.
+- LocalStorage writes use a validated primary/backup envelope, revisioning,
+  read-back verification, and best-effort restoration after failure.
+- Corrupt saves are diagnosed without overwriting evidence; a valid backup can be
+  used while the damaged primary remains intact.
+- Artwork replacement is carefully staged and compensates for failures at decode,
+  write, read-back, Scene commit, old-blob cleanup, and startup cleanup.
+- Hero and equipment derivations are centralized and covered by exact rule tests.
+- Battle mechanics preserve atomic pure-state transitions and detailed legal/
+  unavailable reasons.
+- A* routing, obstacle handling, diagonal corner prevention, and bounded search
+  are well separated from rendering.
+- Battle physical state is unusually complete: ammunition, thrown copies,
+  embedded/ground states, retrieval costs/rolls, completion, and restart persist.
+- Dialog focus trapping, nested-dialog stack behavior, Escape handling, and focus
+  return are centralized in one hook and tested in a real browser.
+- Large inventories, 180-token scenes, long names, quota errors, corruption,
+  reduced motion, responsive viewports, and browser zoom already have explicit
+  coverage.
+- The generated catalog has exact-count and hash integrity checks.
+- Build bases distinguish isolated preview and intended production paths.
+
+
+10. VERIFICATION BASELINE
+=========================
+
+Pre-fix results:
+
+- Clean npm ci: PASS after stopping and restoring the exact Nightforge dev server
+  that held the Windows native bundler binary.
+- npm audit: PASS, zero vulnerabilities.
+- Node tests: PASS, 229/229.
+- Phase 2-11 render smoke scripts: PASS.
+- Phase 1-10 verifiers in the complete run: PASS.
+- Playwright: 14/15 on first run; one font-glyph screenshot mismatch.
+- Isolated rerun of the exact failed Playwright test: PASS.
+- Phase 11 verifier: PASS when run independently.
+- Phase 12 verifier: PASS when run independently.
+- Dependency verifier: PASS.
+- Production build with /Roll30/ base: PASS.
+- Build output: 0.79 kB HTML, 67.71 kB CSS (13.35 kB gzip),
+  497.10 kB JavaScript (131.37 kB gzip).
+- Protected visual source: PASS, byte-identical at the pre-fix checkpoint.
+- UTF-8 validity: PASS for every tracked text file.
+- Relative import resolution: PASS for runtime imports.
+- Target dev server restored: http://127.0.0.1:5310.
+
+The first full npm run verify command did not reach its final stages because the
+Playwright chain is fail-fast. Those later stages were run independently and all
+passed. This distinction is important: the baseline has strong component evidence,
+but a single uninterrupted full-pipeline pass is still required after fixes.
+
+
+11. PRODUCTION-READINESS DECISION
+=================================
+
+Decision at pre-fix commit: NOT READY FOR PRODUCTION.
+
+Reasoning:
+
+- Core features are present and broadly correct.
+- The clean-room and visual-preservation constraints are currently satisfied.
+- The build is healthy and dependency audit is clean.
+- However, AUD-01, AUD-02, and AUD-03 can lose or ambiguously mutate durable game
+  state and therefore block release.
+- AUD-04 through AUD-12 are material reliability, accessibility, deterministic
+  delivery, concurrency, and CI-hardening gaps.
+- The current verification suite did not detect those problems, so a green subset
+  cannot substitute for repaired invariants and expanded evidence.
+
+Production readiness requires all AUD items to be resolved, the audit updated with
+post-fix evidence, all protected visual hashes unchanged, all new regression tests
+passing, repeated browser screenshot stability, a clean dependency audit, a clean
+production build, an uninterrupted full npm run verify pass, and a final manual
+requirement-by-requirement review against the original audit mandate and Nightforge
+constraints.
+
+
+12. REQUIRED POST-FIX EVIDENCE
+==============================
+
+The following evidence must be appended or summarized in this file after repair:
+
+- A resolution entry for every AUD-01 through AUD-15 item.
+- Exact files changed and why each was necessary.
+- Confirmation that core.css, shell.css, library.css, heroes.css, scene.css,
+  table.css, and ui/Glyphs.jsx remain byte-identical.
+- Unit tests covering durability timing, duplicate IDs/collisions, safe integers,
+  log limits, upload limits, revision conflicts, and error recovery.
+- Browser tests covering all control names, keyboard item opening and placement,
+  immediate combat durability, pagehide flushing, and local-font stability.
+- Two consecutive clean browser baseline runs.
+- npm audit output.
+- Production and preview build output.
+- One uninterrupted npm run verify success.
+- A clean git status review proving that no legacy Roll30 worktree or user data was
+  modified or imported.
+
+
+END OF PRE-FIX AUDIT
+====================
+
+
+13. POST-FIX AUDIT SUMMARY
+==========================
+
+Repair completed: 17 August 2026 (Australia/Sydney).
+
+The pre-fix report above was intentionally preserved as the historical record of
+what was found before remediation. This section records the implemented repairs,
+the additional defects exposed by stronger tests, and the final evidence.
+
+All AUD-01 through AUD-15 findings are resolved. Two related defects discovered
+during remediation, AUD-16 and AUD-17 below, were also fixed before completion.
+The clean-room boundary remains intact: no original Roll30 source, UI, UX, layout,
+characters, games, maps, browser saves, or other user data was imported.
+
+
+14. ISSUE-BY-ISSUE RESOLUTION
+============================
+
+AUD-01 - RESOLVED - Rolled combat results are durable before cinematics
+-------------------------------------------------------------------------------
+
+- Table attack and rolled-retrieval handlers now save the complete resolved Scene
+  synchronously before starting any success cinematic or timer.
+- A failed save prevents the success cinematic and leaves the existing actionable
+  persistence error visible.
+- The browser suite closes the page during an attack cinematic, opens a fresh page
+  in the same browser context, and proves that the spent Action and log survived.
+- The Phase 11 verifier independently checks save-before-cinematic source order for
+  both attack and rolled retrieval paths.
+
+AUD-02 - RESOLVED - Stable IDs are unique and creation collisions are recoverable
+-------------------------------------------------------------------------------
+
+- Envelope normalization retains the first valid Scene/Hero for each normalized ID.
+- Table token, chest, and wall normalization uses the same first-valid rule and
+  drops invalid nested records without discarding otherwise recoverable state.
+- Scene, active-Scene, and Hero creation reject injected ID collisions without a
+  mutation.
+- A shared generated-ID validator protects token, chest, and wall creation from
+  blank, duplicate, or throwing factories. Existing battle-item collision rules
+  remain in force.
+- Regression tests exercise top-level and nested duplicates, repository creation,
+  active creation, Hero creation, and all shared Table creation paths.
+
+AUD-03 - RESOLVED - Persisted integers remain finite and safe
+-------------------------------------------------------------------------------
+
+- Inventory quantities now normalize to non-negative safe integers and duplicate
+  sums saturate at Number.MAX_SAFE_INTEGER.
+- Revisions use finite non-negative safe-integer normalization.
+- A save at Number.MAX_SAFE_INTEGER fails explicitly with
+  storage-revision-exhausted instead of overflowing.
+- Tests cover NaN, Infinity, negative values, numeric strings, duplicate overflow,
+  serialization, stale revisions, and revision exhaustion.
+
+AUD-04 - RESOLVED - Encounter history is bounded
+-------------------------------------------------------------------------------
+
+- Encounter logs retain the 500 most recent string entries.
+- Each entry is limited to 500 characters.
+- Every movement, Dash, Swap, turn, attack, chest, loot, retrieval, and completion
+  append uses the centralized bounded helper.
+- Legacy oversized arrays are scanned from newest to oldest without constructing
+  an unbounded intermediate normalized array.
+- Tests cover oversized legacy history and continuing appends at the cap.
+
+AUD-05 - RESOLVED - Artwork resource use is bounded
+-------------------------------------------------------------------------------
+
+- Artwork is rejected before decode above 25 MiB.
+- Decoded images are rejected above 16,384 pixels on either side or 40,000,000
+  total pixels.
+- ImageBitmap objects close in successful and rejected branches; object URLs are
+  still revoked by the fallback decoder.
+- The artwork-too-large result explains recovery and preserves prior artwork.
+- Tests cover rejection and exact acceptance boundaries for bytes, dimensions,
+  pixels, and bitmap cleanup.
+
+AUD-06 - RESOLVED - Enabled form controls have accessible names
+-------------------------------------------------------------------------------
+
+- Stable names were added to the Scene grid slider, Setup numeric/size controls,
+  Gear and chest searches, and the Table summon selector.
+- The browser suite walks Library, Heroes, Gear drawers, Scene, Table, and chest
+  editing and fails if any enabled input, select, or textarea lacks a programmatic
+  name.
+- All 11 managed dialogs retain their accessible dialog names and focus behavior.
+
+AUD-07 - RESOLVED - Core pointer operations have keyboard equivalents
+-------------------------------------------------------------------------------
+
+- The owned-item primary affordance is a real button; quantity and removal controls
+  remain separate controls rather than nested buttons.
+- Focused Play and Setup tokens move with arrow keys.
+- Setup chests move with arrow keys using the existing grid/collision rules.
+- The active Battle token moves with arrow keys using the existing wall-aware route,
+  collision, condition, and movement-resource rules.
+- Browser journeys prove the item and all three movement modes. Wall drawing and
+  ruler tracing remain path-dependent pointer input, as documented in the audit.
+
+AUD-08 - RESOLVED - Fonts are local and deterministic
+-------------------------------------------------------------------------------
+
+- Exact Fraunces, Plus Jakarta Sans, and IBM Plex Mono webfonts are packaged from
+  pinned Fontsource dependencies.
+- License and copyright notices are retained in public/THIRD_PARTY_FONTS.txt.
+- The protected core.css file was not edited. A Vite pre-transform strips its frozen
+  remote import from served/built CSS, while functional-states.css supplies scoped
+  local family aliases for every Nightforge root, dialog, Table, and cinematic.
+- Google font preconnects were removed from index.html.
+- Browser tests prove the local families are active and no Google font resource is
+  requested. Production and preview output contain no Google font URL.
+- Two consecutive final-state browser runs passed all visual baselines.
+
+AUD-09 - RESOLVED - Concurrent tabs cannot silently overwrite stale broad patches
+-------------------------------------------------------------------------------
+
+- Scene/Hero updates carry the application revision into the repository.
+- Repository and StateRepository layers reject stale revisions with actionable
+  storage-revision-conflict results before mutation.
+- App keeps a synchronous revision ref so two legitimate saves in one UI interaction
+  do not falsely conflict while React is scheduling its render.
+- Nightforge listens only for its isolated state storage key and synchronizes newer
+  Scenes, Heroes, active context, and revision into the reducer.
+- Scene/Hero editors reconcile same-record external changes while preserving any
+  locally dirty field.
+- Unit tests use two repositories over one storage adapter; browser tests edit from
+  both tabs in both directions and verify visible Scene and Hero synchronization.
+
+AUD-10 - RESOLVED - Final debounced drafts flush on hard page exit
+-------------------------------------------------------------------------------
+
+- App registers and cleans up a pagehide handler.
+- Only the currently active Scene or Hero editor is flushed.
+- Existing blur, internal navigation, and 450 ms debounce behavior remains intact.
+- A browser journey types a Hero name, dispatches pagehide before the debounce, and
+  proves the final value is already in the verified envelope.
+
+AUD-11 - RESOLVED - Unexpected render errors have a recovery surface
+-------------------------------------------------------------------------------
+
+- The application root is wrapped in ApplicationErrorBoundary.
+- The conditional fallback uses existing Nightforge primitives plus scoped
+  functional-state styles and offers a Reload Nightforge action.
+- Normal rendering and protected visual sources are unchanged.
+- Server render smoke covers the fallback markup, and a dedicated browser harness
+  throws a real React child error, verifies the alert, and exercises recovery.
+
+AUD-12 - RESOLVED - Pages permissions and action references are hardened
+-------------------------------------------------------------------------------
+
+- Global workflow permission is contents:read only.
+- pages:write and id-token:write exist only on the deploy job.
+- Official actions were updated and pinned to reviewed immutable SHAs:
+  checkout v7.0.1, setup-node v7.0.0, upload-artifact v7.0.1,
+  upload-pages-artifact v5.0.0, and deploy-pages v5.0.0.
+- Phase 12 verification checks every exact SHA, requires all action references to
+  be 40 hexadecimal characters, and enforces one deploy-scoped permission grant.
+
+AUD-13 - RESOLVED - Package identity and dependency roles are current
+-------------------------------------------------------------------------------
+
+- Package identity is roll30-nightforge 1.0.0.
+- Vite and its React plugin are devDependencies; direct runtime dependencies are
+  React, React DOM, and lucide-react.
+- Compatible updates were applied to Vite 8.2.1, @vitejs/plugin-react 6.0.5, and
+  lucide-react 1.31.0; the lockfile was regenerated by npm.
+- Unneeded direct optional emnapi declarations were removed. The existing nanoid
+  security override remains pinned.
+- A clean npm ci completed, npm outdated returned an empty object, npm ls resolved,
+  and npm audit reported zero vulnerabilities.
+
+AUD-14 - RESOLVED - Catalog regeneration is documented and callable
+-------------------------------------------------------------------------------
+
+- package.json exposes catalog:generate.
+- README names the three caller-supplied SRD inputs, invocation, generated output
+  review, manifest hash refresh, and verification steps.
+- The generator still refuses missing/unexpected inputs; no SRD input or original
+  Roll30 data was added to the repository or runtime.
+
+AUD-15 - RESOLVED - Verification now matches the repaired claims
+-------------------------------------------------------------------------------
+
+- New audit regressions cover duplicate identity, every shared creation validator,
+  integer safety, log limits, artwork limits, revision conflict/exhaustion, and
+  synchronization reduction.
+- The browser suite expanded from 15 to 23 journeys and now covers application-wide
+  form names, keyboard item/map use, pre-cinematic durability, pagehide, two-tab
+  round trips, local fonts, and a real error-boundary failure.
+- Historical Phase 6/7/8 checks were updated to validate the stronger accessible
+  labels and revision-safe wiring.
+- Phase 11 verifies the new files and contracts, exact browser journey count, dialog
+  count, protected hashes, CI hardening, font hardening, and reconciliation wiring.
+- Static checks are treated as supporting evidence alongside unit, render, and real
+  browser behavior.
+
+AUD-16 - RESOLVED - Mounted editors initially remained stale after external sync
+-------------------------------------------------------------------------------
+
+This was discovered when the new cross-tab browser journey was strengthened from
+one-way Library synchronization to a two-way editing round trip. Application state
+was current, but mounted Scene/Hero local draft state did not react to same-record
+prop updates. Dirty-aware effects now refresh clean fields and retain unsaved local
+fields. The two-tab browser journey proves Scene and Hero visibility and follow-up
+writes in both directions.
+
+AUD-17 - RESOLVED - Repair growth crossed Vite's default chunk warning threshold
+-------------------------------------------------------------------------------
+
+The repaired single chunk reached 504.39 kB minified. Vite 8/Rolldown manual code
+splitting now separates stable node_modules code from application code. The final
+production build emits a 303.28 kB application chunk and 202.17 kB vendor chunk,
+with no large-chunk warning and no runtime/UI behavior change.
+
+
+15. FILES CHANGED AND WHY
+=========================
+
+Release, dependency, and maintainer configuration:
+
+- .github/workflows/deploy-pages.yml - least-privilege permissions and immutable
+  current official action SHAs.
+- package.json and package-lock.json - truthful package identity, dependency roles,
+  compatible versions, local fonts, and catalog command.
+- README.md - current verification counts and reproducible catalog instructions.
+- index.html - remove remote font-origin preconnects.
+- vite.config.js - remove the frozen remote import at transform time, bundle fonts,
+  and split application/vendor chunks.
+- public/THIRD_PARTY_FONTS.txt - bundled font copyright and OFL notices.
+
+Application/runtime integration:
+
+- src/App.jsx - revision-safe update wrappers, storage-event synchronization,
+  pagehide draft flush, and tracked async/synchronous mutation revisions.
+- src/application/artwork.js - byte/dimension/pixel limits and guaranteed cleanup.
+- src/application/commands.js - synchronize command and expected-revision plumbing.
+- src/application/generatedId.js - shared recoverable Table ID validation.
+- src/application/state.js - safe external-state reducer transition.
+- src/main.jsx and src/ui/ApplicationErrorBoundary.jsx - top-level render recovery.
+
+Domain and storage integrity:
+
+- src/domain/items.js - finite safe inventory quantities and saturating sums.
+- src/domain/records.js - valid persisted timestamps.
+- src/domain/table.js - unique nested records and bounded encounter logs.
+- src/domain/attacks.js, src/domain/combat.js, and src/domain/encounter.js - route
+  every ongoing encounter-log append through the bounded helper.
+- src/storage/envelope.js - unique top-level records, safe revisions/timestamps.
+- src/storage/stateRepository.js - stale/unsafe/exhausted revision protection.
+- src/storage/entityRepositories.js - creation collision rejection and optimistic
+  update checks.
+
+UI behavior without visual redesign:
+
+- src/screens/TableScreen.jsx - pre-cinematic saves, unique generated IDs, keyboard
+  movement, collision/resource reuse, and missing accessible name.
+- src/screens/SceneScreen.jsx and src/screens/HeroesScreen.jsx - control naming,
+  dirty-aware external reconciliation, and retained draft flushing.
+- src/screens/GearChapter.jsx - semantic owned-item button and search names.
+- src/screens/BattleSetupInspector.jsx - Setup/chest control names.
+- src/screens/BonusCommandsDrawer.jsx, src/screens/ChestLootDrawer.jsx,
+  src/screens/CombatCommandsDrawer.jsx, src/screens/LibraryScreen.jsx, and
+  src/screens/HeroesScreen.jsx - scoped dialog font/state root.
+- src/styles/functional-states.css - local font faces and behavior-only scoped styles
+  for the semantic item button and fatal recovery surface.
+
+Verification artifacts:
+
+- src/audit-regressions.test.js - repaired invariant unit/regression tests.
+- tests/phase11.spec.js - 23 full browser journeys.
+- tests/error-boundary-harness.html and tests/error-boundary-harness.jsx - real
+  thrown-child browser harness.
+- scripts/phase11-render-smoke.mjs - error-boundary fallback render coverage.
+- scripts/phase7-render-smoke.mjs - stronger chest accessible-name expectation.
+- scripts/verify-phase6.mjs and scripts/verify-phase8.mjs - revision-safe Table
+  integration contract.
+- scripts/verify-phase11.mjs - repaired runtime/accessibility/font/test contracts.
+- scripts/verify-phase12.mjs - immutable actions and permission scope.
+- PROJECT_AUDIT.txt - this preserved pre-fix report and post-fix evidence.
+
+No edits were made to the seven protected permanent visual files.
+
+
+16. FINAL VERIFICATION EVIDENCE
+===============================
+
+Dependency and source integrity:
+
+- Clean npm ci: PASS; 26 packages installed, 27 audited.
+- npm ls --all: PASS for the installed platform dependency graph; only expected
+  cross-platform/feature optional packages are absent.
+- npm outdated --json: {}.
+- npm audit / dependency verifier: PASS, zero vulnerabilities.
+- git diff --check: PASS.
+- Strict UTF-8 decoding: PASS across all repository text files. The focused scan
+  of all 48 non-test JavaScript, JSX, and CSS runtime files found zero mojibake
+  candidates; repository-wide marker matches exist only in intentional historical
+  examples and negative-test assertions.
+- Production dist remote-font scan: PASS, zero Google font URLs.
+
+Authoritative uninterrupted gate:
+
+- npm run verify: PASS again on the final filesystem in one uninterrupted
+  215.7-second run.
+- Node unit/domain/repository/integration tests: 241 passed, 0 failed, 0 skipped.
+- Phase 2 through Phase 11 server-render smoke suites: PASS.
+- Phase 1 through Phase 12 structural, purity, visual, and release verifiers: PASS.
+- Phase 11 Playwright suite: 23 passed, 0 failed, one worker, pinned Chromium.
+- All 47 parity-register journeys remain PASS.
+- All 11 managed dialogs satisfy the Phase 11 contracts.
+
+Visual and browser stability:
+
+- First final-state browser pass inside npm run verify: 23/23 PASS.
+- Immediate second final-state browser pass: 23/23 PASS.
+- Each pass checked the 21 pinned Windows screenshots plus responsive, zoom,
+  compact Table, local-font, accessibility, storage, and reduced-motion behavior.
+- Pinned Linux screenshot hashes remain verified structurally; Linux rendering was
+  not claimed from this Windows host.
+- The seven protected source hashes remain exactly equal to the frozen baseline.
+
+Builds and runtime:
+
+- Preview build (/Roll30-Nightforge/): PASS.
+- Production build (/Roll30/): PASS.
+- Final production assets: 0.73 kB HTML; 69.13 kB CSS (13.67 kB gzip);
+  303.28 kB app JavaScript (69.73 kB gzip); 202.17 kB vendor JavaScript
+  (64.43 kB gzip); five bundled WOFF2 font assets.
+- No Vite large-chunk warning remains.
+- Development runtime: HTTP 200 at http://127.0.0.1:5310/; the normal application
+  opened at Library with zero browser-console errors and zero uncaught page errors.
+
+Protected visual hashes:
+
+- src/styles/core.css     B3CFC20163111A22624033B8B941937D50E727A5FA4DDA6A20B2D427D0B24FEC
+- src/styles/shell.css    572C44E4D043703CEDD5A856AF4B317129CEA787499A70F50E11E88FE4E964BD
+- src/styles/library.css  1A632306746CC221B626163FB887AC038428B556613695C2EF71FF1F33273663
+- src/styles/heroes.css   4893A18215277FFD38F270F509349353D852913E3B5D5A2C5F2DE8EE955AD343
+- src/styles/scene.css    1F56042515055524FB955ACDE3F5DD09D5A8336AF6946F2949AAAE65EB70789F
+- src/styles/table.css    98483CC3D87E0E2D30B0233438CB3AE1C0634B46D7A53E96EE21AF553186FDE4
+- src/ui/Glyphs.jsx       277B1C3325A571A5134F2A940377E7E61646D6C2DA9E8DFC3E02059A5DD7ABE6
+
+
+17. FINAL ASSUMPTIONS AND RESIDUAL OPERATING BOUNDARIES
+=======================================================
+
+- Nightforge remains a browser-local application. LocalStorage and IndexedDB are
+  the source of truth; there is no server account, cloud merge, or multi-user
+  collaboration service.
+- Cross-tab updates are synchronized and stale writes are refused. Conflicting
+  edits to the same field are not silently merged; the user is asked to review the
+  current state and retry.
+- Browser storage can still be denied or exhausted. Those conditions are handled
+  and preserve the last verified state, but the application cannot create storage
+  capacity itself.
+- Artwork limits reduce decode/storage risk but cannot guarantee identical GPU
+  behavior across every browser/device.
+- Deployment or repository publication is an external release operation and still
+  requires the owner's explicit authority; this audit changed only the local
+  Nightforge project.
+
+These are explicit product boundaries, not unresolved defects in the requested
+local application scope.
+
+
+18. FINAL PRODUCTION-READINESS DECISION
+=======================================
+
+Decision after remediation: READY FOR PRODUCTION RELEASE REVIEW.
+
+Why:
+
+- Every audited defect and every additional defect found during repair is resolved.
+- The complete functionality remains in the clean-room Nightforge architecture.
+- Durable-state invariants, resource bounds, concurrency, accessibility, offline
+  typography, error recovery, CI permissions, dependencies, and verification gaps
+  have direct evidence.
+- The exact Nightforge visual baseline is preserved in source hashes and repeated
+  browser screenshots; no original Roll30 UI/UX/layout was introduced.
+- The entire verification command passes uninterrupted, dependencies are clean,
+  both release builds pass, and the live development runtime responds successfully.
+
+This decision covers code readiness. It does not itself authorize publishing,
+committing, pushing, deploying, replacing a repository, or importing any user data.
+
+
+END OF POST-FIX AUDIT
+=====================

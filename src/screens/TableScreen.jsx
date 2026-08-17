@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 
 import { getItem } from "../domain/catalog.js";
+import { generatedId } from "../application/generatedId.js";
 import {
   attackTargetEligibility,
   bonusAttackAvailability,
@@ -82,6 +83,8 @@ import {
   removeToken,
   rulerDistanceFeet,
   setArtworkScale,
+  setupCellForPosition,
+  setupPositionForCell,
   snapSetupPosition,
   updateChest,
   updateToken,
@@ -101,6 +104,12 @@ import RetrievalCinematic from "./RetrievalCinematic.jsx";
 const okay = () => ({ ok: true });
 const initials = (name) => String(name || "?").slice(0, 2).toUpperCase();
 const errorText = (error) => error ? `${error.message} ${error.recovery || "Retry the change."}` : "";
+const ARROW_DELTAS = Object.freeze({
+  ArrowLeft: { column: -1, row: 0, xPercent: -1, yPercent: 0 },
+  ArrowRight: { column: 1, row: 0, xPercent: 1, yPercent: 0 },
+  ArrowUp: { column: 0, row: -1, xPercent: 0, yPercent: -1 },
+  ArrowDown: { column: 0, row: 1, xPercent: 0, yPercent: 1 },
+});
 
 const healthTone = (hp, maxHp) => {
   const percentage = hp / Math.max(1, maxHp);
@@ -278,7 +287,7 @@ function TableToolsDrawer({
   return (
     <PortalLayer>
       <div className="veil" onClick={close} />
-      <aside ref={dialogRef} className="drawer nf-state-table-tools-drawer" role="dialog" aria-modal="true" aria-labelledby="table-tools-title" tabIndex={-1}>
+      <aside ref={dialogRef} className="drawer nf-state-dialog nf-state-table-tools-drawer" role="dialog" aria-modal="true" aria-labelledby="table-tools-title" tabIndex={-1}>
         <div className="drawer-top">
           <div><span className="kicker kicker-brass">Table instruments</span><h2 id="table-tools-title">Table tools</h2></div>
           <button className="glyph" onClick={close} aria-label="Close"><X size={17} /></button>
@@ -492,7 +501,12 @@ export default function TableScreen({
       setWallHover(null);
       return { ok: true };
     }
-    const wall = createWall({ id: wallIdFactory(), type: wallDraft.type, points: wallDraft.points });
+    const wallId = generatedId("wall", wallIdFactory, walls);
+    if (!wallId.ok) {
+      setLocalError(wallId);
+      return wallId;
+    }
+    const wall = createWall({ id: wallId.value, type: wallDraft.type, points: wallDraft.points });
     const result = savePatch({ walls: [...walls, wall] });
     if (result.ok) {
       setWallDraft(null);
@@ -642,6 +656,91 @@ export default function TableScreen({
         yPercent: chest.position.yPercent - pointer.yPercent,
       },
     });
+  };
+
+  const onTokenKeyDown = (event, token) => {
+    const delta = ARROW_DELTAS[event.key];
+    const canMove = !activeTool && !attackDraft && !combatLocked &&
+      (isPlay || isSetup || (isActiveBattle && token.id === active?.id));
+    if (!delta || !canMove) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setSelectedId(token.id);
+    setSelectedChestId(null);
+
+    if (isPlay) {
+      savePatch({
+        tokens: updateToken(playTokens, token.id, {
+          position: {
+            xPercent: token.position.xPercent + delta.xPercent,
+            yPercent: token.position.yPercent + delta.yPercent,
+          },
+        }),
+      });
+      return;
+    }
+
+    const viewport = setupViewport();
+    const currentCell = setupCellForPosition(token.position, viewport);
+    const destination = setupPositionForCell({
+      column: currentCell.column + delta.column,
+      row: currentCell.row + delta.row,
+    }, viewport);
+    const destinationCell = setupCellForPosition(destination, viewport);
+    if (destinationCell.column === currentCell.column && destinationCell.row === currentCell.row) return;
+
+    if (isSetup) {
+      if (!canOccupySetupPosition(destination, {
+        tokens: tableTokens,
+        chests,
+        exclude: { kind: "token", id: token.id },
+        viewport,
+      })) {
+        setLocalError(setupCollisionFailure("token or chest"));
+        return;
+      }
+      savePatch({ tokens: updateToken(tableTokens, token.id, { position: destination }) });
+      return;
+    }
+
+    const moved = moveActiveToken(scene, token.id, destination, viewport);
+    if (!moved.ok) {
+      setLocalError(moved);
+      return;
+    }
+    const saved = savePatch(moved.value);
+    if (saved.ok) {
+      setArrivalId(token.id);
+      if (arrivalTimerRef.current) clearTimeout(arrivalTimerRef.current);
+      arrivalTimerRef.current = setTimeout(() => setArrivalId(null), 520);
+    }
+  };
+
+  const onChestKeyDown = (event, chest) => {
+    const delta = ARROW_DELTAS[event.key];
+    if (!delta || !isSetup || activeTool || combatLocked) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setSelectedChestId(chest.id);
+    setSelectedId(null);
+    const viewport = setupViewport();
+    const currentCell = setupCellForPosition(chest.position, viewport);
+    const position = setupPositionForCell({
+      column: currentCell.column + delta.column,
+      row: currentCell.row + delta.row,
+    }, viewport);
+    const destinationCell = setupCellForPosition(position, viewport);
+    if (destinationCell.column === currentCell.column && destinationCell.row === currentCell.row) return;
+    if (!canOccupySetupPosition(position, {
+      tokens: tableTokens,
+      chests,
+      exclude: { kind: "chest", id: chest.id },
+      viewport,
+    })) {
+      setLocalError(setupCollisionFailure("token or chest"));
+      return;
+    }
+    savePatch({ chests: updateChest(chests, chest.id, { position }) });
   };
 
   const onMapPointerMove = (event) => {
@@ -794,9 +893,15 @@ export default function TableScreen({
   };
 
   const addPlayToken = () => {
-    const token = createPlayToken({ id: tokenIdFactory(), ordinal: playTokens.length });
+    const tokenId = generatedId("token", tokenIdFactory, playTokens);
+    if (!tokenId.ok) {
+      setLocalError(tokenId);
+      return tokenId;
+    }
+    const token = createPlayToken({ id: tokenId.value, ordinal: playTokens.length });
     const result = savePatch({ tokens: [...playTokens, token] });
     if (result.ok) setSelectedId(token.id);
+    return result;
   };
 
   const removeSelectedPlayToken = () => {
@@ -822,7 +927,12 @@ export default function TableScreen({
       });
       return;
     }
-    const id = tokenIdFactory();
+    const tokenId = generatedId("token", tokenIdFactory, tableTokens);
+    if (!tokenId.ok) {
+      setLocalError(tokenId);
+      return tokenId;
+    }
+    const id = tokenId.value;
     const hero = heroes.find((entry) => entry.id === summonChoice);
     const token = hero
       ? createHeroTokenSnapshot(hero, { id, ordinal: tableTokens.length, position })
@@ -832,6 +942,7 @@ export default function TableScreen({
       setSelectedId(token.id);
       setSelectedChestId(null);
     }
+    return result;
   };
 
   const placeSetupChest = () => {
@@ -850,12 +961,18 @@ export default function TableScreen({
       });
       return;
     }
-    const chest = createChest({ id: chestIdFactory(), position });
+    const chestId = generatedId("chest", chestIdFactory, chests);
+    if (!chestId.ok) {
+      setLocalError(chestId);
+      return chestId;
+    }
+    const chest = createChest({ id: chestId.value, position });
     const result = savePatch({ chests: [...chests, chest] });
     if (result.ok) {
       setSelectedChestId(chest.id);
       setSelectedId(null);
     }
+    return result;
   };
 
   const saveSelectedSetupToken = (patch) => {
@@ -964,6 +1081,8 @@ export default function TableScreen({
       setLocalError(resolved);
       return resolved;
     }
+    const saved = savePatch(resolved.value);
+    if (!saved.ok) return saved;
     clearCinematicTimers();
     setSelectedId(targetId);
     setSelectedChestId(null);
@@ -985,11 +1104,6 @@ export default function TableScreen({
       schedule(() => setCinematic((current) => current ? { ...current, stage } : current), timings[stage]);
     }
     schedule(() => {
-      const saved = savePatch(resolved.value);
-      if (!saved.ok) {
-        setCinematic((current) => current ? { ...current, stage: "failed", error: saved } : current);
-        return;
-      }
       if (resolved.outcome.hit) {
         setImpact({ targetId, damage: resolved.outcome.damage.total, critical: resolved.outcome.critical });
         playNightforgeImpact();
@@ -1057,6 +1171,8 @@ export default function TableScreen({
       }
       return saved;
     }
+    const saved = savePatch(resolved.value);
+    if (!saved.ok) return saved;
     clearRetrievalTimers();
     setRetrievalCinematic({ outcome: resolved.outcome, stage: "spin", error: null });
     const reducedMotion = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
@@ -1071,11 +1187,6 @@ export default function TableScreen({
       schedule(() => setRetrievalCinematic((current) => current ? { ...current, stage } : current), timings[stage]);
     }
     schedule(() => {
-      const saved = savePatch(resolved.value);
-      if (!saved.ok) {
-        setRetrievalCinematic((current) => current ? { ...current, stage: "failed", error: saved } : current);
-        return;
-      }
       setSelectedId(resolved.outcome.actorId);
       setSelectedChestId(null);
       setRetrievalCinematic((current) => current ? { ...current, stage: "impact", error: null } : current);
@@ -1209,12 +1320,13 @@ export default function TableScreen({
                 className={`nf-state-table-chest${selectedChestId === chest.id ? " on" : ""}${chestPreview?.id === chest.id && chestPreview.blocked ? " blocked" : ""}${canOpen ? " nf-state-table-chest-eligible" : ""}${count === 0 ? " nf-state-table-chest-empty" : ""}`}
                 style={{ left: `${chest.position.xPercent}%`, top: `${chest.position.yPercent}%` }}
                 onPointerDown={(event) => onChestPointerDown(event, chest)}
+                onKeyDown={(event) => onChestKeyDown(event, chest)}
                 onClick={(event) => {
                   event.stopPropagation();
                   if (isActiveBattle && canOpen) openBattleChest(chest.id);
                   else { setSelectedChestId(chest.id); setSelectedId(null); }
                 }}
-                aria-label={isActiveBattle ? canOpen ? `Open adjacent chest with ${count} items` : `Chest unavailable: ${option?.availability.message || "Battle is complete"}` : `Chest with ${count} items`}
+                aria-label={isActiveBattle ? canOpen ? `Open adjacent chest with ${count} items` : `Chest unavailable: ${option?.availability.message || "Battle is complete"}` : `Chest with ${count} items, use arrow keys to move`}
               >
                 <Package size={18} />
                 <span className="nf-state-table-chest-count numeral">{count}</span>
@@ -1249,8 +1361,9 @@ export default function TableScreen({
                 className={`piece${selectedId === token.id ? " on" : ""}${isActiveBattle && token.id === active?.id ? " acting" : ""}${tokenPreview?.id === token.id && tokenPreview.blocked ? " blocked" : ""}${arrivalId === token.id ? " nf-state-table-arriving" : ""}${targetState?.ok ? " nf-state-table-targetable" : ""}${impact?.targetId === token.id ? ` nf-state-table-hit${impact.critical ? " nf-state-table-critical" : ""}` : ""}`}
                 style={{ left: `${token.position.xPercent}%`, top: `${token.position.yPercent}%`, "--piece": token.color }}
                 onPointerDown={(event) => onTokenPointerDown(event, token)}
+                onKeyDown={(event) => onTokenKeyDown(event, token)}
                 onClick={(event) => { event.stopPropagation(); if (attackDraft) resolveAttackTarget(token.id); else { setSelectedId(token.id); setSelectedChestId(null); } }}
-                aria-label={attackDraft ? targetState?.ok ? `Attack ${token.name}` : `${token.name} unavailable as target` : token.name}
+                aria-label={attackDraft ? targetState?.ok ? `Attack ${token.name}` : `${token.name} unavailable as target` : `${token.name}${isPlay || isSetup || (isActiveBattle && token.id === active?.id) ? ", use arrow keys to move" : ""}`}
               >
                 <span className="piece-disc">{initials(token.name)}</span>
                 <span className="piece-name">{token.name}</span>
@@ -1294,7 +1407,7 @@ export default function TableScreen({
         <div className="dock-body">
           <section className="unit">
             <div className="unit-top"><span className="unit-label">Summon a token</span></div>
-            <select className={`sel${isBattle ? " nf-state-disabled" : ""}`} value={isPlay ? "" : summonChoice} onChange={(event) => setSummonChoice(event.target.value)} disabled={isBattle}>
+            <select className={`sel${isBattle ? " nf-state-disabled" : ""}`} aria-label="Token to summon" value={isPlay ? "" : summonChoice} onChange={(event) => setSummonChoice(event.target.value)} disabled={isBattle}>
               <option value="">Blank token</option>
               {!isPlay && heroes.map((hero) => <option value={hero.id} key={hero.id}>{hero.name}</option>)}
             </select>
@@ -1345,7 +1458,7 @@ export default function TableScreen({
       {lootChest && isActiveBattle && <ChestLootDrawer chest={lootChest} busy={busy || combatLocked} error={visibleError} take={takeChestItem} close={() => setLootChestId(null)} />}
       {cinematic && <AttackCinematic cinematic={cinematic} />}
       {retrievalCinematic && <RetrievalCinematic cinematic={retrievalCinematic} />}
-      {abandonOpen && <PortalLayer><div className="veil" onClick={() => setAbandonOpen(false)} /><aside ref={abandonDialogRef} className="drawer" role="dialog" aria-modal="true" aria-labelledby="abandon-battle-title" aria-describedby="abandon-battle-description" tabIndex={-1}><div className="drawer-top"><div><span className="kicker">Return to Setup</span><h2 id="abandon-battle-title">Abandon this encounter?</h2></div><button className="glyph" onClick={() => setAbandonOpen(false)} aria-label="Close"><X size={17} /></button></div><div className="drawer-body">{visibleError && <div className="nf-state-inline-error" role="alert"><strong>Battle not abandoned</strong><span>{errorText(visibleError)}</span></div>}<p className="prose" id="abandon-battle-description">Return <strong>{scene?.name}</strong> to editable Battle Setup?</p><p className="note">Current token HP and positions are preserved. Initiative, turn resources, and physical battle items are cleared.</p></div><div className="drawer-foot"><button className="btn btn-line" onClick={() => setAbandonOpen(false)} autoFocus>Continue Battle</button><button className="btn btn-hazard" onClick={abandonBattle} disabled={busy}><Hammer size={15} /> Abandon Battle</button></div></aside></PortalLayer>}
+      {abandonOpen && <PortalLayer><div className="veil" onClick={() => setAbandonOpen(false)} /><aside ref={abandonDialogRef} className="drawer nf-state-dialog" role="dialog" aria-modal="true" aria-labelledby="abandon-battle-title" aria-describedby="abandon-battle-description" tabIndex={-1}><div className="drawer-top"><div><span className="kicker">Return to Setup</span><h2 id="abandon-battle-title">Abandon this encounter?</h2></div><button className="glyph" onClick={() => setAbandonOpen(false)} aria-label="Close"><X size={17} /></button></div><div className="drawer-body">{visibleError && <div className="nf-state-inline-error" role="alert"><strong>Battle not abandoned</strong><span>{errorText(visibleError)}</span></div>}<p className="prose" id="abandon-battle-description">Return <strong>{scene?.name}</strong> to editable Battle Setup?</p><p className="note">Current token HP and positions are preserved. Initiative, turn resources, and physical battle items are cleared.</p></div><div className="drawer-foot"><button className="btn btn-line" onClick={() => setAbandonOpen(false)} autoFocus>Continue Battle</button><button className="btn btn-hazard" onClick={abandonBattle} disabled={busy}><Hammer size={15} /> Abandon Battle</button></div></aside></PortalLayer>}
     </div>
   );
 }

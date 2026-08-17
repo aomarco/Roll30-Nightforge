@@ -16,7 +16,7 @@ export default function ChestLootDrawer({ chest, busy = false, error = null, tak
   return (
     <PortalLayer>
       <div className="veil" onClick={close} />
-      <aside ref={dialogRef} className="drawer nf-state-loot-drawer" role="dialog" aria-modal="true" aria-labelledby="chest-loot-title" tabIndex={-1}>
+      <aside ref={dialogRef} className="drawer nf-state-dialog nf-state-loot-drawer" role="dialog" aria-modal="true" aria-labelledby="chest-loot-title" tabIndex={-1}>
         <div className="drawer-top"><div><span className="kicker kicker-brass">Opened chest</span><h2 id="chest-loot-title">Take one item</h2></div><button className="glyph" onClick={close} aria-label="Close"><X size={17} /></button></div>
         <div className="drawer-body">
           {error && <div className="nf-state-inline-error" role="alert"><strong>Loot was not saved</strong><span>{errorText(error)}</span></div>}
