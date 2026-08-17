@@ -3537,4 +3537,118 @@ Every Phase 11 requirement has implementation and direct verification evidence:
   regression suite, production build, dependency audit, Nightforge visual
   protection, original Roll30 isolation, and no data import: proven.
 
-Phase 11 is complete. Phase 12 remains deliberately unexecuted.
+Phase 11 was complete at this checkpoint. Phase 12 was then deliberately
+unexecuted pending the separately required owner authorization.
+
+
+======================================================================
+PHASE 12 COMPLETION RECORD
+======================================================================
+
+Date completed: 17 August 2026 (Australia/Sydney)
+
+
+140. RELEASE SCOPE
+------------------
+
+Phase 12 executed the approved preview-and-release sequence without importing
+or modifying any original Roll30 character, game, map, artwork, or save data.
+The seven protected Nightforge visual files remained byte-identical throughout
+the release. A repository-level LF contract was added so those frozen bytes
+remain stable on Windows and Linux checkouts.
+
+
+141. SEPARATE PREVIEW
+---------------------
+
+- Repository: https://github.com/aomarco/Roll30-Nightforge
+- Pages preview: https://aomarco.github.io/Roll30-Nightforge/
+- Accepted source commit: 44db4f2721813c3395eed601bd30d625d109a11c
+- Accepted source tree: eb0e55d39d5634e27364226000de787bcb45a430
+- Successful preview workflow: https://github.com/aomarco/Roll30-Nightforge/actions/runs/32017852472
+
+The preview workflow passed the complete verification command on pinned
+Ubuntu 24.04 and published only after that gate succeeded.
+
+
+142. OWNER-AUTHORIZED ACCEPTANCE WALKTHROUGH
+--------------------------------------------
+
+The user explicitly authorized execution of the complete final phase. The
+repeatable live walkthrough then passed:
+
+    npm run acceptance:phase12 -- \
+      https://aomarco.github.io/Roll30-Nightforge/ \
+      /Roll30-Nightforge/
+
+Covered journey:
+
+- Fresh Library.
+- Forge a persisted Play Scene.
+- Open the Table.
+- Create a Hero and verify `Level 1 Fighter · Human` plus the `−1` modifiers.
+- Open Abilities and its skill list.
+- Open Scene settings, rename, return, and reload.
+- Confirm the renamed Scene and new Hero persist under Nightforge-only keys.
+- Confirm zero malformed UTF-8 markers, page errors, or failed resources.
+
+
+143. REVIEWED REPLACEMENT
+-------------------------
+
+- Pull request: https://github.com/aomarco/Roll30/pull/2
+- Replacement commit: 416edd77f4cfeb880b2e6f6dcf96324b05304676
+- Replacement tree: eb0e55d39d5634e27364226000de787bcb45a430
+- Successful PR workflow: https://github.com/aomarco/Roll30/actions/runs/32018771711
+
+The replacement was assembled in a separate clean worktree. Its complete tree
+matched the accepted Nightforge tree exactly. All 306 changed paths were
+reviewed through GitHub's paginated API; none of the original working folder's
+untracked PDFs, images, redesign-attempt directory, or transfer-plan working
+file entered the pull request.
+
+
+144. ROLLBACK AND PRODUCTION DEPLOYMENT
+---------------------------------------
+
+- Annotated rollback tag: pre-nightforge-2026-08-17
+- Rollback commit: 224e82f747b90089dc83d89967df35f940653837
+- Rollback tag object: 46b6edc6f5f0e7ba1901345bd1b98c00fe0653b5
+- Production merge commit: 8f49c0577261aaf954ecf7c23463c41e7253f6b2
+- Successful production workflow: https://github.com/aomarco/Roll30/actions/runs/32019078653
+- Production URL: https://aomarco.github.io/Roll30/
+
+The production workflow rebuilt with the exact `/Roll30/` base, passed the
+full verification gate, uploaded the Pages artifact, and deployed successfully.
+
+
+145. FINAL PRODUCTION EVIDENCE
+------------------------------
+
+The production entry document returned HTTP 200. Its JavaScript and CSS assets
+were served beneath `/Roll30/assets/`. The same repeatable live walkthrough
+passed against production with:
+
+- Four original Roll30 LocalStorage sentinels unchanged.
+- The original `roll30-assets` IndexedDB sentinel unchanged.
+- Nightforge state and session data persisted only under fresh identifiers.
+- Zero malformed-text markers.
+- Zero page errors.
+- Zero failed same-origin application resources.
+
+The sentinel walkthrough ran in an isolated Playwright profile. Static purity
+verification independently proves that the production runtime contains no
+access to the original storage identifiers.
+
+
+146. PHASE 12 COMPLETION STATEMENT
+----------------------------------
+
+Every Phase 12 requirement has direct evidence: the separate preview repository
+exists and is live; the acceptance walkthrough passed; release-native CI and
+line-ending defects were fixed without changing the protected UI; the
+replacement PR was reviewed and passed; the prior production commit has an
+annotated rollback tag; production was merged and deployed with `/Roll30/`;
+and original browser-save identifiers remained untouched.
+
+Phase 12 is complete.

@@ -32,6 +32,18 @@ Release builds use explicit GitHub Pages bases:
 The same verified source can therefore be reviewed in an isolated preview
 repository before the production repository is replaced.
 
+## Release status
+
+Phase 12 completed on 17 August 2026.
+
+| Environment | URL |
+|---|---|
+| Nightforge preview | https://aomarco.github.io/Roll30-Nightforge/ |
+| Roll30 production | https://aomarco.github.io/Roll30/ |
+
+Production rollback is anchored by the annotated tag
+`pre-nightforge-2026-08-17`, which points to the final pre-Nightforge commit.
+
 ## Verification
 
 ```bash
@@ -40,7 +52,8 @@ npm run verify
 
 The complete gate runs **229 domain/repository/integration tests**, every render
 smoke suite, all phase purity verifiers, **15 pinned-Chromium browser journeys**,
-21 deterministic visual baselines, dependency audit, and the production build.
+21 deterministic visual baselines per platform, dependency audit, and the
+production build.
 
 Useful focused commands:
 
@@ -50,6 +63,8 @@ Useful focused commands:
 | `npm run test:phase11:render` | Loading, empty, success, error, recovery, and extreme-content markup |
 | `npm run test:phase11:browser` | Keyboard dialogs, responsive layouts, zoom, large lists, storage isolation, and screenshots |
 | `npm run verify:phase11` | Phase 11 purity, accessibility, performance, parity, and baseline contracts |
+| `npm run verify:phase12` | Release bases, Pages workflow, protected UI, and storage-isolation contracts |
+| `npm run acceptance:phase12 -- <url> </base/>` | Live Pages journey, asset-base, Unicode, persistence, and original-save isolation |
 
 The [parity register](./PARITY_REGISTER.md) maps all 47 planned acceptance
 journeys to their authoritative evidence.

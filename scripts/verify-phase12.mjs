@@ -56,6 +56,15 @@ for (const key of [
   "roll30-nightforge-assets",
 ]) if (!constants.includes(key)) failures.push(`Fresh Nightforge storage identifier is missing: ${key}.`);
 
+const completionRecord = await read("Phase Completion.txt");
+for (const contract of [
+  "PHASE 12 COMPLETION RECORD",
+  "pre-nightforge-2026-08-17",
+  "32019078653",
+  "https://aomarco.github.io/Roll30/",
+  "Phase 12 is complete.",
+]) if (!completionRecord.includes(contract)) failures.push(`Phase 12 completion evidence is missing ${contract}.`);
+
 if (failures.length) {
   console.error("Phase 12 verification failed:\n" + failures.map((failure) => `- ${failure}`).join("\n"));
   process.exit(1);
