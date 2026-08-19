@@ -82,6 +82,8 @@ import {
   removeChest,
   removeToken,
   rulerDistanceFeet,
+  sceneViewport,
+  sceneWorldSize,
   setArtworkScale,
   setupCellForPosition,
   setupPositionForCell,
@@ -379,7 +381,7 @@ export default function TableScreen({
   const isCompleteBattle = isBattle && scene?.encounter?.status === "complete";
   const isSetup = !isPlay && !isBattle;
   const mapRef = useRef(null);
-  const worldRef = useRef(null);
+  const planeRef = useRef(null);
   const arrivalTimerRef = useRef(null);
   const cinematicTimersRef = useRef([]);
   const retrievalTimersRef = useRef([]);
@@ -426,8 +428,9 @@ export default function TableScreen({
   const walls = scene?.walls || [];
   const wallsVisible = scene?.wallsVisible !== false;
   const canAdjustArtwork = Boolean(artworkUrl || scene?.blankCanvas);
-  const rulerFeet = rulerDraft && worldRef.current
-    ? rulerDistanceFeet(rulerDraft.start, rulerDraft.end, { width: worldRef.current.offsetWidth, height: worldRef.current.offsetHeight, gridSize: scene?.gridSize })
+  const sceneSize = sceneWorldSize(scene?.gridSize);
+  const rulerFeet = rulerDraft
+    ? rulerDistanceFeet(rulerDraft.start, rulerDraft.end, sceneViewport(scene?.gridSize))
     : 0;
 
   const clearCinematicTimers = () => {
@@ -564,15 +567,11 @@ export default function TableScreen({
   }, [abandonOpen, activeTool, attackDraft, bonusOpen, combatLocked, commandOpen, drawerOpen, lootChestId, wallDraft, walls]);
 
   const localPoint = (event) => {
-    const rect = worldRef.current?.getBoundingClientRect();
+    const rect = planeRef.current?.getBoundingClientRect();
     return rect ? clientPointToPercent({ x: event.clientX, y: event.clientY }, rect) : { xPercent: 50, yPercent: 50 };
   };
 
-  const setupViewport = () => ({
-    width: worldRef.current?.offsetWidth,
-    height: worldRef.current?.offsetHeight,
-    gridSize: scene?.gridSize,
-  });
+  const setupViewport = () => sceneViewport(scene?.gridSize);
 
   const setupCollisionFailure = (entity) => ({
     ok: false,
@@ -1297,16 +1296,24 @@ export default function TableScreen({
         <div className="map-wash" aria-hidden="true" />
         <div
           className="nf-state-table-world"
-          ref={worldRef}
-          style={{ transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.zoom})`, "--nf-grid-size": `${scene?.gridSize || 44}px`, "--nf-grid-major": `${(scene?.gridSize || 44) * 5}px` }}
+          style={{ transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.zoom})` }}
         >
-          <div className="nf-state-table-plane">
+          <div
+            className="nf-state-table-plane"
+            ref={planeRef}
+            style={{
+              width: `${sceneSize.width}px`,
+              height: `${sceneSize.height}px`,
+              "--nf-grid-size": `${sceneSize.cellSize}px`,
+              "--nf-grid-major": `${sceneSize.cellSize * 5}px`,
+            }}
+          >
             {(artworkUrl || scene?.blankCanvas) && (
               <div className="nf-state-table-artwork" style={{ transform: `translate(${mapView.x}px, ${mapView.y}px) scale(${mapView.scale})`, backgroundColor: scene?.blankCanvas ? "#fff" : undefined }}>
                 {artworkUrl && <img src={artworkUrl} alt="" draggable="false" />}
               </div>
             )}
-            {!isPlay && <div className="map-grid nf-state-table-infinite-grid" aria-hidden="true" />}
+            {!isPlay && <div className="map-grid nf-state-table-scene-grid" aria-hidden="true" />}
             <div className="map-fog" aria-hidden="true" />
             <WallAndRulerLayer walls={walls} wallsVisible={wallsVisible} wallDraft={wallDraft} wallHover={wallHover} rulerDraft={rulerDraft} rulerFeet={rulerFeet} />
             {isActiveBattle && <MovementRouteLayer preview={routePreview} />}

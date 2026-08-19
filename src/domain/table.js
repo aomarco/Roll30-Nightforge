@@ -300,6 +300,42 @@ export function changeChestInventory(chests, chestId, itemId, direction) {
   };
 }
 
+/**
+ * The board is a fixed number of cells, not a slice of whatever the browser
+ * window happens to be. Deriving the grid from the viewport meant a resize
+ * silently re-mapped every stored percentage onto a different cell, and left
+ * scene artwork with no size of its own. These two constants match the
+ * long-standing fallback in setupGridMetrics, so a scene keeps the board it
+ * was built on.
+ */
+export const SCENE_COLUMNS = 20;
+export const SCENE_ROWS = 12;
+
+export const MIN_GRID_SIZE = 24;
+export const MAX_GRID_SIZE = 80;
+
+export const sceneCellSize = (gridSize) =>
+  clamp(Math.floor(finite(gridSize, 44)), MIN_GRID_SIZE, MAX_GRID_SIZE);
+
+/** Pixel size of the whole board for a scene's chosen cell size. */
+export function sceneWorldSize(gridSize) {
+  const cellSize = sceneCellSize(gridSize);
+  return {
+    cellSize,
+    width: cellSize * SCENE_COLUMNS,
+    height: cellSize * SCENE_ROWS,
+  };
+}
+
+/**
+ * The viewport object every grid helper expects, built from the scene rather
+ * than from the DOM so cell identity is stable across window sizes.
+ */
+export function sceneViewport(gridSize) {
+  const { cellSize, width, height } = sceneWorldSize(gridSize);
+  return { width, height, gridSize: cellSize };
+}
+
 export function setupGridMetrics({ width, height, gridSize } = {}) {
   const cellSize = Math.max(1, finite(gridSize, 44));
   const worldWidth = Math.max(cellSize, finite(width, cellSize * 20));

@@ -920,15 +920,28 @@
   will-change: transform;
 }
 
+/*
+ * The board is a real object with its own size, centred in the map area. The
+ * backdrop, grid and every token live inside it, so resizing the browser moves
+ * the whole board instead of silently changing which cell a stored position
+ * falls in — and the artwork finally has a shape of its own to fill.
+ */
 .nf-state-table-plane {
   position: absolute;
-  inset: 0;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: var(--r-md);
+  background: linear-gradient(160deg, #16242a, #070d0f);
+  box-shadow: 0 0 0 1px var(--line-2), 0 30px 90px rgba(0,0,0,.55);
 }
 
 .nf-state-table-artwork {
   position: absolute;
   inset: 0;
-  transform-origin: center;
+  overflow: hidden;
+  border-radius: inherit;
+  transform-origin: 0 0;
   will-change: transform;
 }
 
@@ -941,13 +954,18 @@
   pointer-events: none;
 }
 
-.nf-state-table-infinite-grid {
-  inset: -4000px;
+/* Cell lines start at the board's own origin, so drawn squares line up with
+   the cell centres the domain calculates. */
+.nf-state-table-scene-grid {
+  inset: 0;
+  border-radius: inherit;
+  background-position: 0 0;
   background-size: var(--nf-grid-size) var(--nf-grid-size);
   pointer-events: none;
 }
 
-.nf-state-table-infinite-grid::after {
+.nf-state-table-scene-grid::after {
+  background-position: 0 0;
   background-size: var(--nf-grid-major) var(--nf-grid-major);
 }
 
