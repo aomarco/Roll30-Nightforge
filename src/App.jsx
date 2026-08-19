@@ -140,6 +140,9 @@ export default function App({ browser = window, runtimeFactory = createBrowserRu
         onCreate={(input) => trackRevision(() => runtime.commands.createHero(input))}
         onUpdate={updateHero}
         onRetire={(id) => trackRevision(() => runtime.commands.removeHero(id))}
+        portraitRepository={runtime.portraitRepository}
+        onReplacePortrait={(id, blob) => trackRevision(() => runtime.commands.replaceHeroPortrait(id, blob))}
+        onRemovePortrait={(id) => trackRevision(() => runtime.commands.removeHeroPortrait(id))}
         flushRef={heroFlushRef}
       />
     );

@@ -112,6 +112,7 @@ export function createHeroRecord(
       typeof input.name === "string" && input.name.trim()
         ? input.name.trim()
         : "Unnamed hero",
+    portraitKey: nullableId(input.portraitKey),
     classId: selectedClass.id,
     level: Math.max(1, Math.min(20, Math.floor(finiteNumber(input.level, 1)))),
     raceId: selectedRace.id,

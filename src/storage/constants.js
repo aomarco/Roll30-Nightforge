@@ -10,6 +10,13 @@ export const STORAGE_KEYS = Object.freeze({
 export const ARTWORK_DATABASE = "roll30-nightforge-assets";
 export const ARTWORK_STORE = "scene-artwork";
 
+/**
+ * Hero portraits live in their own database so the Scene artwork orphan sweep
+ * can never mistake a portrait for an unreferenced Scene image and delete it.
+ */
+export const PORTRAIT_DATABASE = "roll30-nightforge-portraits";
+export const PORTRAIT_STORE = "hero-portrait";
+
 export const FORBIDDEN_LEGACY_STORAGE_IDENTIFIERS = Object.freeze([
   "roll30-maps",
   "roll30-active-map",

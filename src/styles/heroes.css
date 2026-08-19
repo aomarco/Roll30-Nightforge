@@ -35,6 +35,7 @@
   width: 42px;
   height: 42px;
   flex: none;
+  overflow: hidden;
   border-radius: var(--r-sm);
   color: var(--ink-2);
   background: linear-gradient(160deg, var(--raised-2), var(--surface));
@@ -262,26 +263,29 @@
   transition: border-color var(--ease), transform var(--ease);
 }
 .dial:hover { border-color: var(--line-3); transform: translateY(-2px); }
-.dial-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-}
 .dial-key {
+  align-self: flex-start;
   font-family: var(--mono);
   font-size: 10.5px;
   font-weight: 600;
   letter-spacing: .2em;
   color: var(--ink-3);
 }
+.dial-figures {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+}
 .dial-mod {
-  font-size: 11.5px;
+  font-size: 20px;
   font-weight: 600;
   font-style: normal;
+  line-height: 1;
   color: var(--brass);
-  padding: 2px 7px;
-  border-radius: var(--r-full);
+  padding: 4px 9px;
+  border-radius: var(--r-sm);
   background: var(--brass-tint);
 }
 .dial-score {
@@ -322,12 +326,6 @@
   color: var(--void);
   background: var(--jade);
   border-color: transparent;
-}
-.dial-step > small {
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--ink-4);
-  white-space: nowrap;
 }
 
 /* --------------------------------------------------------------- gear */

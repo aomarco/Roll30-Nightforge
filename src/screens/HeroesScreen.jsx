@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Footprints,
   HeartPulse,
+  ImagePlus,
   Minus,
   Plus,
   ShieldHalf,
@@ -42,6 +43,49 @@ const errorText = (error) =>
 const toggleValue = (values, value) =>
   values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
 
+function useHeroPortraits(heroes, portraitRepository) {
+  const [portraits, setPortraits] = useState({});
+  const [portraitError, setPortraitError] = useState(null);
+  const signature = heroes.map((hero) => `${hero.id}:${hero.portraitKey || ""}`).join("|");
+
+  useEffect(() => {
+    let active = true;
+    const objectUrls = [];
+    setPortraitError(null);
+    if (!portraitRepository) {
+      setPortraits({});
+      return undefined;
+    }
+
+    const load = async () => {
+      const next = {};
+      for (const hero of heroes) {
+        if (!hero.portraitKey) continue;
+        const result = await portraitRepository.get(hero.portraitKey);
+        if (!active) return;
+        if (!result.ok) {
+          setPortraitError(result);
+          continue;
+        }
+        if (result.value instanceof Blob && globalThis.URL?.createObjectURL) {
+          const url = URL.createObjectURL(result.value);
+          objectUrls.push(url);
+          next[hero.id] = url;
+        }
+      }
+      if (active) setPortraits(next);
+    };
+    load();
+
+    return () => {
+      active = false;
+      for (const url of objectUrls) URL.revokeObjectURL(url);
+    };
+  }, [portraitRepository, signature]);
+
+  return { portraits, portraitError };
+}
+
 export default function HeroesScreen({
   heroes = [],
   lifecycle = "ready",
@@ -50,10 +94,14 @@ export default function HeroesScreen({
   onCreate = okay,
   onUpdate = okay,
   onRetire = okay,
+  portraitRepository = null,
+  onReplacePortrait = async () => okay(),
+  onRemovePortrait = async () => okay(),
   flushRef = null,
   initialChapter = "identity",
   initialRetiringId = null,
 }) {
+  const [portraitBusy, setPortraitBusy] = useState(false);
   const [activeId, setActiveId] = useState(() => heroes[0]?.id || null);
   const [chapter, setChapter] = useState(initialChapter);
   const [retiring, setRetiring] = useState(
@@ -220,7 +268,32 @@ export default function HeroesScreen({
     apply({ baseAbilities: { ...activeHero.baseAbilities, [ability]: score } });
   };
 
-  const visibleError = localError || persistence.error;
+  const { portraits, portraitError } = useHeroPortraits(heroes, portraitRepository);
+  const visibleError = localError || persistence.error || portraitError;
+
+  const uploadPortrait = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !activeHero || !flushDraft().ok) return;
+    setPortraitBusy(true);
+    try {
+      const result = await onReplacePortrait(activeHero.id, file);
+      setLocalError(result?.ok === false ? result : null);
+    } finally {
+      setPortraitBusy(false);
+    }
+  };
+
+  const clearPortrait = async () => {
+    if (!activeHero || !flushDraft().ok) return;
+    setPortraitBusy(true);
+    try {
+      const result = await onRemovePortrait(activeHero.id);
+      setLocalError(result?.ok === false ? result : null);
+    } finally {
+      setPortraitBusy(false);
+    }
+  };
   const Icon = activeHero ? CLASS_ICONS[activeHero.classId] || Sword : Sword;
   const selectedClass = activeHero ? derived.class : CLASSES[0];
   const selectedSkills = activeHero?.skillProficiencies.length || 0;
@@ -265,13 +338,18 @@ export default function HeroesScreen({
         <div className="band-rail">
           {heroes.map((hero) => {
             const HeroIcon = CLASS_ICONS[hero.classId] || Sword;
+            const portrait = portraits[hero.id];
             return (
               <button
                 key={hero.id}
                 className={"portrait" + (hero.id === activeHero?.id ? " on" : "")}
                 onClick={() => selectHero(hero.id)}
               >
-                <span className="portrait-face"><HeroIcon size={19} /></span>
+                <span className="portrait-face">
+                  {portrait
+                    ? <img className="nf-state-portrait-image" src={portrait} alt="" />
+                    : <HeroIcon size={19} />}
+                </span>
                 <span className="portrait-meta">
                   <strong>{hero.name}</strong>
                   <small>Lv {hero.level} · {CLASSES.find((entry) => entry.id === hero.classId)?.name || "Fighter"}</small>
@@ -307,8 +385,13 @@ export default function HeroesScreen({
             <section className="codex">
               <div className="codex-glow" aria-hidden="true" />
               <div className="codex-head">
-                <span className="sigil sigil-xl" style={{ background: "linear-gradient(150deg,#3a6f7a,#16292f)" }}>
-                  <Icon size={30} />
+                <span
+                  className={"sigil sigil-xl" + (portraits[activeHero.id] ? " nf-state-portrait-sigil" : "")}
+                  style={portraits[activeHero.id] ? undefined : { background: "linear-gradient(150deg,#3a6f7a,#16292f)" }}
+                >
+                  {portraits[activeHero.id]
+                    ? <img className="nf-state-portrait-image" src={portraits[activeHero.id]} alt="" />
+                    : <Icon size={30} />}
                 </span>
                 <div className="codex-id">
                   <span className="kicker kicker-brass">Character sheet</span>
@@ -317,6 +400,27 @@ export default function HeroesScreen({
                     Level {activeHero.level} {selectedClass.name} · {derived.race.name}
                     {derived.subrace ? ` (${derived.subrace.name})` : ""}
                   </p>
+                  <div className="nf-state-portrait-actions">
+                    <label className={"btn btn-line btn-sm file-drop" + (busy || portraitBusy ? " nf-state-disabled" : "")}>
+                      <ImagePlus size={14} /> {portraits[activeHero.id] ? "Change portrait" : "Add portrait"}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        aria-label="Upload a hero portrait"
+                        onChange={uploadPortrait}
+                        disabled={busy || portraitBusy}
+                      />
+                    </label>
+                    {activeHero.portraitKey && (
+                      <button
+                        className="btn btn-line btn-sm"
+                        onClick={clearPortrait}
+                        disabled={busy || portraitBusy}
+                      >
+                        <X size={14} /> Remove portrait
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <button className="btn btn-hazard btn-sm" onClick={() => setRetiring(activeHero)} disabled={busy}>
                   <Trash2 size={15} /> Retire hero
@@ -434,12 +538,14 @@ export default function HeroesScreen({
                     const final = derived.finalAbilities[ability.id];
                     return (
                       <article className="dial" key={ability.id}>
-                        <div className="dial-top"><span className="dial-key">{ability.short}</span><em className="dial-mod numeral">{formatModifier(derived.abilityModifiers[ability.id])}</em></div>
-                        <span className="dial-score numeral">{final}</span>
+                        <span className="dial-key">{ability.short}</span>
+                        <div className="dial-figures">
+                          <span className="dial-score numeral">{final}</span>
+                          <em className="dial-mod numeral">{formatModifier(derived.abilityModifiers[ability.id])}</em>
+                        </div>
                         <span className="dial-name">{ability.name}</span>
                         <div className="dial-step">
                           <button onClick={() => changeAbility(ability.id, -1)} disabled={base <= 8} aria-label={`Lower ${ability.short}`}><Minus size={13} /></button>
-                          <small>Base {base}</small>
                           <button onClick={() => changeAbility(ability.id, 1)} disabled={!canSetBaseAbility(activeHero.baseAbilities, ability.id, base + 1)} aria-label={`Raise ${ability.short}`}><Plus size={13} /></button>
                         </div>
                       </article>
@@ -450,11 +556,25 @@ export default function HeroesScreen({
                 <div className="nf-state-hero-sections">
                   <section className="nf-state-hero-panel">
                     <div className="unit-top"><span className="unit-label">Saving throws</span><span className="tag">Proficiency +{derived.proficiency}</span></div>
+                    <p className="note">
+                      Tap a save to make this hero <strong>proficient</strong> in it. A proficient save
+                      adds the +{derived.proficiency} proficiency bonus to the number shown; removing
+                      proficiency takes it away again. Highlighted saves are the proficient ones.
+                    </p>
                     <div className="nf-state-hero-checks">
                       {SAVING_THROWS.map((save) => {
                         const proficient = activeHero.saveProficiencies.includes(save.id);
                         return (
-                          <button type="button" key={save.id} className={`toggle-chip${proficient ? " on" : ""}`} onClick={() => apply({ saveProficiencies: toggleValue(activeHero.saveProficiencies, save.id) })}>
+                          <button
+                            type="button"
+                            key={save.id}
+                            className={`toggle-chip${proficient ? " on" : ""}`}
+                            aria-pressed={proficient}
+                            title={proficient
+                              ? `${save.name}: proficient. Tap to remove proficiency and lose +${derived.proficiency}.`
+                              : `${save.name}: not proficient. Tap to add proficiency and gain +${derived.proficiency}.`}
+                            onClick={() => apply({ saveProficiencies: toggleValue(activeHero.saveProficiencies, save.id) })}
+                          >
                             {save.short} <strong className="numeral">{formatModifier(saveModifier(activeHero, derived, save.id))}</strong>
                           </button>
                         );
@@ -468,14 +588,25 @@ export default function HeroesScreen({
                       <span className={`tag${overRecommended ? " tag-foe" : " tag-jade"}`}>{selectedSkills} / {selectedClass.recommendedSkillCount} chosen</span>
                     </div>
                     <p className="note">
-                      {selectedClass.name} guidance: choose {selectedClass.recommendedSkillCount} from {selectedClass.skillOptions.map((id) => SKILLS.find((skill) => skill.id === id)?.name).join(", ")}.
+                      Tap a skill to make this hero <strong>proficient</strong> in it, which adds
+                      +{derived.proficiency} to that skill. Highlighted skills are the proficient ones.
+                      {" "}{selectedClass.name} guidance: choose {selectedClass.recommendedSkillCount} from {selectedClass.skillOptions.map((id) => SKILLS.find((skill) => skill.id === id)?.name).join(", ")}.
                       {overRecommended ? " You may keep extra proficiencies, but this exceeds Fighter guidance." : ""}
                     </p>
                     <div className="nf-state-hero-skills">
                       {SKILLS.map((skill) => {
                         const proficient = activeHero.skillProficiencies.includes(skill.id);
                         return (
-                          <button type="button" key={skill.id} className={`toggle-chip${proficient ? " on" : ""}`} onClick={() => apply({ skillProficiencies: toggleValue(activeHero.skillProficiencies, skill.id) })}>
+                          <button
+                            type="button"
+                            key={skill.id}
+                            className={`toggle-chip${proficient ? " on" : ""}`}
+                            aria-pressed={proficient}
+                            title={proficient
+                              ? `${skill.name}: proficient. Tap to remove proficiency and lose +${derived.proficiency}.`
+                              : `${skill.name}: not proficient. Tap to add proficiency and gain +${derived.proficiency}.`}
+                            onClick={() => apply({ skillProficiencies: toggleValue(activeHero.skillProficiencies, skill.id) })}
+                          >
                             <span>{skill.name} <small>{skill.ability.toUpperCase()}</small></span>
                             <strong className="numeral">{formatModifier(skillModifier(activeHero, derived, skill))}</strong>
                           </button>

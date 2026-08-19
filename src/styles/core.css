@@ -408,6 +408,30 @@ a { color: inherit; text-decoration: none; }
   border-color: var(--jade-edge);
   background: var(--jade-tint);
 }
+.toggle-chip.on {
+  color: var(--void);
+  font-weight: 700;
+  background: linear-gradient(180deg, var(--jade-hi), var(--jade));
+  border-color: var(--jade);
+  box-shadow: 0 0 14px var(--jade-glow), inset 0 1px 0 rgba(255,255,255,.35);
+}
+.toggle-chip.on::before {
+  content: '\2713';
+  margin-right: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+.toggle-chip.on:hover {
+  color: var(--void);
+  background: linear-gradient(180deg, var(--jade-hi), var(--jade-lo));
+  border-color: var(--jade-hi);
+}
+.toggle-chip.on strong { color: var(--void); }
+.toggle-chip:disabled {
+  opacity: .58;
+  cursor: not-allowed;
+}
 
 /* ---------------------------------------------------------------- steppers */
 .step {

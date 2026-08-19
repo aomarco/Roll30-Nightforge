@@ -133,39 +133,76 @@ function OwnedItemRow({ hero, item, run, open, busy }) {
   );
 }
 
-function LoadoutContinuation({ hero, run, error, clearError, busy }) {
+const SLOT_ICONS = { mainHand: Sword, offHand: Sword, armour: ShieldHalf, shield: ShieldHalf };
+
+function LoadoutPanel({ hero, run, error, clearError, busy }) {
   const ownedItems = hero.inventory.map((entry) => ITEM_BY_ID[entry.itemId]).filter(Boolean);
   const weapons = ownedItems.filter((item) => item.kind === "weapon");
   const armor = ownedItems.filter((item) => item.kind === "armor" && item.category !== "shield");
   const shields = ownedItems.filter((item) => item.kind === "armor" && item.category === "shield");
-  const wornBonuses = wornMagicBonuses(hero);
   const choose = (operation) => (event) => {
     clearError();
     run(operation(event.target.value || null));
   };
+  const slots = [
+    { id: "mainHand", label: "Main hand", empty: "Empty", value: hero.loadout.mainHand, options: weapons, onChange: choose((id) => setMainHand(hero, id)) },
+    { id: "offHand", label: "Off hand", empty: "Empty", value: hero.loadout.offHand, options: weapons, onChange: choose((id) => setOffHand(hero, id)) },
+    { id: "armour", label: "Armour", empty: "Unarmoured", value: hero.armorId, options: armor, onChange: choose((id) => setArmor(hero, id)) },
+    { id: "shield", label: "Shield", empty: "No shield", value: hero.shieldId, options: shields, onChange: choose((id) => setShield(hero, id)) },
+  ];
   return (
-    <div className="nf-state-gear-continuation">
-      <section className="nf-state-hero-panel">
-        <div className="unit-top"><span className="unit-label">Loadout</span><span className="tag tag-jade">Owned equipment only</span></div>
-        <p className="note">Two-Handed, shield, quantity, and Light dual-wield rules are enforced before saving.</p>
-        {error && <div className="nf-state-inline-error" role="alert"><strong>Loadout unchanged</strong><span>{error}</span></div>}
-        <div className="nf-state-gear-fields">
-          <label className="field"><span className="label">Main hand</span><select className="sel" value={hero.loadout.mainHand || ""} onChange={choose((id) => setMainHand(hero, id))} disabled={busy}><option value="">Empty</option>{weapons.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>
-          <label className="field"><span className="label">Off hand</span><select className="sel" value={hero.loadout.offHand || ""} onChange={choose((id) => setOffHand(hero, id))} disabled={busy}><option value="">Empty</option>{weapons.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>
-          <label className="field"><span className="label">Armour</span><select className="sel" value={hero.armorId || ""} onChange={choose((id) => setArmor(hero, id))} disabled={busy}><option value="">Unarmoured</option>{armor.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>
-          <label className="field"><span className="label">Shield</span><select className="sel" value={hero.shieldId || ""} onChange={choose((id) => setShield(hero, id))} disabled={busy}><option value="">No shield</option>{shields.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>
-        </div>
-      </section>
-      <section className="nf-state-hero-panel">
-        <div className="unit-top"><span className="unit-label">Worn magic</span><span className="tag tag-brass">No attunement cap</span></div>
-        <div className="nf-state-gear-bonuses">
-          <span>AC <strong className="numeral">+{wornBonuses.ac}</strong></span>
-          <span>Saves <strong className="numeral">+{wornBonuses.save}</strong></span>
-          <span>Attacks <strong className="numeral">+{wornBonuses.attack}</strong></span>
-          <span>Ranged damage <strong className="numeral">+{wornBonuses.rangedDamage}</strong></span>
-        </div>
-      </section>
-    </div>
+    <section className="nf-state-loadout">
+      <div className="unit-top">
+        <span className="unit-label">Loadout</span>
+        <span className="tag tag-jade">What this hero is carrying</span>
+      </div>
+      {error && <div className="nf-state-inline-error" role="alert"><strong>Loadout unchanged</strong><span>{error}</span></div>}
+      <div className="nf-state-loadout-slots">
+        {slots.map((slot) => {
+          const item = slot.value ? ITEM_BY_ID[slot.value] : null;
+          const Icon = SLOT_ICONS[slot.id];
+          const bonus = item ? hero.enchantments?.[item.id] || 0 : 0;
+          return (
+            <label className={`nf-state-loadout-slot${item ? " nf-state-loadout-slot-filled" : ""}`} key={slot.id}>
+              <span className="nf-state-loadout-slot-head">
+                <span className="nf-state-loadout-slot-ico"><Icon size={16} /></span>
+                <span className="nf-state-loadout-slot-label">{slot.label}</span>
+              </span>
+              <strong className="nf-state-loadout-slot-name">
+                {item ? `${item.name}${bonus ? ` +${bonus}` : ""}` : slot.empty}
+              </strong>
+              <small className="nf-state-loadout-slot-note">{item ? itemSubtitle(item) : "Nothing equipped"}</small>
+              <select
+                className="sel"
+                aria-label={slot.label}
+                value={slot.value || ""}
+                onChange={slot.onChange}
+                disabled={busy}
+              >
+                <option value="">{slot.empty}</option>
+                {slot.options.map((option) => <option value={option.id} key={option.id}>{option.name}</option>)}
+              </select>
+            </label>
+          );
+        })}
+      </div>
+      <p className="note">Only owned equipment is listed. Two-Handed, shield, quantity, and Light dual-wield rules are enforced before saving.</p>
+    </section>
+  );
+}
+
+function WornMagicPanel({ hero }) {
+  const wornBonuses = wornMagicBonuses(hero);
+  return (
+    <section className="nf-state-hero-panel nf-state-gear-continuation">
+      <div className="unit-top"><span className="unit-label">Worn magic</span><span className="tag tag-brass">No attunement cap</span></div>
+      <div className="nf-state-gear-bonuses">
+        <span>AC <strong className="numeral">+{wornBonuses.ac}</strong></span>
+        <span>Saves <strong className="numeral">+{wornBonuses.save}</strong></span>
+        <span>Attacks <strong className="numeral">+{wornBonuses.attack}</strong></span>
+        <span>Ranged damage <strong className="numeral">+{wornBonuses.rangedDamage}</strong></span>
+      </div>
+    </section>
   );
 }
 
@@ -270,12 +307,13 @@ export default function GearChapter({
     <>
       <section className="sheet enter" key="gear">
         <header className="sheet-head"><div><span className="kicker">Inventory</span><h3>Gear &amp; treasures</h3></div><div className="row"><span className="tag numeral">{hero.inventory.length} unique · {hero.inventory.reduce((total, entry) => total + entry.quantity, 0)} total</span><button className="btn btn-key btn-sm" onClick={() => { setGearError(""); setDrawer({ mode: "catalog" }); }}><Plus size={15} strokeWidth={2.4} /> Add item</button></div></header>
+        <LoadoutPanel hero={hero} run={run} error={gearError} clearError={() => setGearError("")} busy={busy} />
         <div className="seek" style={{ marginBottom: 18 }}><Search size={16} /><input className="inp" aria-label="Search owned inventory" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search your inventory…" /></div>
         <div className="hoard">
           {owned.map(({ item }) => <OwnedItemRow key={item.id} hero={hero} item={item} run={run} open={(itemId) => { setGearError(""); setDrawer({ mode: "item", itemId }); }} busy={busy} />)}
           {!owned.length && <div className="nf-state-catalog-empty"><strong>{hero.inventory.length ? "No owned items match" : "This pack is empty"}</strong><span>{hero.inventory.length ? "Try another inventory search." : "Open Add item to choose from the Nightforge catalogs."}</span></div>}
         </div>
-        <LoadoutContinuation hero={hero} run={run} error={gearError} clearError={() => setGearError("")} busy={busy} />
+        <WornMagicPanel hero={hero} />
       </section>
       {drawer?.mode === "catalog" && <CatalogDrawer hero={hero} filters={filters} setFilters={setFilters} run={run} close={() => setDrawer(null)} busy={busy} />}
       {drawer?.mode === "item" && selectedItem && <ItemDrawer hero={hero} item={selectedItem} run={run} close={() => setDrawer(null)} error={gearError} busy={busy} />}

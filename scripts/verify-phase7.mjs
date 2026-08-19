@@ -33,7 +33,7 @@ for (const control of [
   "Editable token", "Save token details", "Hero snapshot", "Read only", "GearChapter",
   "Fill chest", "ITEM_CATALOG", "changeItem", "Remove chest", "Creature size", "Initiative bonus",
 ]) if (!inspector.includes(control)) failures.push(`Battle Setup inspector is missing ${control}.`);
-if (!(await read("src/screens/GearChapter.jsx")).includes("Owned equipment only")) failures.push("Per-battle Gear does not retain the owned-equipment legality control.");
+if (!(await read("src/screens/GearChapter.jsx")).includes("Only owned equipment is listed")) failures.push("Per-battle Gear does not retain the owned-equipment legality control.");
 
 const app = await read("src/App.jsx");
 if (!app.includes("heroes={state.heroes}")) failures.push("App does not supply the real Hero roster to Battle Setup.");

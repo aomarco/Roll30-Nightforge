@@ -1,9 +1,10 @@
 import { createApplicationCommands } from "./commands.js";
-import { createBrowserArtworkDecoder } from "./artwork.js";
+import { createBrowserArtworkDecoder, HERO_PORTRAIT_LIMITS } from "./artwork.js";
 import { createArtworkRepository, createIndexedDbArtworkAdapter } from "../storage/artworkRepository.js";
 import { createHeroRepository, createSceneRepository } from "../storage/entityRepositories.js";
 import { createSessionRepository } from "../storage/sessionRepository.js";
 import { createStateRepository } from "../storage/stateRepository.js";
+import { PORTRAIT_DATABASE, PORTRAIT_STORE } from "../storage/constants.js";
 
 const unavailableStorage = (error) => ({
   getItem() { throw error; },
@@ -30,9 +31,17 @@ export function createBrowserRuntime(browser, dispatch) {
   const artworkRepository = createArtworkRepository(
     createIndexedDbArtworkAdapter(browser.indexedDB),
   );
+  const portraitRepository = createArtworkRepository(
+    createIndexedDbArtworkAdapter(browser.indexedDB, {
+      databaseName: PORTRAIT_DATABASE,
+      storeName: PORTRAIT_STORE,
+    }),
+  );
   const commands = createApplicationCommands({
     artworkDecoder: createBrowserArtworkDecoder(browser),
     artworkRepository,
+    portraitDecoder: createBrowserArtworkDecoder(browser, HERO_PORTRAIT_LIMITS),
+    portraitRepository,
     sceneRepository,
     heroRepository,
     sessionRepository,
@@ -41,6 +50,7 @@ export function createBrowserRuntime(browser, dispatch) {
 
   return {
     artworkRepository,
+    portraitRepository,
     commands,
     heroRepository,
     sceneRepository,

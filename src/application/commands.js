@@ -14,6 +14,9 @@ export function createApplicationCommands({
   artworkRepository = null,
   artworkDecoder = null,
   artworkKeyFactory = () => `artwork-${crypto.randomUUID()}`,
+  portraitRepository = null,
+  portraitDecoder = null,
+  portraitKeyFactory = () => `portrait-${crypto.randomUUID()}`,
   dispatch,
 }) {
   if (!sceneRepository || !heroRepository || !sessionRepository || !dispatch) {
@@ -356,6 +359,107 @@ export function createApplicationCommands({
     },
     createHero: (input) => persist(() => heroRepository.create(input), refreshHeroes),
     updateHero,
-    removeHero: (id) => persist(() => heroRepository.remove(id), refreshHeroes),
+    removeHero: (id) => {
+      const existing = heroRepository.get(id);
+      const portraitKey = existing.ok ? existing.value.portraitKey : null;
+      const removed = persist(() => heroRepository.remove(id), refreshHeroes);
+      if (removed.ok && portraitKey && portraitRepository) {
+        const cleanup = portraitRepository.remove(portraitKey);
+        cleanup.then?.((result) => {
+          if (!result?.ok) dispatch({ type: "persistence-failed", error: result });
+        });
+        return success(removed.value, {
+          envelope: removed.envelope,
+          revision: removed.revision,
+          cleanup,
+        });
+      }
+      return removed;
+    },
+    replaceHeroPortrait: async (id, blob) => {
+      if (!portraitRepository || !portraitDecoder) {
+        const unavailable = failure(
+          "portrait-unavailable",
+          "Hero portraits are unavailable in this browser.",
+          { recovery: "Use a current browser and retry.", retryable: true },
+        );
+        dispatch({ type: "persistence-failed", error: unavailable });
+        return unavailable;
+      }
+
+      const current = heroRepository.get(id);
+      if (!current.ok) {
+        dispatch({ type: "persistence-failed", error: current });
+        return current;
+      }
+
+      dispatch({ type: "persistence-saving" });
+      const decoded = await portraitDecoder(blob);
+      if (!decoded.ok) {
+        dispatch({ type: "persistence-failed", error: decoded });
+        return decoded;
+      }
+
+      const portraitKey = portraitKeyFactory();
+      const written = await portraitRepository.put(portraitKey, blob);
+      if (!written.ok) {
+        dispatch({ type: "persistence-failed", error: written });
+        return written;
+      }
+
+      const verified = await portraitRepository.get(portraitKey);
+      if (!verified.ok || !verified.value) {
+        await portraitRepository.remove(portraitKey);
+        const failed = verified.ok
+          ? failure("portrait-verification-failed", "Nightforge could not verify the staged portrait.", {
+              recovery: "The previous portrait remains active. Retry the upload.",
+              retryable: true,
+            })
+          : verified;
+        dispatch({ type: "persistence-failed", error: failed });
+        return failed;
+      }
+
+      const previousPortraitKey = current.value.portraitKey;
+      const saved = heroRepository.update(id, { portraitKey });
+      if (!saved.ok) {
+        await portraitRepository.remove(portraitKey);
+        dispatch({ type: "persistence-failed", error: saved });
+        return saved;
+      }
+
+      refreshHeroes();
+      dispatch({ type: "persistence-saved", revision: saved.revision || 0 });
+      const cleanup = previousPortraitKey
+        ? await portraitRepository.remove(previousPortraitKey)
+        : success(null);
+      return success(saved.value, {
+        revision: saved.revision,
+        issues: cleanup.ok ? [] : [cleanup],
+      });
+    },
+    removeHeroPortrait: async (id) => {
+      const current = heroRepository.get(id);
+      if (!current.ok) {
+        dispatch({ type: "persistence-failed", error: current });
+        return current;
+      }
+      const previousPortraitKey = current.value.portraitKey;
+      dispatch({ type: "persistence-saving" });
+      const saved = heroRepository.update(id, { portraitKey: null });
+      if (!saved.ok) {
+        dispatch({ type: "persistence-failed", error: saved });
+        return saved;
+      }
+      refreshHeroes();
+      dispatch({ type: "persistence-saved", revision: saved.revision || 0 });
+      const cleanup = previousPortraitKey && portraitRepository
+        ? await portraitRepository.remove(previousPortraitKey)
+        : success(null);
+      return success(saved.value, {
+        revision: saved.revision,
+        issues: cleanup.ok ? [] : [cleanup],
+      });
+    },
   };
 }

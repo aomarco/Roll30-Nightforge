@@ -606,6 +606,11 @@
   gap: 8px;
 }
 
+.nf-state-hero-skills .toggle-chip.on small {
+  color: var(--void);
+  opacity: .72;
+}
+
 .nf-state-hero-skills small {
   margin-left: 4px;
   color: var(--ink-3);
@@ -680,6 +685,126 @@
   display: grid;
   gap: 14px;
   margin-top: 22px;
+}
+
+/* ------------------------------------------------------------- portraits */
+.nf-state-portrait-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.nf-state-portrait-sigil {
+  padding: 0;
+  overflow: hidden;
+  background: var(--inset);
+}
+
+.nf-state-portrait-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* ------------------------------------------------------- loadout (primary) */
+.nf-state-loadout {
+  margin: 4px 0 22px;
+  padding: 18px;
+  border-radius: var(--r-lg);
+  background: linear-gradient(180deg, rgba(47,211,180,.07), rgba(6,11,12,.5));
+  border: 1px solid var(--jade-edge);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.05);
+}
+
+.nf-state-loadout-slots {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 16px 0 12px;
+}
+
+.nf-state-loadout-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 13px 13px 12px;
+  border-radius: var(--r-md);
+  background: rgba(3,9,10,.55);
+  border: 1px solid var(--line-2);
+  transition: border-color var(--swift), background var(--swift);
+}
+
+.nf-state-loadout-slot:hover { border-color: var(--line-3); }
+
+.nf-state-loadout-slot-filled {
+  background: linear-gradient(180deg, rgba(31,54,60,.6), rgba(3,9,10,.62));
+  border-color: var(--jade-edge);
+}
+
+.nf-state-loadout-slot-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nf-state-loadout-slot-ico {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: var(--r-xs);
+  color: var(--ink-3);
+  background: rgba(255,255,255,.05);
+}
+
+.nf-state-loadout-slot-filled .nf-state-loadout-slot-ico {
+  color: var(--void);
+  background: var(--jade);
+}
+
+.nf-state-loadout-slot-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.nf-state-loadout-slot-name {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.nf-state-loadout-slot:not(.nf-state-loadout-slot-filled) .nf-state-loadout-slot-name {
+  color: var(--ink-4);
+  font-weight: 500;
+}
+
+.nf-state-loadout-slot-note {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--ink-3);
+  overflow-wrap: anywhere;
+}
+
+.nf-state-loadout-slot .sel { margin-top: 4px; }
+
+@media (max-width: 1080px) {
+  .nf-state-loadout-slots { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 720px) {
+  .nf-state-loadout-slots { grid-template-columns: 1fr; }
 }
 
 .nf-state-gear-fields {

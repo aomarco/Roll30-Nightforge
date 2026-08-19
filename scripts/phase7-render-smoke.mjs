@@ -74,7 +74,7 @@ try {
   assert.match(heroMarkup, /Strength/);
   assert.match(heroMarkup, /Dexterity/);
   assert.match(heroMarkup, /Initiative/);
-  assert.match(heroMarkup, /Owned equipment only/);
+  assert.match(heroMarkup, /Only owned equipment is listed/);
 
   const chestMarkup = renderToStaticMarkup(React.createElement(TableScreen, {
     ...handlers,

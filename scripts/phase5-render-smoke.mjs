@@ -51,7 +51,7 @@ try {
   assert.match(gear, /Ring of Protection/);
   assert.match(gear, />Worn</);
   assert.match(gear, /Loadout/);
-  assert.match(gear, /Owned equipment only/);
+  assert.match(gear, /Only owned equipment is listed/);
   assert.match(gear, /No attunement cap/);
 
   const emptyHero = createHeroRecord({}, { id: "empty-gear", now: "2026-08-16T00:00:00.000Z" });
