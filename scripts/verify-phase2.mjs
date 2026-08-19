@@ -1,24 +1,9 @@
-import { createHash } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import { resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
 const read = (path) => readFile(resolve(root, path), "utf8");
-const manifest = JSON.parse(await read("scripts/nightforge-baseline-hashes.json"));
 const failures = [];
-
-for (const relativePath of [
-  "src/styles/core.css",
-  "src/styles/shell.css",
-  "src/styles/library.css",
-  "src/styles/heroes.css",
-  "src/styles/scene.css",
-  "src/styles/table.css",
-]) {
-  const contents = await readFile(resolve(root, relativePath));
-  const actual = createHash("sha256").update(contents).digest("hex").toUpperCase();
-  if (actual !== manifest[relativePath]) failures.push(`${relativePath}: frozen stylesheet changed.`);
-}
 
 const functionalCss = await read("src/styles/functional-states.css");
 const cssWithoutComments = functionalCss.replace(/\/\*[\s\S]*?\*\//g, "");

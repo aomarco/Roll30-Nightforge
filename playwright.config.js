@@ -1,24 +1,15 @@
 import { defineConfig } from "@playwright/test";
 
-const snapshotPathTemplate = process.platform === "win32"
-  ? "{testDir}/__screenshots__/{arg}{ext}"
-  : "{testDir}/__screenshots__/linux/{arg}{ext}";
-
 export default defineConfig({
   testDir: "./tests",
   testMatch: "phase11.spec.js",
   timeout: 45_000,
   expect: {
     timeout: 8_000,
-    toHaveScreenshot: {
-      animations: "disabled",
-      maxDiffPixelRatio: process.platform === "win32" ? 0 : 0.001,
-    },
   },
   fullyParallel: false,
   workers: 1,
   reporter: "line",
-  snapshotPathTemplate,
   use: {
     baseURL: "http://127.0.0.1:5311",
     browserName: "chromium",

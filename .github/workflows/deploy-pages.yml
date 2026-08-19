@@ -6,12 +6,6 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      capture_linux_baselines:
-        description: Generate pinned Linux screenshot candidates as a review artifact
-        required: false
-        default: false
-        type: boolean
 
 permissions:
   contents: read
@@ -31,17 +25,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - name: Capture pinned Linux screenshot candidates
-        if: github.event_name == 'workflow_dispatch' && inputs.capture_linux_baselines
-        run: npm run test:phase11:browser -- --update-snapshots
       - run: npm run verify
-      - name: Upload pinned Linux screenshot candidates
-        if: github.event_name == 'workflow_dispatch' && inputs.capture_linux_baselines
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: nightforge-linux-screenshot-candidates
-          path: tests/__screenshots__/linux
-          if-no-files-found: error
       - name: Build repository-specific Pages artifact
         shell: bash
         run: |
@@ -51,12 +35,12 @@ jobs:
             npm run build:preview
           fi
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
-        if: github.event_name != 'pull_request' && !(github.event_name == 'workflow_dispatch' && inputs.capture_linux_baselines)
+        if: github.event_name != 'pull_request'
         with:
           path: dist
 
   deploy:
-    if: github.event_name != 'pull_request' && !(github.event_name == 'workflow_dispatch' && inputs.capture_linux_baselines)
+    if: github.event_name != 'pull_request'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

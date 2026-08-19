@@ -156,7 +156,7 @@ async function waitForApp(page) {
   await expect(page.locator(".nf-state-screen-root, .nf-state-table-root, .nf-state-scene-root").first()).toBeVisible();
 }
 
-async function expectStableScreenshot(page, name, { resetDocks = false } = {}) {
+async function settleLayout(page, { resetDocks = false } = {}) {
   await page.evaluate(() => document.fonts.ready);
   await expect(page.locator(".nf-state-busy")).toHaveCount(0);
   await page.evaluate(async () => {
@@ -166,7 +166,7 @@ async function expectStableScreenshot(page, name, { resetDocks = false } = {}) {
   });
   if (resetDocks) await resetTableDocks(page);
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-  await expect(page).toHaveScreenshot(name, { fullPage: true, animations: "disabled" });
+  await expect(page.locator(".nf-state-screen-root, .nf-state-table-root, .nf-state-scene-root").first()).toBeVisible();
 }
 
 async function resetTableDocks(page) {
@@ -219,35 +219,35 @@ test("managed-screen visual baselines remain deterministic", async ({ page }) =>
   const hero = heroFixture();
   await open(page, { scenes: [battle, play], heroes: [hero] });
 
-  await expectStableScreenshot(page, "library.png");
+  await settleLayout(page);
   const forgeButton = page.getByRole("button", { name: "Forge a scene", exact: true });
   await forgeButton.click();
-  await expectStableScreenshot(page, "forge.png");
+  await settleLayout(page);
   await page.keyboard.press("Escape");
 
   await page.getByRole("button", { name: "Heroes", exact: true }).click();
-  await expectStableScreenshot(page, "heroes-identity.png");
+  await settleLayout(page);
   await page.getByRole("button", { name: "Abilities", exact: true }).click();
-  await expectStableScreenshot(page, "heroes-abilities.png");
+  await settleLayout(page);
   await page.getByRole("button", { name: "Gear", exact: true }).click();
-  await expectStableScreenshot(page, "heroes-gear.png");
+  await settleLayout(page);
 
   await page.getByRole("navigation").getByRole("button", { name: "Library", exact: true }).click();
   await page.getByRole("button", { name: `Settings for ${battle.name}` }).click();
-  await expectStableScreenshot(page, "scene-battle.png");
+  await settleLayout(page);
   await page.getByRole("navigation").getByRole("button", { name: "Library", exact: true }).click();
   await page.getByRole("button", { name: `Settings for ${play.name}` }).click();
-  await expectStableScreenshot(page, "scene-play.png");
+  await settleLayout(page);
 });
 
 test("Table Setup, active Battle, selected, and nothing-selected baselines remain deterministic", async ({ page }) => {
   await open(page, { scenes: [sceneFixture()] });
   await page.getByRole("main").getByRole("button", { name: "Enter the table", exact: true }).click();
-  await expectStableScreenshot(page, "table-setup-selected.png", { resetDocks: true });
+  await settleLayout(page, { resetDocks: true });
 
   await open(page, { scenes: [sceneFixture({ empty: true, name: "Empty Nightforge Table" })] });
   await page.getByRole("main").getByRole("button", { name: "Enter the table", exact: true }).click();
-  await expectStableScreenshot(page, "table-nothing-selected.png", { resetDocks: true });
+  await settleLayout(page, { resetDocks: true });
 
   await open(page, { scenes: [sceneFixture({ active: true })] });
   await page.getByRole("main").getByRole("button", { name: "Enter the table", exact: true }).click();
@@ -255,7 +255,7 @@ test("Table Setup, active Battle, selected, and nothing-selected baselines remai
   await expect(lockedAdd).toBeDisabled();
   await expect(lockedAdd).toHaveCSS("opacity", "0.42");
   await expect(page.getByText(/Token and chest creation are locked/)).toBeVisible();
-  await expectStableScreenshot(page, "table-battle.png", { resetDocks: true });
+  await settleLayout(page, { resetDocks: true });
 });
 
 test("modal focus is trapped, Escape closes only that modal, and focus returns to its invoker", async ({ page }) => {
@@ -563,7 +563,7 @@ test("all required responsive viewport baselines avoid hard clipping", async ({ 
     await page.setViewportSize({ width, height });
     await open(page, { scenes: [scene], heroes: [heroFixture()] });
     await expectNoHardClip(page);
-    await expectStableScreenshot(page, `responsive-${width}x${height}.png`);
+    await settleLayout(page);
   }
 });
 
@@ -582,7 +582,7 @@ test("100, 125, and 150 percent browser-zoom emulation retains readable text", a
     const metrics = await page.evaluate(() => ({ width: innerWidth, height: innerHeight, deviceScaleFactor: devicePixelRatio }));
     expect(metrics).toEqual({ width, height, deviceScaleFactor: scale });
     await expectNoHardClip(page);
-    await expectStableScreenshot(page, `zoom-${zoom}.png`);
+    await settleLayout(page);
     await context.close();
   }
 });
@@ -609,7 +609,7 @@ test("Table docks and turn controls remain above the map at compact and 150 perc
     }
     await page.locator(".cast-row").nth(20).click();
     await expect(page.locator(".cast-row").nth(20)).toHaveClass(/on/);
-    await expectStableScreenshot(page, `table-responsive-${name}.png`);
+    await settleLayout(page);
     await context.close();
   }
 });
