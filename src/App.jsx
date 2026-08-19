@@ -1,5 +1,5 @@
 import { useEffect, useReducer, useRef } from "react";
-import { Compass, ScrollText, SlidersHorizontal, Swords } from "lucide-react";
+import { Compass, ScrollText } from "lucide-react";
 
 import { createBrowserRuntime } from "./application/browserRuntime.js";
 import { tableModeForScene } from "./application/library.js";
@@ -14,11 +14,9 @@ import TableScreen from "./screens/TableScreen.jsx";
 const TABS = [
   { id: "home", label: "Library", icon: Compass },
   { id: "characters", label: "Heroes", icon: ScrollText },
-  { id: "settings", label: "Scene", icon: SlidersHorizontal, requiresScene: true },
 ];
 
-export function CommandDeck({ route, go, activeScene }) {
-  const hasScene = Boolean(activeScene);
+export function CommandDeck({ route, go }) {
   return (
     <header className="deck">
       <button className="brand" onClick={() => go({ page: "home" })} title="Roll30">
@@ -27,37 +25,16 @@ export function CommandDeck({ route, go, activeScene }) {
       </button>
 
       <nav className="deck-nav">
-        {TABS.map(({ id, label, icon: Icon, requiresScene }) => {
-          const disabled = Boolean(requiresScene && !hasScene);
-          return (
-            <button
-              key={id}
-              className={
-                "deck-tab" + (route.page === id ? " on" : "") +
-                (disabled ? " nf-state-disabled" : "")
-              }
-              onClick={() =>
-                go(id === "settings" ? { page: id, returnTo: { page: "home" } } : { page: id })
-              }
-              disabled={disabled}
-              title={disabled ? "Choose or Forge a Scene from Library first" : undefined}
-            >
-              <Icon size={15} strokeWidth={2} /> {label}
-            </button>
-          );
-        })}
+        {TABS.map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            className={"deck-tab" + (route.page === id ? " on" : "")}
+            onClick={() => go({ page: id })}
+          >
+            <Icon size={15} strokeWidth={2} /> {label}
+          </button>
+        ))}
       </nav>
-
-      <div className="deck-tail">
-        <button
-          className={"btn btn-key btn-sm" + (!hasScene ? " nf-state-disabled" : "")}
-          onClick={() => go({ page: "board", mode: tableModeForScene(activeScene) })}
-          title={hasScene ? "Jump to the table" : "Choose or Forge a Scene first"}
-          disabled={!hasScene}
-        >
-          <Swords size={14} strokeWidth={2.2} /> Enter the table
-        </button>
-      </div>
     </header>
   );
 }
@@ -206,7 +183,7 @@ export default function App({ browser = window, runtimeFactory = createBrowserRu
 
   return (
     <div className="app nf-state-responsive-shell">
-      <CommandDeck route={state.route} go={go} activeScene={activeScene} />
+      <CommandDeck route={state.route} go={go} />
       <main className="viewport" key={state.route.page}>{screen}</main>
     </div>
   );

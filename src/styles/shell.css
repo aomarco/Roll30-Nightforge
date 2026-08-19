@@ -118,14 +118,6 @@
   box-shadow: 0 0 10px var(--jade-glow);
 }
 
-/* Right cluster */
-.deck-tail {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  justify-self: end;
-}
-
 /* -------------------------------------------------------------- viewport */
 .viewport {
   position: relative;

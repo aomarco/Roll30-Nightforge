@@ -87,24 +87,16 @@ try {
   );
   assert.match(recoveredLibrary, /restored the backup vault/);
 
-  const deckWithoutScene = renderToStaticMarkup(
+  const deck = renderToStaticMarkup(
     React.createElement(CommandDeck, {
       route: { page: "home" },
       go: () => {},
-      activeScene: null,
     }),
   );
-  assert.match(deckWithoutScene, /disabled=""/);
-  assert.match(deckWithoutScene, /Choose or Forge a Scene first/);
-
-  const deckWithScene = renderToStaticMarkup(
-    React.createElement(CommandDeck, {
-      route: { page: "home" },
-      go: () => {},
-      activeScene: scenes[0],
-    }),
-  );
-  assert.doesNotMatch(deckWithScene, /Choose or Forge a Scene first/);
+  assert.match(deck, /Library/);
+  assert.match(deck, /Heroes/);
+  assert.doesNotMatch(deck, /Enter the table/);
+  assert.doesNotMatch(deck, /Choose or Forge a Scene/);
 
   const workbench = renderToStaticMarkup(
     React.createElement(SceneScreen, { scene: scenes[0], go: () => {} }),

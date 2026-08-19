@@ -301,7 +301,7 @@ test("primary Library actions are keyboard reachable with a visible focus indica
     expect(active.outlineStyle, `visible focus for ${active.name}`).toBe("solid");
     expect(Number.parseFloat(active.outlineWidth), `visible focus width for ${active.name}`).toBeGreaterThanOrEqual(2);
   }
-  for (const expected of ["Roll30", "Library", "Heroes", "Scene", "Jump to the table", "Party roster", "Forge a scene"]) {
+  for (const expected of ["Roll30", "Library", "Heroes", "Party roster", "Forge a scene"]) {
     expect(visited.some((name) => name.includes(expected)), `${expected} must be in the keyboard sequence`).toBe(true);
   }
 });
@@ -486,8 +486,8 @@ test("destructive confirmations identify their exact target", async ({ page }) =
 test("fresh launch exposes honest disabled reasons and a successful Forge journey", async ({ page }) => {
   await open(page);
   await expect(page.getByRole("heading", { name: "The vault is ready" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Scene", exact: true })).toHaveAttribute("title", /Choose or Forge a Scene/);
-  await expect(page.getByRole("button", { name: "Enter the table", exact: true })).toHaveAttribute("title", /Choose or Forge a Scene/);
+  await expect(page.getByRole("navigation").getByRole("button", { name: "Scene", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Enter the table", exact: true })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Forge a scene", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Forge a scene" });
