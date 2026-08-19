@@ -1,6 +1,12 @@
 import { ITEM_BY_ID } from "./catalog.js";
 import { normalizeConditions } from "./conditions.js";
-import { computeArmorClass, deriveHero } from "./heroes.js";
+import {
+  ABILITY_KEYS,
+  abilityModifier,
+  computeArmorClass,
+  deriveHero,
+  proficiencyBonus,
+} from "./heroes.js";
 import {
   changeInventory,
   normalizeEquipment,
@@ -151,6 +157,13 @@ export function normalizeTableToken(input = {}, { id, ordinal = 0 } = {}) {
     baseSpeed: Math.max(0, Math.floor(finite(input.baseSpeed ?? input.speed, 30))),
     strength: Math.max(1, Math.floor(finite(input.strength, 10))),
     dexterity: Math.max(1, Math.floor(finite(input.dexterity, 10))),
+    constitution: Math.max(1, Math.floor(finite(input.constitution, 10))),
+    intelligence: Math.max(1, Math.floor(finite(input.intelligence, 10))),
+    wisdom: Math.max(1, Math.floor(finite(input.wisdom, 10))),
+    charisma: Math.max(1, Math.floor(finite(input.charisma, 10))),
+    saveProficiencies: Array.isArray(input.saveProficiencies)
+      ? [...new Set(input.saveProficiencies.filter((ability) => ABILITY_KEYS.includes(ability)))]
+      : [],
     level: Math.max(1, Math.min(20, Math.floor(finite(input.level, 1)))),
     initiativeBonus: Math.floor(finite(input.initiativeBonus)),
     size: ["small", "medium", "large"].includes(input.size) ? input.size : "medium",
@@ -215,6 +228,11 @@ export function createHeroTokenSnapshot(hero, { id, ordinal = 0, position } = {}
     baseSpeed: derived.speed,
     strength: derived.finalAbilities.str,
     dexterity: derived.finalAbilities.dex,
+    constitution: derived.finalAbilities.con,
+    intelligence: derived.finalAbilities.int,
+    wisdom: derived.finalAbilities.wis,
+    charisma: derived.finalAbilities.cha,
+    saveProficiencies: hero.saveProficiencies || [],
     level: derived.level,
     initiativeBonus: derived.initiative,
     size: derived.size,
@@ -227,6 +245,39 @@ export function createHeroTokenSnapshot(hero, { id, ordinal = 0, position } = {}
     conditions: [],
   }, { id, ordinal });
 }
+
+const TOKEN_ABILITY_FIELD = Object.freeze({
+  str: "strength",
+  dex: "dexterity",
+  con: "constitution",
+  int: "intelligence",
+  wis: "wisdom",
+  cha: "charisma",
+});
+
+export const tokenAbilityScore = (token, ability) =>
+  Math.max(1, Math.floor(finite(token?.[TOKEN_ABILITY_FIELD[ability]], 10)));
+
+/**
+ * A token carries its own six ability scores and save proficiencies, copied
+ * from the Hero when it joined the Battle. Saves are therefore readable during
+ * combat without reaching back into a Hero record that may since have changed,
+ * and manual tokens get real saves too.
+ */
+export function tokenSaveModifier(token, ability) {
+  if (!ABILITY_KEYS.includes(ability)) return 0;
+  const base = abilityModifier(tokenAbilityScore(token, ability));
+  const proficient = (token?.saveProficiencies || []).includes(ability);
+  return base
+    + (proficient ? proficiencyBonus(token?.level) : 0)
+    + Number(wornMagicBonuses(token).save || 0);
+}
+
+export const tokenSaveProfile = (token) => ABILITY_KEYS.map((ability) => ({
+  ability,
+  modifier: tokenSaveModifier(token, ability),
+  proficient: (token?.saveProficiencies || []).includes(ability),
+}));
 
 export function derivedTokenArmorClass(token) {
   const armor = ITEM_BY_ID[token?.armorId] || null;

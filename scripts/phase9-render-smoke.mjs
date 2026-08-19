@@ -67,11 +67,9 @@ try {
     ...handlers,
     scene: battle,
     mode: "battle",
-    initialCommandOpen: true,
-    initialAttackOpen: true,
+    initialCommandPanel: "attack",
   }));
   assert.match(actionMarkup, /Choose attack weapon/);
-  assert.match(actionMarkup, /Equipped only/);
   assert.match(actionMarkup, /Dagger/);
   assert.match(actionMarkup, /Main hand/);
   assert.match(actionMarkup, /Off hand/);
@@ -128,23 +126,22 @@ try {
     ...handlers,
     scene: afterMain,
     mode: "battle",
-    initialBonusOpen: true,
+    initialCommandPanel: "bonus",
   }));
-  assert.match(bonusMarkup, /Duelist.*s Bonus Action/);
+  assert.match(bonusMarkup, /Bonus commands/);
   assert.match(bonusMarkup, /Off-hand attack/);
   assert.match(bonusMarkup, /Dagger/);
   assert.match(bonusMarkup, /Battle chests/);
-  assert.match(bonusMarkup, /No Battle chests are on this Table/);
+  assert.match(bonusMarkup, /No Battle chests or thrown weapons are present/);
   assert.match(bonusMarkup, /Physical weapons/);
-  assert.match(bonusMarkup, /No thrown weapons are present/);
   assert.match(bonusMarkup, /No automatic End Turn/);
-  assert.match(bonusMarkup, /aria-label="Open Bonus Commands"/);
+  assert.match(bonusMarkup, /nf-state-command-meter-bonus/);
 
   const unavailableBonusMarkup = renderToStaticMarkup(React.createElement(TableScreen, {
     ...handlers,
     scene: battle,
     mode: "battle",
-    initialBonusOpen: true,
+    initialCommandPanel: "bonus",
   }));
   assert.match(unavailableBonusMarkup, /Off-hand attack unavailable/);
   assert.match(unavailableBonusMarkup, /Use the Attack Action with one weapon/);

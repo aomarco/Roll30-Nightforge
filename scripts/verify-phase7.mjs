@@ -21,7 +21,7 @@ const table = await read("src/screens/TableScreen.jsx");
 for (const integration of [
   "heroes = []", "summonChoice", "addSetupToken", "placeSetupChest", "onChestPointerDown",
   "setupCollisionFailure", "BattleSetupInspector", "beginBattle", "abandonBattle", "setAbandonOpen(true)",
-  "Token and chest creation are locked", "returnTo: { page: \"board\", mode }",
+  "Place a chest", "returnTo: { page: \"board\", mode }",
 ]) if (!table.includes(integration)) failures.push(`Table screen is missing ${integration}.`);
 for (const fixture of ["BATTLE_PROTOTYPE_TOKENS", "Thorin", "Elara", "Goblin"]) {
   if (table.includes(fixture)) failures.push(`Deferred prototype fixture remains in the real Phase 7 Table: ${fixture}.`);

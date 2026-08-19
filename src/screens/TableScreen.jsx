@@ -65,6 +65,7 @@ import {
   changeChestInventory,
   clientPointToPercent,
   createChest,
+  createTurnResources,
   createHeroTokenSnapshot,
   createManualToken,
   createPlayToken,
@@ -96,16 +97,62 @@ import {
 import { Pip } from "../ui/Glyphs.jsx";
 import { useDialogA11y } from "../ui/useDialogA11y.js";
 import BattleSetupInspector from "./BattleSetupInspector.jsx";
+import BattleTokenInspector from "./BattleTokenInspector.jsx";
 import AttackCinematic from "./AttackCinematic.jsx";
 import BattleCompletion from "./BattleCompletion.jsx";
-import BonusCommandsDrawer from "./BonusCommandsDrawer.jsx";
 import ChestLootDrawer from "./ChestLootDrawer.jsx";
-import CombatCommandsDrawer from "./CombatCommandsDrawer.jsx";
+import CommandBar from "./CommandBar.jsx";
 import RetrievalCinematic from "./RetrievalCinematic.jsx";
 
 const okay = () => ({ ok: true });
 const initials = (name) => String(name || "?").slice(0, 2).toUpperCase();
 const errorText = (error) => error ? `${error.message} ${error.recovery || "Retry the change."}` : "";
+
+/**
+ * Refusals during play get a short line you can read at a glance. Anything that
+ * risks losing work keeps its full explanation, because there the detail is the
+ * point.
+ */
+const BRIEF_REFUSALS = Object.freeze({
+  NO_MOVEMENT_REMAINING: "Not enough movement left",
+  NO_LEGAL_MOVEMENT: "No legal step there",
+  PATH_UNREACHABLE: "No route to that square",
+  PATH_SEARCH_LIMIT: "That route is too far to search",
+  TOKEN_IMMOBILIZED: "This token cannot move",
+  TOKEN_DEFEATED: "This token is down",
+  NOT_ACTIVE_TOKEN: "It is not this token's turn",
+  SWAP_ATTACK_LOCKS_MOVEMENT: "Attacking after a swap locks movement",
+  SETUP_CELL_OCCUPIED: "That square is taken",
+  SETUP_GRID_FULL: "No empty square left",
+  ATTACK_OUT_OF_RANGE: "Target is out of range",
+  ATTACK_LINE_BLOCKED: "A wall blocks the shot",
+  ATTACK_TARGET_DEFEATED: "That target is already down",
+  ATTACK_TARGET_INVALID: "Choose another target",
+  ATTACK_ACTION_SPENT: "Action already used",
+  ATTACK_INCAPACITATED: "This token cannot attack",
+  ATTACK_AFTER_DASH: "Cannot attack after Dash",
+  DASH_ALREADY_USED: "Dash already used",
+  DASH_ACTION_SPENT: "Action already used",
+  DASH_AFTER_SWAP: "Cannot Dash after a swap",
+  DASH_INCAPACITATED: "This token cannot Dash",
+  SWAP_ALREADY_USED: "Weapons already swapped",
+  SWAP_AFTER_ACTION: "Action already used",
+  SWAP_AFTER_DASH: "Cannot swap after Dash",
+  SWAP_UNCHANGED: "Pick a different loadout",
+  ILLEGAL_SWAP: "That loadout is not legal",
+  BONUS_ACTION_SPENT: "Bonus Action already used",
+  OFF_HAND_ATTACK_LOCKED: "No off-hand attack available",
+  CHEST_NOT_ADJACENT: "Move next to the chest first",
+  CHEST_ITEM_DEPLETED: "That item is gone",
+  GROUND_ITEM_NOT_ADJACENT: "Move closer to pick that up",
+  LIVING_CARRIER_NOT_ADJACENT: "Move next to the carrier",
+  DEFEATED_CARRIER_NOT_ADJACENT: "Move next to the carrier",
+  AMMUNITION_DEPLETED: "Out of ammunition",
+  BATTLE_NEEDS_TOKENS: "Battle needs at least two tokens",
+  BATTLE_GRID_FULL: "No room left on the board",
+});
+
+const briefRefusal = (error) => (error?.code ? BRIEF_REFUSALS[error.code] : null) || null;
 const ARROW_DELTAS = Object.freeze({
   ArrowLeft: { column: -1, row: 0, xPercent: -1, yPercent: 0 },
   ArrowRight: { column: 1, row: 0, xPercent: 1, yPercent: 0 },
@@ -387,12 +434,9 @@ export default function TableScreen({
   initialSelectedId = undefined,
   initialSelectedChestId = null,
   initialAbandonOpen = false,
-  initialCommandOpen = false,
-  initialBonusOpen = false,
+  initialCommandPanel = null,
   initialMovementPreview = null,
-  initialSwapOpen = false,
   initialSwapDraft = null,
-  initialAttackOpen = false,
   initialAttackDraft = null,
   initialCinematic = null,
   initialRetrievalCinematic = null,
@@ -424,8 +468,6 @@ export default function TableScreen({
   const [wallHover, setWallHover] = useState(null);
   const [rulerDraft, setRulerDraft] = useState(initialRulerDraft);
   const [abandonOpen, setAbandonOpen] = useState(initialAbandonOpen);
-  const [commandOpen, setCommandOpen] = useState(initialCommandOpen);
-  const [bonusOpen, setBonusOpen] = useState(initialBonusOpen);
   const [movementPreview, setMovementPreview] = useState(initialMovementPreview);
   const [attackDraft, setAttackDraft] = useState(initialAttackDraft);
   const [cinematic, setCinematic] = useState(initialCinematic);
@@ -458,6 +500,14 @@ export default function TableScreen({
     ? rulerDistanceFeet(rulerDraft.start, rulerDraft.end, sceneViewport(scene?.gridSize))
     : 0;
 
+  // The result is already saved before the animation starts, so skipping only
+  // stops the presentation.
+  const skipCinematic = () => {
+    clearCinematicTimers();
+    setCinematic(null);
+    setImpact(null);
+  };
+
   const clearCinematicTimers = () => {
     for (const timer of cinematicTimersRef.current) clearTimeout(timer);
     cinematicTimersRef.current = [];
@@ -489,8 +539,6 @@ export default function TableScreen({
     setWallHover(null);
     setRulerDraft(null);
     setAbandonOpen(false);
-    setCommandOpen(false);
-    setBonusOpen(false);
     setMovementPreview(null);
     setAttackDraft(null);
     setCinematic(null);
@@ -508,13 +556,19 @@ export default function TableScreen({
   }, [scene?.mapView?.scale, scene?.mapView?.x, scene?.mapView?.y]);
 
   useEffect(() => {
-    setCommandOpen(false);
-    setBonusOpen(false);
     setMovementPreview(null);
     setAttackDraft(null);
     setLootChestId(null);
     setInteraction((current) => current?.kind === "movement" ? null : current);
   }, [activeId]);
+
+  // Short refusals clear themselves; anything that risks losing work stays until
+  // it is read and dismissed.
+  useEffect(() => {
+    if (!localError || !briefRefusal(localError)) return undefined;
+    const timer = setTimeout(() => setLocalError(null), 3200);
+    return () => clearTimeout(timer);
+  }, [localError]);
 
   const savePatch = (patch) => {
     if (!scene?.id) return { ok: false, message: "No active Scene is available." };
@@ -568,14 +622,6 @@ export default function TableScreen({
         setLootChestId(null);
         return;
       }
-      if (commandOpen) {
-        setCommandOpen(false);
-        return;
-      }
-      if (bonusOpen) {
-        setBonusOpen(false);
-        return;
-      }
       if (abandonOpen) {
         setAbandonOpen(false);
         return;
@@ -589,7 +635,7 @@ export default function TableScreen({
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [abandonOpen, activeTool, attackDraft, bonusOpen, combatLocked, commandOpen, drawerOpen, lootChestId, wallDraft, walls]);
+  }, [abandonOpen, activeTool, attackDraft, combatLocked, drawerOpen, lootChestId, wallDraft, walls]);
 
   const localPoint = (event) => {
     const rect = planeRef.current?.getBoundingClientRect();
@@ -1066,9 +1112,7 @@ export default function TableScreen({
       setLocalError(dashed);
       return dashed;
     }
-    const result = savePatch(dashed.value);
-    if (result.ok) setCommandOpen(false);
-    return result;
+    return savePatch(dashed.value);
   };
 
   const useWeaponSwap = (loadout) => {
@@ -1077,9 +1121,7 @@ export default function TableScreen({
       setLocalError(swapped);
       return swapped;
     }
-    const result = savePatch(swapped.value);
-    if (result.ok) setCommandOpen(false);
-    return result;
+    return savePatch(swapped.value);
   };
 
   const startAttack = (specification) => {
@@ -1090,8 +1132,6 @@ export default function TableScreen({
       return range;
     }
     setAttackDraft({ ...specification, viewport, rangeModel: range.value });
-    setCommandOpen(false);
-    setBonusOpen(false);
     setMovementPreview(null);
     setInteraction(null);
     setLocalError(null);
@@ -1111,15 +1151,15 @@ export default function TableScreen({
     setSelectedId(targetId);
     setSelectedChestId(null);
     setAttackDraft(null);
-    setCommandOpen(false);
-    setBonusOpen(false);
     setInteraction(null);
     setLocalError(null);
     setCinematic({ outcome: resolved.outcome, stage: "spin", error: null });
     const reducedMotion = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    // Each beat gets long enough to read. The old sequence gave every step under
+    // half a second, which is why nothing could be followed.
     const timings = reducedMotion
       ? { natural: 80, modifiers: 160, verdict: 240, damage: 320, impact: 420, close: 760 }
-      : { natural: 420, modifiers: 820, verdict: 1220, damage: 1600, impact: 1980, close: 2800 };
+      : { natural: 950, modifiers: 1650, verdict: 2550, damage: 3200, impact: 4050, close: 5200 };
     const schedule = (callback, delay) => {
       const timer = setTimeout(callback, delay);
       cinematicTimersRef.current.push(timer);
@@ -1151,15 +1191,12 @@ export default function TableScreen({
     }
     if (opened.resumed) {
       setLootChestId(chestId);
-      setBonusOpen(false);
       setLocalError(null);
       return opened;
     }
     const saved = savePatch(opened.value);
     if (saved.ok) {
       setLootChestId(chestId);
-      setBonusOpen(false);
-      setCommandOpen(false);
       setSelectedChestId(chestId);
       setSelectedId(null);
     }
@@ -1183,8 +1220,6 @@ export default function TableScreen({
       setLocalError(resolved);
       return resolved;
     }
-    setBonusOpen(false);
-    setCommandOpen(false);
     setLootChestId(null);
     setLocalError(null);
     if (!resolved.outcome.requiresRoll) {
@@ -1235,8 +1270,6 @@ export default function TableScreen({
       setSelectedChestId(null);
       setLootChestId(null);
       setAttackDraft(null);
-      setCommandOpen(false);
-      setBonusOpen(false);
       setImpact(null);
       setMode("battle");
     }
@@ -1264,8 +1297,6 @@ export default function TableScreen({
     if (result.ok) {
       setSelectedId(ended.activeTokenId);
       setSelectedChestId(null);
-      setCommandOpen(false);
-      setBonusOpen(false);
       setMovementPreview(null);
       setAttackDraft(null);
       setLootChestId(null);
@@ -1435,32 +1466,75 @@ export default function TableScreen({
       {toolLabel && <div className="nf-state-table-tool-status glass grained" role="status"><span className="tag tag-jade">{toolLabel}</span><button className="glyph" onClick={exitTool} title="Exit current tool" aria-label="Exit current tool"><X size={15} /></button></div>}
       {movementPreview && <div className="nf-state-table-tool-status glass grained" role="status"><span className={`tag ${movementPreview.ok ? routePreview?.overBudget ? "tag-foe" : "tag-jade" : "tag-foe"}`}>{movementPreview.ok ? routePreview.overBudget ? `${routePreview.costFeet} ft reachable · ${routePreview.requestedFeet - routePreview.costFeet} ft over` : `${routePreview.costFeet} ft route · release to move` : movementPreview.message}</span></div>}
       {attackDraft && <div className="nf-state-table-tool-status nf-state-table-attack-status glass grained" role="status"><span className="tag tag-jade">Choose a target · {attackDraft.rangeModel.option.weapon.name}</span>{attackDraft.rangeModel.bands.map((band) => <span className={`tag nf-state-table-range-key nf-state-table-range-key-${band.tone}`} key={band.id}>{band.label}</span>)}<button className="glyph" onClick={() => setAttackDraft(null)} title="Cancel targeting" aria-label="Cancel targeting"><X size={15} /></button></div>}
-      {visibleError && !drawerOpen && <div className="nf-state-table-error glass" role="alert"><strong>Table change not saved</strong><span>{errorText(visibleError)}</span></div>}
+      {visibleError && !drawerOpen && (
+        briefRefusal(visibleError)
+          ? (
+            <div className="nf-state-table-refusal glass" role="status" key={visibleError.code}>
+              <span>{briefRefusal(visibleError)}</span>
+              <button className="glyph" onClick={() => setLocalError(null)} title="Dismiss" aria-label="Dismiss message"><X size={14} /></button>
+            </div>
+          )
+          : (
+            <div className="nf-state-table-error glass" role="alert">
+              <div>
+                <strong>Table change not saved</strong>
+                <span>{errorText(visibleError)}</span>
+              </div>
+              <button className="glyph" onClick={() => setLocalError(null)} title="Dismiss" aria-label="Dismiss message"><X size={16} /></button>
+            </div>
+          )
+      )}
 
       <aside className="dock dock-left glass grained">
-        <header className="dock-head"><div><span className="kicker kicker-jade">{isPlay ? "Free play" : "Encounter"}</span><h2>{isPlay ? "Build the cast" : isCompleteBattle ? "Battle complete" : isActiveBattle ? "Battle running" : "Build the scene"}</h2></div></header>
-        <div className="dock-body">
-          <section className="unit">
-            <div className="unit-top"><span className="unit-label">Summon a token</span></div>
-            <select className={`sel${isBattle ? " nf-state-disabled" : ""}`} aria-label="Token to summon" value={isPlay ? "" : summonChoice} onChange={(event) => setSummonChoice(event.target.value)} disabled={isBattle}>
-              <option value="">Blank token</option>
-              {!isPlay && heroes.map((hero) => <option value={hero.id} key={hero.id}>{hero.name}</option>)}
-            </select>
-            <button className={`btn btn-key btn-sm btn-wide${isBattle ? " nf-state-disabled" : ""}`} onClick={isPlay ? addPlayToken : addSetupToken} disabled={busy || isBattle}><Plus size={15} strokeWidth={2.4} /> Add to map</button>
-            {isSetup && <button className="btn btn-line btn-sm btn-wide" onClick={placeSetupChest} disabled={busy}><Package size={14} /> Place a chest</button>}
-            {isBattle && <p className="note">Token and chest creation are locked while this encounter is preserved.</p>}
-          </section>
-          <section className="unit">
-            <div className="unit-top"><span className="unit-label">On the map</span><span className="tag numeral">{tableTokens.length}</span></div>
-            <div className="cast">
-              {tableTokens.map((token) => <button key={token.id} className={`cast-row${selectedId === token.id ? " on" : ""}`} onClick={() => { setSelectedId(token.id); setSelectedChestId(null); }}><span className="sigil" style={{ background: token.color }}>{initials(token.name)}</span><span className="cast-meta"><strong>{token.name}</strong><small>{isBattle ? `${token.hp}/${token.maxHp} HP` : token.heroId ? "Hero snapshot" : "Manual token"}</small></span><Pip tone={token.type === "enemy" ? "foe" : "ally"} /></button>)}
-              {!tableTokens.length && <p className="note">No tokens are on this Table yet.</p>}
+        <header className="dock-head"><div><span className="kicker kicker-jade">{isPlay ? "Free play" : isBattle ? "Turn order" : "Encounter"}</span><h2>{isPlay ? "Build the cast" : isBattle ? "Initiative" : "Build the scene"}</h2></div></header>
+        {isBattle ? (
+          <div className="dock-body nf-state-initiative">
+            <div className="nf-state-initiative-round">
+              <span className="kicker kicker-brass">Round</span>
+              <strong className="numeral">{scene.encounter.round}</strong>
             </div>
-          </section>
-          {isSetup && <section className="unit"><div className="unit-top"><span className="unit-label">Chests</span><span className="tag numeral">{chests.length}</span></div><div className="cast">{chests.map((chest, index) => <button key={chest.id} className={`cast-row${selectedChestId === chest.id ? " on" : ""}`} onClick={() => { setSelectedChestId(chest.id); setSelectedId(null); }}><span className="sigil nf-state-table-chest-sigil"><Package size={15} /></span><span className="cast-meta"><strong>Chest {index + 1}</strong><small>{chest.inventory.reduce((total, entry) => total + entry.quantity, 0)} items</small></span><Pip tone="ally" /></button>)}</div></section>}
-          {isSetup && <p className="whisper">Arrange the scene, then press Battle to snap every token and roll initiative.</p>}
-          {isPlay && <p className="whisper">Drag tokens freely across the Table. Camera position and ruler marks remain view-only.</p>}
-        </div>
+            <ol className="nf-state-initiative-list">
+              {orderedTokens.map((token, index) => (
+                <li key={token.id}>
+                  <button
+                    className={`nf-state-initiative-row${index === scene.encounter.activeIndex ? " nf-state-initiative-now" : ""}${selectedId === token.id ? " on" : ""}${token.hp <= 0 ? " nf-state-initiative-down" : ""}`}
+                    onClick={() => { setSelectedId(token.id); setSelectedChestId(null); }}
+                  >
+                    <span className="nf-state-initiative-order numeral">{scene.encounter.initiatives[token.id]}</span>
+                    <span className="nf-state-initiative-face" style={{ background: token.color }}>{initials(token.name)}</span>
+                    <span className="nf-state-initiative-meta">
+                      <strong>{token.name}</strong>
+                      <small className="numeral">{token.hp}/{token.maxHp} HP</small>
+                    </span>
+                    {token.hp <= 0 && <X size={14} className="nf-state-initiative-x" />}
+                  </button>
+                </li>
+              ))}
+            </ol>
+          </div>
+        ) : (
+          <div className="dock-body">
+            <section className="unit">
+              <div className="unit-top"><span className="unit-label">Summon a token</span></div>
+              <select className="sel" aria-label="Token to summon" value={isPlay ? "" : summonChoice} onChange={(event) => setSummonChoice(event.target.value)}>
+                <option value="">Blank token</option>
+                {!isPlay && heroes.map((hero) => <option value={hero.id} key={hero.id}>{hero.name}</option>)}
+              </select>
+              <button className="btn btn-key btn-sm btn-wide" onClick={isPlay ? addPlayToken : addSetupToken} disabled={busy}><Plus size={15} strokeWidth={2.4} /> Add to map</button>
+              {isSetup && <button className="btn btn-line btn-sm btn-wide" onClick={placeSetupChest} disabled={busy}><Package size={14} /> Place a chest</button>}
+            </section>
+            <section className="unit">
+              <div className="unit-top"><span className="unit-label">On the map</span><span className="tag numeral">{tableTokens.length}</span></div>
+              <div className="cast">
+                {tableTokens.map((token) => <button key={token.id} className={`cast-row${selectedId === token.id ? " on" : ""}`} onClick={() => { setSelectedId(token.id); setSelectedChestId(null); }}><span className="sigil" style={{ background: token.color }}>{initials(token.name)}</span><span className="cast-meta"><strong>{token.name}</strong><small>{token.heroId ? "Hero snapshot" : "Manual token"}</small></span><Pip tone="ally" /></button>)}
+                {!tableTokens.length && <p className="note">No tokens are on this Table yet.</p>}
+              </div>
+            </section>
+            {isSetup && <section className="unit"><div className="unit-top"><span className="unit-label">Chests</span><span className="tag numeral">{chests.length}</span></div><div className="cast">{chests.map((chest, index) => <button key={chest.id} className={`cast-row${selectedChestId === chest.id ? " on" : ""}`} onClick={() => { setSelectedChestId(chest.id); setSelectedId(null); }}><span className="sigil nf-state-table-chest-sigil"><Package size={15} /></span><span className="cast-meta"><strong>Chest {index + 1}</strong><small>{chest.inventory.reduce((total, entry) => total + entry.quantity, 0)} items</small></span><Pip tone="ally" /></button>)}</div></section>}
+            {isSetup && <p className="whisper">Arrange the scene, then press Battle to snap every token and roll initiative.</p>}
+            {isPlay && <p className="whisper">Drag tokens freely across the Table. Camera position and ruler marks remain view-only.</p>}
+          </div>
+        )}
       </aside>
 
       <aside className="dock dock-right glass grained">
@@ -1470,28 +1544,49 @@ export default function TableScreen({
         </> : selected ? <>
           <header className="dock-head"><span className="sigil sigil-lg" style={{ background: selected.color }}>{initials(selected.name)}</span><div><span className="kicker">Selected token</span><h2>{selected.name}</h2></div></header>
           <div className="dock-body">
-            <label className="field"><span className="label">Name</span><input className="inp" value={selected.name} readOnly /></label>
-            {isPlay ? <section className="unit"><div className="unit-top"><span className="unit-label">Free position</span><span className="tag tag-jade">No turn limits</span></div><div className="nf-state-table-position"><span>X <strong className="numeral">{selected.position.xPercent.toFixed(1)}%</strong></span><span>Y <strong className="numeral">{selected.position.yPercent.toFixed(1)}%</strong></span></div><p className="note">Drag this token directly on the Table. No grid snapping or combat resources apply in Play.</p></section> : <>
-              <section className="unit"><div className="unit-top"><span className="unit-label">Vitals</span></div><div className="quad"><div className="quad-cell"><span>HP</span><strong className="numeral">{selected.hp}</strong></div><div className="quad-cell"><span>Max HP</span><strong className="numeral">{selected.maxHp}</strong></div><div className="quad-cell"><span>AC</span><strong className="numeral">{selected.ac}</strong></div><div className="quad-cell"><span>Speed</span><strong className="numeral">{selected.baseSpeed}</strong></div></div><div className="vitalbar"><div className="vitalbar-top"><span>Health</span><strong className="numeral">{selected.hp} / {selected.maxHp}</strong></div><div className="meter"><i style={{ width: `${(selected.hp / selected.maxHp) * 100}%`, background: healthTone(selected.hp, selected.maxHp), boxShadow: `0 0 12px ${healthTone(selected.hp, selected.maxHp)}` }} /></div></div></section>
-              <section className="unit"><div className="unit-top"><span className="unit-label">Conditions</span><span className="tag tag-jade">{selected.conditions.length || "None"}</span></div><div className="afflict">{CONDITIONS.map((condition) => { const on = selected.conditions.includes(condition.id); return <button key={condition.id} type="button" className={`toggle-chip nf-state-condition-chip${on ? " on" : ""}`} style={on ? { "--nf-condition": condition.color } : undefined} onClick={() => changeSelectedCondition(condition.id)} disabled={busy || combatLocked || !isActiveBattle} title={condition.note} aria-pressed={on}>{condition.name}</button>; })}</div><p className="note">Conditions are applied manually. Their movement, action, roll-mode, and automatic-critical effects are enforced immediately.</p></section>
-              <section className="unit nf-state-embedded-inspector"><div className="unit-top"><span className="unit-label">Embedded weapons</span><span className="tag tag-brass">{selectedEmbedded.length || "None"}</span></div>{selectedEmbedded.map((battleItem) => { const option = battleRetrievalOptions.find((entry) => entry.battleItem.id === battleItem.id); const weapon = getItem(battleItem.itemId); return <button type="button" className="btn btn-line btn-wide" key={battleItem.id} onClick={() => resolveRetrieval(battleItem.id)} disabled={busy || combatLocked || !option?.availability.ok} title={option?.availability.ok ? `${option.availability.value.cost} retrieval` : option?.availability.message || "Battle is complete"}><ArchiveRestore size={14} /> {weapon?.name || battleItem.itemId}<span className="nf-state-command-reason">{option?.availability.ok ? `${option.availability.value.retrievalKind.replaceAll("-", " ")} · ${option.availability.value.cost}` : option?.availability.message || "Preserved final state"}</span></button>; })}{!selectedEmbedded.length && <p className="note">No thrown weapons are embedded in this token.</p>}</section>
-              <section className="unit nf-state-battle-inventory"><div className="unit-top"><span className="unit-label">Battle inventory</span><span className="tag">{selected.inventory.reduce((total, entry) => total + entry.quantity, 0)} units</span></div><div className="nf-state-table-chest-owned">{selected.inventory.map((entry) => { const item = getItem(entry.itemId); const hands = [selected.loadout.mainHand === entry.itemId ? "Main" : null, selected.loadout.offHand === entry.itemId ? "Off" : null].filter(Boolean); return <span key={entry.itemId}><strong>{item?.name || entry.itemId}{hands.length ? ` · ${hands.join("/")}` : ""}</strong><em className="numeral">×{entry.quantity}</em></span>; })}{!selected.inventory.length && <p className="note">Inventory is empty.</p>}</div><p className="note">Shots consume one matching ammunition unit. Thrown weapons leave inventory until they are retrieved.</p></section>
-              <form className="unit" onSubmit={(event) => event.preventDefault()}><div className="unit-top"><span className="unit-label">Adjust stat</span><span className="tag">Locked</span></div><div className="console-row"><select className="sel" defaultValue="hp" disabled><option value="hp">HP</option><option value="maxHp">Max HP</option><option value="ac">AC</option><option value="speed">Speed</option></select><input className="inp" placeholder="+5 / −5" inputMode="numeric" disabled /></div><button className="btn btn-key btn-sm btn-wide" type="submit" disabled>Apply adjustment</button></form>
-            </>}
-            <button className={`btn btn-hazard btn-sm btn-wide${isBattle ? " nf-state-disabled" : ""}`} onClick={isPlay ? removeSelectedPlayToken : undefined} disabled={busy || isBattle} title={isBattle ? "Tokens cannot be removed during an active Battle" : undefined}><Trash2 size={15} /> Remove token</button>
+            {isPlay ? (
+              <section className="unit"><div className="unit-top"><span className="unit-label">Free position</span><span className="tag tag-jade">No turn limits</span></div><div className="nf-state-table-position"><span>X <strong className="numeral">{selected.position.xPercent.toFixed(1)}%</strong></span><span>Y <strong className="numeral">{selected.position.yPercent.toFixed(1)}%</strong></span></div><p className="note">Drag this token directly on the Table. No grid snapping or combat resources apply in Play.</p></section>
+            ) : (
+              <BattleTokenInspector
+                token={selected}
+                busy={busy}
+                locked={combatLocked || !isActiveBattle}
+                changeCondition={changeSelectedCondition}
+              />
+            )}
+            {isPlay && <button className="btn btn-hazard btn-sm btn-wide" onClick={removeSelectedPlayToken} disabled={busy}><Trash2 size={15} /> Remove token</button>}
           </div>
         </> : selectedChest ? <><header className="dock-head"><span className="sigil sigil-lg nf-state-table-chest-sigil"><Package size={18} /></span><div><span className="kicker">Selected chest</span><h2>Battle chest</h2></div></header><div className="dock-body"><section className="unit"><div className="unit-top"><span className="unit-label">Contents</span><span className={`tag ${selectedChest.inventory.length ? "tag-brass" : ""}`}>{selectedChest.inventory.length ? isActiveBattle ? "Bonus Action" : "Final state" : "Empty"}</span></div><div className="nf-state-table-chest-owned">{selectedChest.inventory.map((entry) => <span key={entry.itemId}><strong>{getItem(entry.itemId)?.name || entry.itemId}</strong><em className="numeral">×{entry.quantity}</em></span>)}{!selectedChest.inventory.length && <p className="note">This chest is empty.</p>}</div><p className="note">Chest movement and Setup editing stay locked. An adjacent active token can open it through the Bonus command; depleted contents persist through restart.</p></section></div></> : <div className="void-state"><span className="void-orb"><CircleDot size={26} /></span><h3>Nothing selected</h3><p>Pick a token on the map or in the cast list to inspect it.</p></div>}
       </aside>
 
-      {isActiveBattle && active && <div className="track glass grained"><div className="track-round"><span className="kicker kicker-brass">Round</span><strong className="numeral">{scene.encounter.round}</strong></div><div className="track-div" /><ol className="track-order">{orderedTokens.map((token, index) => <li key={token.id} className={index === scene.encounter.activeIndex ? "now" : ""}><span className="track-face" style={{ background: token.color }}>{initials(token.name)}</span><span className="track-name">{token.name}</span><span className="track-init numeral">{scene.encounter.initiatives[token.id]}</span></li>)}</ol><div className="track-div" /><div className="track-res"><div className="res-move"><span className="kicker"><Wind size={11} style={{ verticalAlign: -1, marginRight: 5 }} />Movement</span><strong className="numeral">{movementLeft} / {movementMax} ft</strong><div className="meter" style={{ marginTop: 6 }}><i style={{ width: `${movementMax ? movementLeft / movementMax * 100 : 0}%` }} /></div></div><div className="res-pips"><button className={`pip-key nf-state-command-pip${activeResources?.actionSpent ? " spent" : ""}`} title="Open Combat Commands" aria-label="Open Combat Commands" onClick={() => { setCommandOpen(true); setBonusOpen(false); }} disabled={combatLocked}><Swords size={13} /><em>{activeResources?.actionSpent ? activeResources.actionType || "Spent" : "Action"}</em></button><button className={`pip-key nf-state-command-pip${activeResources?.bonusActionSpent ? " spent" : ""}`} title="Open Bonus Commands" aria-label="Open Bonus Commands" onClick={() => { setBonusOpen(true); setCommandOpen(false); }} disabled={combatLocked}><ShieldHalf size={13} /><em>{activeResources?.bonusActionSpent ? activeResources.bonusActionType || "Spent" : "Bonus"}</em></button></div></div></div>}
+      {isActiveBattle && active && (
+        <CommandBar
+          token={active}
+          resources={activeResources || createTurnResources(active)}
+          dashState={dashState}
+          swapState={swapState}
+          attackState={attackState}
+          bonusState={bonusState}
+          chestOptions={battleChestOptions}
+          retrievalOptions={battleRetrievalOptions}
+          busy={busy || combatLocked}
+          error={visibleError}
+          attack={startAttack}
+          dash={useDash}
+          swap={useWeaponSwap}
+          end={finishTurn}
+          openChest={openBattleChest}
+          retrieve={resolveRetrieval}
+          initialPanel={initialCommandPanel}
+          initialSwapDraft={initialSwapDraft}
+        />
+      )}
 
       {isCompleteBattle && <BattleCompletion encounter={scene.encounter} tokens={tableTokens} busy={busy || combatLocked} restart={restartBattle} />}
 
       {drawerOpen && <TableToolsDrawer isPlay={isPlay} camera={camera} mapView={mapView} activeTool={activeTool} wallDraft={wallDraft} wallsVisible={wallsVisible} canAdjustArtwork={canAdjustArtwork} busy={busy} error={visibleError} close={() => setDrawerOpen(false)} zoomBy={zoomBy} resetCamera={() => setCamera({ ...DEFAULT_CAMERA })} chooseTool={chooseTool} scaleArtwork={scaleArtwork} resetArtwork={resetArtwork} finishWall={finishWall} cancelWall={cancelWall} toggleWalls={() => savePatch({ wallsVisible: !wallsVisible })} exitTool={exitTool} />}
-      {commandOpen && isActiveBattle && active && <CombatCommandsDrawer token={active} resources={activeResources} dashState={dashState} swapState={swapState} attackState={attackState} busy={busy || combatLocked} error={visibleError} close={() => setCommandOpen(false)} attack={startAttack} dash={useDash} swap={useWeaponSwap} end={finishTurn} initialSwapOpen={initialSwapOpen} initialSwapDraft={initialSwapDraft} initialAttackOpen={initialAttackOpen} />}
-      {bonusOpen && isActiveBattle && active && <BonusCommandsDrawer token={active} resources={activeResources} bonusState={bonusState} chestOptions={battleChestOptions} retrievalOptions={battleRetrievalOptions} busy={busy || combatLocked} error={visibleError} close={() => setBonusOpen(false)} attack={startAttack} openChest={openBattleChest} retrieve={resolveRetrieval} />}
       {lootChest && isActiveBattle && <ChestLootDrawer chest={lootChest} busy={busy || combatLocked} error={visibleError} take={takeChestItem} close={() => setLootChestId(null)} />}
-      {cinematic && <AttackCinematic cinematic={cinematic} />}
+      {cinematic && <AttackCinematic cinematic={cinematic} skip={skipCinematic} />}
       {retrievalCinematic && <RetrievalCinematic cinematic={retrievalCinematic} />}
       {abandonOpen && <PortalLayer><div className="veil" onClick={() => setAbandonOpen(false)} /><aside ref={abandonDialogRef} className="drawer nf-state-dialog" role="dialog" aria-modal="true" aria-labelledby="abandon-battle-title" aria-describedby="abandon-battle-description" tabIndex={-1}><div className="drawer-top"><div><span className="kicker">Return to Setup</span><h2 id="abandon-battle-title">Abandon this encounter?</h2></div><button className="glyph" onClick={() => setAbandonOpen(false)} aria-label="Close"><X size={17} /></button></div><div className="drawer-body">{visibleError && <div className="nf-state-inline-error" role="alert"><strong>Battle not abandoned</strong><span>{errorText(visibleError)}</span></div>}<p className="prose" id="abandon-battle-description">Return <strong>{scene?.name}</strong> to editable Battle Setup?</p><p className="note">Current token HP and positions are preserved. Initiative, turn resources, and physical battle items are cleared.</p></div><div className="drawer-foot"><button className="btn btn-line" onClick={() => setAbandonOpen(false)} autoFocus>Continue Battle</button><button className="btn btn-hazard" onClick={abandonBattle} disabled={busy}><Hammer size={15} /> Abandon Battle</button></div></aside></PortalLayer>}
     </div>

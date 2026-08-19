@@ -103,12 +103,11 @@ try {
     heroes: [hero],
     initialSelectedId: manual.id,
   }));
-  assert.match(battleMarkup, /Battle running/);
+  assert.match(battleMarkup, /Initiative/);
   assert.match(battleMarkup, /Round 1/);
-  assert.match(battleMarkup, /Token and chest creation are locked/);
-  assert.match(battleMarkup, /track-order/);
+  assert.match(battleMarkup, /nf-state-initiative-list/);
   assert.match(battleMarkup, new RegExp(`>${active.encounter.initiatives[manual.id]}<`));
-  assert.match(battleMarkup, /Tokens cannot be removed during an active Battle/);
+  assert.doesNotMatch(battleMarkup, /Remove token/);
   assert.match(battleMarkup, /Conditions.*None/s);
   assert.doesNotMatch(battleMarkup, /Save token details|Open chest inventory/);
 

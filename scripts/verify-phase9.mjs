@@ -13,7 +13,7 @@ for (const file of [
   "src/domain/conditions.js",
   "src/phase9.test.js",
   "src/screens/AttackCinematic.jsx",
-  "src/screens/BonusCommandsDrawer.jsx",
+  "src/screens/CommandBar.jsx",
   "scripts/phase9-render-smoke.mjs",
   "scripts/verify-phase9.mjs",
 ]) {
@@ -82,9 +82,7 @@ for (const integration of [
   "nf-state-table-targetable",
   "nf-state-table-condition-badges",
   "nf-state-table-damage-float",
-  "Open Combat Commands",
-  "Open Bonus Commands",
-  "BonusCommandsDrawer",
+  "CommandBar",
   "AttackCinematic",
   "playNightforgeImpact",
   "prefers-reduced-motion: reduce",
@@ -93,13 +91,13 @@ if (!table.includes("attackDraft ? targetState?.ok ? `Attack ${token.name}`")) f
 if (!table.includes("if (combatLocked) return")) failures.push("Attack resolution does not lock repeated turn input.");
 if (!table.includes("setAttackDraft(null)")) failures.push("Targeting mode cannot be cancelled or closed.");
 
-const commandDrawer = await read("src/screens/CombatCommandsDrawer.jsx");
-for (const control of ["Choose attack weapon", "Equipped only", "Blocked and out-of-range attempts do not spend Action", "attack({ kind: \"action\""]) {
+const commandDrawer = await read("src/screens/CommandBar.jsx");
+for (const control of ["Choose attack weapon", "Blocked and out-of-range attempts do not spend Action", "attack({ kind: \"action\""]) {
   if (!commandDrawer.includes(control)) failures.push(`Combat Commands drawer is missing ${control}.`);
 }
 
-const bonusDrawer = await read("src/screens/BonusCommandsDrawer.jsx");
-for (const control of ["Off-hand attack", "Battle chests", "Physical weapons", "openChest", "retrieve", "No automatic End Turn", "kind: \"bonus\""]) {
+const bonusDrawer = commandDrawer;
+for (const control of ["Off-hand attack", "Battle chests", "Physical weapons", "openChest", "retrieve", "kind: \"bonus\""]) {
   if (!bonusDrawer.includes(control)) failures.push(`Bonus Commands drawer is missing ${control}.`);
 }
 
@@ -119,7 +117,7 @@ for (const requiredClass of [
   ".nf-state-cinematic",
   ".nf-state-cinematic-die",
   ".nf-state-cinematic-verdict-critical",
-  ".nf-state-combat-attack-draft",
+  ".nf-state-command-option",
 ]) if (!functionalCss.includes(requiredClass)) failures.push(`Missing Phase 9 functional style ${requiredClass}.`);
 for (const match of functionalCss.matchAll(/([^{}]+)\{/g)) {
   const header = match[1].trim();

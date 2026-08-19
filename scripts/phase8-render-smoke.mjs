@@ -67,33 +67,32 @@ try {
   assert.match(routeMarkup, /10 ft reachable · 25 ft over/);
   assert.match(routeMarkup, /left:15%;top:15%/);
   assert.match(routeMarkup, /Round 2/);
-  assert.match(routeMarkup, /10 \/ 10 ft/);
+  assert.match(routeMarkup, /10 ft/);
   assert.ok(routeMarkup.indexOf("Vanguard") < routeMarkup.indexOf("Rival"));
   assert.match(routeMarkup, />18<.*>13</s);
-  assert.match(routeMarkup, /<button class="pip-key nf-state-command-pip"[^>]*aria-label="Open Combat Commands"/);
-  assert.match(routeMarkup, /aria-label="Open Bonus Commands"/);
+  assert.match(routeMarkup, /nf-state-command-meter-action/);
+  assert.match(routeMarkup, /nf-state-command-meter-bonus/);
 
   const commandMarkup = renderToStaticMarkup(React.createElement(TableScreen, {
     ...handlers,
     scene: battle,
     mode: "battle",
-    initialCommandOpen: true,
-    initialSwapOpen: true,
+    initialCommandPanel: "swap",
     initialSwapDraft: { mainHand: "dagger", offHand: "dagger" },
   }));
-  assert.match(commandMarkup, /role="dialog"/);
-  assert.match(commandMarkup, /combat-commands-title/);
+  assert.match(commandMarkup, /nf-state-command-bar-open/);
+  assert.match(commandMarkup, /nf-state-command-panel/);
   assert.match(commandMarkup, /Vanguard.*s turn/);
-  assert.match(commandMarkup, /10 \/ 10 ft/);
+  assert.match(commandMarkup, /10 ft/);
   assert.match(commandMarkup, /Attack.*1 equipped/s);
   assert.match(commandMarkup, /Dash.*Add 10 ft/s);
   assert.match(commandMarkup, /Swap weapons.*Once this turn/s);
   assert.match(commandMarkup, /Swap draft/);
   assert.match(commandMarkup, /Confirm weapon swap/);
   assert.doesNotMatch(commandMarkup, /Choose another loadout/);
-  const commandFooter = commandMarkup.match(/<div class="drawer-foot">([\s\S]*?)<\/div>/)?.[1] || "";
-  assert.match(commandFooter, /End Turn/);
-  assert.doesNotMatch(commandFooter, /disabled/);
+  const commandActions = commandMarkup.match(/nf-state-command-actions">([\s\S]*?)<\/div>/)?.[1] || "";
+  assert.match(commandActions, /End Turn/);
+  assert.doesNotMatch(commandActions.match(/nf-state-command-end[\s\S]*?<\/button>/)?.[0] || "x", /disabled/);
 
   const dashed = makeBattle({
     ...table.createTurnResources(vanguard),
@@ -106,16 +105,16 @@ try {
     ...handlers,
     scene: dashed,
     mode: "battle",
-    initialCommandOpen: true,
+    initialCommandPanel: "attack",
   }));
-  assert.match(dashedMarkup, /20 \/ 20 ft/);
+  assert.match(dashedMarkup, /20 ft/);
   assert.match(dashedMarkup, /Dash was already used this turn/);
   assert.match(dashedMarkup, /Attack is unavailable after Dash/);
   assert.match(dashedMarkup, /Weapon Swap is unavailable after Dash/);
-  assert.match(dashedMarkup, /nf-state-command-pip spent/);
-  const dashedFooter = dashedMarkup.match(/<div class="drawer-foot">([\s\S]*?)<\/div>/)?.[1] || "";
-  assert.match(dashedFooter, /End Turn/);
-  assert.doesNotMatch(dashedFooter, /disabled/);
+  assert.match(dashedMarkup, /nf-state-command-meter-spent/);
+  const dashedActions = dashedMarkup.match(/nf-state-command-actions">([\s\S]*?)<\/div>/)?.[1] || "";
+  assert.match(dashedActions, /End Turn/);
+  assert.doesNotMatch(dashedActions.match(/nf-state-command-end[\s\S]*?<\/button>/)?.[0] || "x", /disabled/);
 
   const movedAfterSwap = makeBattle({
     ...table.createTurnResources(vanguard),
@@ -127,9 +126,9 @@ try {
     ...handlers,
     scene: movedAfterSwap,
     mode: "battle",
-    initialCommandOpen: true,
+    initialCommandPanel: "attack",
   }));
-  assert.match(branchMarkup, /5 \/ 10 ft/);
+  assert.match(branchMarkup, /5 ft/);
   assert.match(branchMarkup, /Attack is unavailable after moving in the weapon-swap branch/);
   assert.match(branchMarkup, /Dash is unavailable after a weapon swap/);
   assert.match(branchMarkup, /Weapons were already swapped this turn/);
@@ -138,7 +137,7 @@ try {
     ...handlers,
     scene: battle,
     mode: "battle",
-    initialCommandOpen: true,
+    initialCommandPanel: "attack",
     persistence: { status: "failed", error: { message: "Turn command storage failed.", recovery: "Retry safely." } },
   }));
   assert.match(failureMarkup, /Command not completed/);

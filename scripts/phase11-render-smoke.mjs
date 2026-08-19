@@ -165,8 +165,8 @@ try {
     persistence,
     initialSelectedId: active.id,
   }));
-  assert.equal((tableMarkup.match(/class="cast-row\b/g) || []).length, 180);
-  assert.equal((tableMarkup.match(/class="track-face"/g) || []).length, 180);
+  assert.equal((tableMarkup.match(/class="nf-state-initiative-row/g) || []).length, 180);
+  assert.equal((tableMarkup.match(/class="nf-state-initiative-face"/g) || []).length, 180);
   assert.match(tableMarkup, new RegExp(LONG_NAME));
   assert.match(tableMarkup, /Round 11/);
   assert.match(tableMarkup, /title="The Last Sentinel of the Verdigris Archive/);

@@ -45,7 +45,7 @@ try {
   assert.match(playMarkup, /Drag tokens freely across the Table/);
   assert.match(playMarkup, /translate\(120px, -40px\) scale\(1.5\)/);
   assert.match(playMarkup, /translate\(25px, -18px\) scale\(1.4\)/);
-  assert.doesNotMatch(playMarkup, /track-order|piece-hp|Battle geometry/);
+  assert.doesNotMatch(playMarkup, /nf-state-initiative-list|piece-hp|Battle geometry/);
 
   const playTools = renderToStaticMarkup(React.createElement(TableScreen, {
     ...handlers,

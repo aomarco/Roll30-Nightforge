@@ -1,49 +1,138 @@
-import { createPortal } from "react-dom";
 import { Shield, Sparkles, Swords, Target } from "lucide-react";
 
 const STAGES = ["spin", "natural", "modifiers", "verdict", "damage", "impact", "failed"];
 
-function PortalLayer({ children }) {
-  return typeof document === "undefined" ? children : createPortal(children, document.body);
-}
+const signed = (value) => (value >= 0 ? `+${value}` : String(value).replace("-", "−"));
 
-const signed = (value) => Number(value) >= 0 ? `+${Number(value)}` : String(Number(value));
-
-export default function AttackCinematic({ cinematic }) {
-  if (!cinematic?.outcome) return null;
-  const { outcome, stage = "spin", error = null } = cinematic;
+/**
+ * The roll is told one beat at a time, and every beat animates: the dice
+ * tumble before they settle, each modifier slides in on its own, the verdict
+ * stamps down, and the damage dice roll separately. The panel keeps a fixed
+ * height so nothing jumps while you are reading it.
+ */
+export default function AttackCinematic({ cinematic, skip }) {
+  const { outcome, stage, error } = cinematic;
   const stageIndex = STAGES.indexOf(stage);
   const revealed = stageIndex >= 1;
   const showModifiers = stageIndex >= 2;
   const showVerdict = stageIndex >= 3;
   const showDamage = stageIndex >= 4 && outcome.hit;
   const showImpact = stageIndex >= 5;
+
+  const modifierRows = [
+    { id: "ability", label: `${outcome.ability.ability} modifier`, value: signed(outcome.ability.modifier) },
+    { id: "proficiency", label: "Proficiency", value: signed(outcome.proficiency) },
+    ...(outcome.magicAttackBonus ? [{ id: "magic", label: "Magic", value: signed(outcome.magicAttackBonus) }] : []),
+  ];
+
+  const verdictCopy = outcome.verdict === "critical"
+    ? outcome.autoCritical
+      ? "Critical hit — the target's condition made this an automatic critical."
+      : "Critical hit — a Natural 20 doubles the damage dice."
+    : outcome.hit
+      ? `${outcome.attackTotal} meets or beats AC ${outcome.targetAc}.`
+      : outcome.naturalRoll === 1
+        ? "Natural 1 always misses, whatever the modifiers say."
+        : `${outcome.attackTotal} falls short of AC ${outcome.targetAc}.`;
+
   return (
-    <PortalLayer>
-      <div className="nf-state-cinematic-veil" />
-      <section className={`nf-state-cinematic nf-state-cinematic-${stage}`} role="status" aria-live="assertive" aria-label="Attack result">
-        <div className="nf-state-cinematic-heading">
+    <>
+      <div className="nf-state-cinematic-veil" onClick={skip} aria-hidden="true" />
+      <section
+        className={`nf-state-cinematic nf-state-cinematic-${stage}`}
+        role="status"
+        aria-label="Attack result"
+        onClick={skip}
+      >
+        <header className="nf-state-cinematic-head">
           <span className="kicker kicker-brass">{outcome.kind === "bonus" ? "Off-hand attack" : "Attack Action"}</span>
-          <h2>{outcome.attackerName} <Swords size={20} /> {outcome.targetName}</h2>
+          <h2>{outcome.attackerName} <Swords size={16} /> {outcome.targetName}</h2>
           <p>{outcome.weaponName} · {outcome.range.distanceFeet} ft · {outcome.mode}</p>
+        </header>
+
+        <div className="nf-state-cinematic-stage">
+          <div className="nf-state-cinematic-dice">
+            {outcome.rolls.map((roll, index) => (
+              <span
+                className={`nf-state-cinematic-die${revealed && index === outcome.selectedIndex ? " selected" : ""}${revealed && index !== outcome.selectedIndex ? " rejected" : ""}`}
+                key={index}
+              >
+                {revealed ? roll : "?"}
+                <small>d20</small>
+              </span>
+            ))}
+          </div>
+
+          <div className="nf-state-cinematic-readout">
+            {!revealed && <p className="nf-state-cinematic-rolling"><Sparkles size={14} /> Rolling {outcome.rolls.length > 1 ? "two dice" : "one d20"}…</p>}
+            {revealed && <p className="nf-state-cinematic-natural"><Target size={14} /> Natural <strong>{outcome.naturalRoll}</strong></p>}
+
+            {showModifiers && (
+              <ul className="nf-state-cinematic-modifiers">
+                {modifierRows.map((row, index) => (
+                  <li key={row.id} style={{ animationDelay: `${index * 180}ms` }}>
+                    <span>{row.label}</span>
+                    <strong className="numeral">{row.value}</strong>
+                  </li>
+                ))}
+                <li className="nf-state-cinematic-total" style={{ animationDelay: `${modifierRows.length * 180}ms` }}>
+                  <span>Total</span>
+                  <strong className="numeral">{outcome.attackTotal}</strong>
+                </li>
+                <li className="nf-state-cinematic-target" style={{ animationDelay: `${(modifierRows.length + 1) * 180}ms` }}>
+                  <span><Shield size={12} /> Target AC</span>
+                  <strong className="numeral">{outcome.targetAc}</strong>
+                </li>
+              </ul>
+            )}
+          </div>
         </div>
-        <div className="nf-state-cinematic-dice" aria-label={`${outcome.rolls.length} d20 roll${outcome.rolls.length === 1 ? "" : "s"}`}>
-          {outcome.rolls.map((roll, index) => <span key={index} className={`nf-state-cinematic-die${revealed && index !== outcome.selectedIndex ? " rejected" : ""}${revealed && index === outcome.selectedIndex ? " selected" : ""}`}>{revealed ? roll : "?"}<small>d20</small></span>)}
+
+        <div className="nf-state-cinematic-result">
+          {showVerdict && (
+            <div className={`nf-state-cinematic-verdict nf-state-cinematic-verdict-${outcome.verdict}`}>
+              <strong>{outcome.verdict === "critical" ? "Critical" : outcome.hit ? "Hit" : "Miss"}</strong>
+              <span>{verdictCopy}</span>
+            </div>
+          )}
+
+          {showDamage && (
+            <div className="nf-state-cinematic-damage">
+              <div className="nf-state-cinematic-damage-dice">
+                {outcome.damage.rolls.map((roll, index) => (
+                  <span key={index} style={{ animationDelay: `${index * 120}ms` }}>{roll}</span>
+                ))}
+              </div>
+              <strong className="numeral">{outcome.damage.total}</strong>
+              <small className="numeral">
+                {outcome.damage.definition}
+                {outcome.damage.critical ? " doubled" : ""}
+                {outcome.damage.modifier ? ` ${signed(outcome.damage.modifier)}` : ""}
+              </small>
+            </div>
+          )}
+
+          {showImpact && (
+            <p className="nf-state-cinematic-impact-copy">
+              {outcome.hit
+                ? <>{outcome.targetName}: <strong className="numeral">{outcome.previousHp}</strong> → <strong className="numeral">{outcome.nextHp}</strong> HP</>
+                : <>{outcome.targetName} takes no damage and stays on <strong className="numeral">{outcome.nextHp}</strong> HP</>}
+            </p>
+          )}
         </div>
-        <div className="nf-state-cinematic-readout">
-          {!revealed && <p><Sparkles size={15} /> Rolling {outcome.mode === "normal" ? "one d20" : "two d20s"}…</p>}
-          {revealed && <p><Target size={15} /> Natural <strong className="numeral">{outcome.naturalRoll}</strong>{outcome.rolls.length > 1 && <span> · retained die</span>}</p>}
-          {showModifiers && <p><Swords size={15} /> {outcome.ability.ability} {signed(outcome.ability.modifier)} · proficiency {signed(outcome.proficiency)} · magic {signed(outcome.magicAttackBonus)} = <strong className="numeral">{outcome.attackTotal}</strong></p>}
-          {showModifiers && <p><Shield size={15} /> Target AC <strong className="numeral">{outcome.targetAc}</strong></p>}
-        </div>
-        {showVerdict && <div className={`nf-state-cinematic-verdict nf-state-cinematic-verdict-${outcome.verdict}`}><strong>{outcome.critical ? "Critical hit" : outcome.hit ? "Hit" : "Miss"}</strong><span>{outcome.critical ? outcome.autoCritical ? "Condition-forced melee critical" : "Natural 20" : outcome.hit ? `${outcome.attackTotal} meets AC ${outcome.targetAc}` : outcome.naturalRoll === 1 ? "Natural 1 always misses" : `${outcome.attackTotal} misses AC ${outcome.targetAc}`}</span></div>}
-        {showDamage && <div className="nf-state-cinematic-damage"><span className="kicker">Damage</span><strong className="numeral">{outcome.damage.total}</strong><small>{outcome.damage.rolls.length ? `${outcome.damage.rolls.join(" + ")} ${signed(outcome.damage.modifier)}` : `${outcome.damage.diceTotal} ${signed(outcome.damage.modifier)}`}</small></div>}
-        {showImpact && !error && <p className="nf-state-cinematic-impact-copy">{outcome.hit ? `${outcome.targetName}: ${outcome.previousHp} → ${outcome.nextHp} HP` : `${outcome.targetName} takes no damage.`}</p>}
-        {error && <div className="nf-state-inline-error" role="alert"><strong>Attack was not saved</strong><span>{error.message} {error.recovery}</span></div>}
+
         <div className="nf-state-cinematic-sources">
-          {outcome.sources.length ? outcome.sources.map((source) => <span className={`tag ${source.mode === "advantage" ? "tag-jade" : "tag-foe"}`} key={source.code}>{source.label}</span>) : <span className="tag">Normal roll</span>}
+          {outcome.sources.length
+            ? outcome.sources.map((source) => (
+              <span className={`tag ${source.mode === "advantage" ? "tag-jade" : "tag-foe"}`} key={source.code}>{source.label}</span>
+            ))
+            : <span className="tag">Normal roll</span>}
         </div>
+
+        {error && <div className="nf-state-inline-error" role="alert"><strong>Attack was not saved</strong><span>{error.message} {error.recovery}</span></div>}
+
+        <p className="nf-state-cinematic-skip">Click anywhere to skip</p>
       </section>
-    </PortalLayer>
+    </>
   );
 }

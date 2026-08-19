@@ -96,14 +96,13 @@ for (const integration of [
   "nf-state-table-chest-eligible",
   "nf-state-battle-item",
   "nf-state-table-embedded-count",
-  "Battle inventory",
   "Restart Battle",
   "prefers-reduced-motion: reduce",
 ]) if (!table.includes(integration)) failures.push(`Table screen is missing Phase 10 integration ${integration}.`);
-if (!table.includes("commandOpen && isActiveBattle") || !table.includes("bonusOpen && isActiveBattle")) failures.push("Ordinary command drawers are not gated out of completed encounters.");
-if (!table.includes("isActiveBattle && active && <div className=\"track")) failures.push("The active turn track is not removed in completed encounters.");
+if (!table.includes("isActiveBattle && attackDraft")) failures.push("Targeting is not gated out of completed encounters.");
+if (!table.includes("isActiveBattle && active && (")) failures.push("The command bar is not removed in completed encounters.");
 
-const bonusDrawer = await read("src/screens/BonusCommandsDrawer.jsx");
+const bonusDrawer = await read("src/screens/CommandBar.jsx");
 for (const control of ["Battle chests", "Physical weapons", "openChest(chest.id)", "retrieve(battleItem.id)", "alreadyOpen", "availability.message"]) {
   if (!bonusDrawer.includes(control)) failures.push(`Bonus Commands drawer is missing ${control}.`);
 }
@@ -126,7 +125,7 @@ for (const state of ["Battle complete", "No survivor", "Restart Battle", "fired 
 
 const functionalCss = (await read("src/styles/functional-states.css")).replace(/\/\*[\s\S]*?\*\//g, "");
 for (const requiredClass of [
-  ".nf-state-bonus-command-group",
+  ".nf-state-command-group",
   ".nf-state-table-chest-eligible",
   ".nf-state-loot-list",
   ".nf-state-battle-item-ground",

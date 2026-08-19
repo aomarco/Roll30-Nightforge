@@ -10,7 +10,7 @@ const failures = [];
 for (const file of [
   "src/domain/combat.js",
   "src/phase8.test.js",
-  "src/screens/CombatCommandsDrawer.jsx",
+  "src/screens/CommandBar.jsx",
   "scripts/phase8-render-smoke.mjs",
   "scripts/verify-phase8.mjs",
 ]) {
@@ -73,32 +73,28 @@ for (const integration of [
   "nf-state-table-movement-over",
   "nf-state-table-movement-start",
   "nf-state-table-arriving",
-  "Open Combat Commands",
-  "Open Bonus Commands",
-  "CombatCommandsDrawer",
+  "CommandBar",
   "returnTo: { page: \"board\", mode }",
 ]) if (!table.includes(integration)) failures.push(`Table screen is missing Phase 8 integration ${integration}.`);
 if (!table.includes("token.id === active?.id")) failures.push("The Table does not restrict Battle dragging to the active token.");
 if (!table.includes("kind: isActiveBattle ? \"movement\" : \"token\"")) failures.push("Active-Battle pointer input is not isolated from Setup, Play, and completed encounters.");
-if (!/<button className=\{`pip-key nf-state-command-pip/.test(table)) failures.push("The Action resource is not a semantic command button.");
-if (!table.includes("aria-label=\"Open Bonus Commands\"")) failures.push("The Bonus resource is not a semantic command button.");
+if (!table.includes("initialCommandPanel")) failures.push("The Table does not drive the single combat command bar.");
+if (!table.includes("bonusState={bonusState}")) failures.push("The command bar does not receive Bonus availability.");
 
-const drawer = await read("src/screens/CombatCommandsDrawer.jsx");
+const drawer = await read("src/screens/CommandBar.jsx");
 for (const control of [
-  "Turn resources",
-  "Action commands",
+  "Movement",
+  "Action",
   "Choose attack weapon",
   "Dash",
-  "Swap weapons",
+  "Swap weapon",
   "Swap draft",
   "Confirm weapon swap",
-  "End Turn stays available",
-  "Keep turn open",
   "End Turn",
   "validateSwapLoadout",
 ]) if (!drawer.includes(control)) failures.push(`Combat Commands drawer is missing ${control}.`);
-if (!/<button className="btn btn-key" onClick=\{end\} disabled=\{busy\}/.test(drawer)) failures.push("End Turn is not independently reachable after Action is spent.");
-if (!drawer.includes("onClick={toggleAttack}")) failures.push("The later Phase 9 Attack integration is not connected through the existing command drawer.");
+if (!/onClick=\{end\} disabled=\{busy\}/.test(drawer)) failures.push("End Turn is not independently reachable after Action is spent.");
+if (!drawer.includes("togglePanel(\"attack\")")) failures.push("The Attack command is not connected through the command bar.");
 
 const functionalCss = (await read("src/styles/functional-states.css")).replace(/\/\*[\s\S]*?\*\//g, "");
 for (const requiredClass of [
@@ -108,9 +104,9 @@ for (const requiredClass of [
   ".nf-state-table-movement-start",
   ".nf-state-table-arriving",
   ".nf-state-command-pip",
-  ".nf-state-combat-drawer",
-  ".nf-state-combat-resource-grid",
-  ".nf-state-combat-swap-draft",
+  ".nf-state-command-bar",
+  ".nf-state-command-meter",
+  ".nf-state-command-swap",
 ]) if (!functionalCss.includes(requiredClass)) failures.push(`Missing Phase 8 functional style ${requiredClass}.`);
 for (const match of functionalCss.matchAll(/([^{}]+)\{/g)) {
   const header = match[1].trim();

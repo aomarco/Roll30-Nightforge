@@ -181,7 +181,7 @@ async function resetTableDocks(page) {
 async function expectNoHardClip(page) {
   const audit = await page.evaluate(() => {
     const root = document.documentElement;
-    const clipped = [...document.querySelectorAll("h1,h2,h3,.btn,.deck-tab,.tag,.cast-meta,.hud-scene,.track-name")]
+    const clipped = [...document.querySelectorAll("h1,h2,h3,.btn,.deck-tab,.tag,.cast-meta,.hud-scene,.nf-state-initiative-meta")]
       .filter((element) => {
         const style = getComputedStyle(element);
         return element.getClientRects().length && element.scrollWidth > element.clientWidth + 1 &&
@@ -251,10 +251,10 @@ test("Table Setup, active Battle, selected, and nothing-selected baselines remai
 
   await open(page, { scenes: [sceneFixture({ active: true })] });
   await page.getByRole("main").getByRole("button", { name: "Enter the table", exact: true }).click();
-  const lockedAdd = page.getByRole("button", { name: "Add to map", exact: true });
-  await expect(lockedAdd).toBeDisabled();
-  await expect(lockedAdd).toHaveCSS("opacity", "0.42");
-  await expect(page.getByText(/Token and chest creation are locked/)).toBeVisible();
+  await expect(page.locator(".nf-state-initiative-round")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add to map", exact: true })).toHaveCount(0);
+  await expect(page.getByText(/Token and chest creation are locked/)).toHaveCount(0);
+  await expect(page.locator(".nf-state-initiative-now")).toHaveCount(1);
   await settleLayout(page, { resetDocks: true });
 });
 
@@ -369,7 +369,8 @@ test("focused Play, Setup, and active-Battle pieces move with arrow keys", async
   await page.getByRole("main").getByRole("button", { name: "Enter the table", exact: true }).click();
   const activeToken = page.getByRole("button", { name: new RegExp(`${LONG_NAME}, use arrow keys to move`) });
   await activeToken.focus();
-  await page.keyboard.press("ArrowRight");
+  // The cast starts shoulder to shoulder along the top row, so step down into free space.
+  await page.keyboard.press("ArrowDown");
   await expect.poll(() => page.evaluate((stateKey) => {
     const envelope = JSON.parse(localStorage.getItem(stateKey));
     return envelope.scenes[0].encounter.resources["token-0"].movementSpent;
@@ -381,9 +382,8 @@ test("a rolled attack is durably saved before its cinematic can be interrupted",
   await open(page, { scenes: [scene] });
   await page.getByRole("main").getByRole("button", { name: "Enter the table", exact: true }).click();
   const beforeRevision = await page.evaluate((stateKey) => JSON.parse(localStorage.getItem(stateKey)).revision, STORAGE_KEYS.state);
-  await page.getByRole("button", { name: "Open Combat Commands", exact: true }).click();
-  const commands = page.getByRole("dialog");
-  await commands.getByRole("button", { name: /^Attack\b/ }).click();
+  await page.locator(".nf-state-command-actions").getByRole("button", { name: /^Attack\b/ }).click();
+  const commands = page.getByRole("group", { name: "attack options" });
   await commands.getByRole("button", { name: /Dagger/ }).click();
   await page.getByRole("button", { name: "Attack Durable Target", exact: true }).click();
   await expect(page.getByRole("status", { name: "Attack result" })).toBeVisible();
@@ -408,7 +408,8 @@ test("a rolled attack is durably saved before its cinematic can be interrupted",
   await restoredPage.evaluate(() => document.fonts.ready);
   await expect(restoredPage.getByText("Gathering your scenes…")).toHaveCount(0);
   await restoredPage.getByRole("main").getByRole("button", { name: "Enter the table", exact: true }).click();
-  await expect(restoredPage.getByRole("button", { name: "Open Combat Commands", exact: true })).toContainText(/attack/i);
+  await expect(restoredPage.locator(".nf-state-command-meter-action")).toContainText(/attack/i);
+  await expect(restoredPage.locator(".nf-state-command-meter-action")).toHaveClass(/nf-state-command-meter-spent/);
   await restoredPage.close();
 });
 
@@ -601,14 +602,14 @@ test("Table docks and turn controls remain above the map at compact and 150 perc
     await open(page, { scenes: [scene] });
     await page.getByRole("main").getByRole("button", { name: "Enter the table", exact: true }).click();
     await expectNoHardClip(page);
-    for (const selector of [".dock-left", ".dock-right", ".track"]) {
+    for (const selector of [".dock-left", ".dock-right", ".nf-state-command-bar"]) {
       const box = await page.locator(selector).boundingBox();
       expect(box, `${selector} must remain rendered`).not.toBeNull();
       expect(box.x + box.width, `${selector} must stay within the viewport`).toBeLessThanOrEqual(width + 1);
       expect(box.y + box.height, `${selector} must stay within the viewport`).toBeLessThanOrEqual(height + 1);
     }
-    await page.locator(".cast-row").nth(20).click();
-    await expect(page.locator(".cast-row").nth(20)).toHaveClass(/on/);
+    await page.locator(".nf-state-initiative-row").nth(20).click();
+    await expect(page.locator(".nf-state-initiative-row").nth(20)).toHaveClass(/on/);
     await settleLayout(page);
     await context.close();
   }
@@ -629,10 +630,10 @@ test("large active token lists scroll while dock controls remain clickable above
   const scene = sceneFixture({ active: true, tokens: 180, name: LONG_NAME });
   await open(page, { scenes: [scene] });
   await page.getByRole("main").getByRole("button", { name: "Enter the table", exact: true }).click();
-  await expect(page.locator(".track-order li")).toHaveCount(180);
-  await expect(page.locator(".cast-row")).toHaveCount(180);
-  await page.locator(".cast-row").nth(75).click();
-  await expect(page.locator(".cast-row").nth(75)).toHaveClass(/on/);
+  await expect(page.locator(".nf-state-initiative-list li")).toHaveCount(180);
+  await expect(page.locator(".nf-state-initiative-row")).toHaveCount(180);
+  await page.locator(".nf-state-initiative-row").nth(75).click();
+  await expect(page.locator(".nf-state-initiative-row").nth(75)).toHaveClass(/on/);
   await expectNoHardClip(page);
 });
 
@@ -642,7 +643,7 @@ test("reduced motion removes material animation while preserving status content"
   await open(page, { scenes: [sceneFixture({ active: true })] });
   await page.getByRole("main").getByRole("button", { name: "Enter the table", exact: true }).click();
   const durations = await page.evaluate(() => {
-    const elements = [document.querySelector(".piece"), document.querySelector(".track"), document.querySelector(".hud")].filter(Boolean);
+    const elements = [document.querySelector(".piece"), document.querySelector(".nf-state-command-bar"), document.querySelector(".hud")].filter(Boolean);
     return elements.map((element) => {
       const style = getComputedStyle(element);
       return { animation: style.animationDuration, transition: style.transitionDuration };
@@ -654,6 +655,6 @@ test("reduced motion removes material animation while preserving status content"
   });
   expect(durations.every(({ animation, transition }) =>
     [...durationSeconds(animation), ...durationSeconds(transition)].every((value) => value <= 0.001))).toBe(true);
-  await expect(page.getByText(/Round 12/)).toBeVisible();
+  await expect(page.locator(".nf-state-initiative-round")).toContainText("12");
   await context.close();
 });

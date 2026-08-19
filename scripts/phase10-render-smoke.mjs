@@ -91,18 +91,16 @@ try {
   assert.equal((mapMarkup.match(/nf-state-battle-item /g) || []).length, 2);
   assert.match(mapMarkup, /nf-state-battle-item-ground nf-state-battle-item-eligible/);
   assert.match(mapMarkup, /nf-state-battle-item-embedded nf-state-battle-item-eligible/);
-  assert.match(mapMarkup, /Embedded weapons/);
+  assert.match(mapMarkup, /nf-state-battle-item-embedded/);
   assert.match(mapMarkup, /Javelin/);
-  assert.match(mapMarkup, /Battle inventory/);
-  assert.match(mapMarkup, /Arrow/);
-  assert.match(mapMarkup, /×7/);
+  assert.match(mapMarkup, /Saving throws/);
   assert.match(mapMarkup, /aria-label="1 embedded weapon"/);
 
   const bonusMarkup = renderToStaticMarkup(React.createElement(TableScreen, {
     ...handlers,
     scene: activeScene,
     mode: "battle",
-    initialBonusOpen: true,
+    initialCommandPanel: "bonus",
   }));
   assert.match(bonusMarkup, /Battle chests/);
   assert.match(bonusMarkup, /Chest 1/);
@@ -182,8 +180,8 @@ try {
   assert.match(completeMarkup, /2 of 5 fired ammunition recovered/);
   assert.match(completeMarkup, /Restart Battle/);
   assert.match(completeMarkup, /No ammunition recovery was required|Arrow/);
-  assert.doesNotMatch(completeMarkup, /class="track glass grained"/);
-  assert.doesNotMatch(completeMarkup, /aria-label="Open Combat Commands"/);
+  assert.doesNotMatch(completeMarkup, /class="nf-state-command-bar/);
+  assert.doesNotMatch(completeMarkup, /aria-label="Close options"/);
   assert.match(completeMarkup, /nf-state-battle-item-ground/);
 
   const noSurvivorScene = makeScene({
@@ -206,7 +204,7 @@ try {
     loadout: { mainHand: "shortbow", offHand: null },
   });
   const depletedScene = makeScene({ tokens: [archerWithoutAmmo, carrier, witness], resources: table.createTurnResources(archerWithoutAmmo), physicalItems: [], ammoSpentByToken: {} });
-  const depletedMarkup = renderToStaticMarkup(React.createElement(TableScreen, { ...handlers, scene: depletedScene, mode: "battle", initialCommandOpen: true }));
+  const depletedMarkup = renderToStaticMarkup(React.createElement(TableScreen, { ...handlers, scene: depletedScene, mode: "battle", initialCommandPanel: "attack" }));
   assert.match(depletedMarkup, /requires Arrow/);
   assert.doesNotMatch(depletedMarkup, /Choose attack weapon/);
 
