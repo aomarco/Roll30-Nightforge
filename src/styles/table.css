@@ -50,15 +50,17 @@
 }
 
 /* ----------------------------------------------------------- creatures */
+/* The token box is exactly the disc, so translate(-50%,-50%) lands the disc's
+   own centre on the cell centre. The name label hangs below it, out of flow,
+   and no longer drags the centring upwards. Size follows the scene's cell so
+   a token always fits its square. */
 .piece {
   position: absolute;
   z-index: 5;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
+  width: var(--nf-token-size, 38px);
+  height: var(--nf-token-size, 38px);
   transform: translate(-50%, -50%);
-  transition: filter var(--ease);
+  transition: filter var(--ease), left var(--token-move), top var(--token-move);
 }
 .piece:hover { z-index: 7; }
 
@@ -66,8 +68,8 @@
   position: relative;
   display: grid;
   place-items: center;
-  width: 48px;
-  height: 48px;
+  width: 100%;
+  height: 100%;
   border-radius: var(--r-full);
   font-family: var(--mono);
   font-size: 14px;
@@ -94,6 +96,9 @@
 .piece:hover .piece-disc { transform: scale(1.06); }
 
 .piece-name {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
   padding: 2px 9px;
   border-radius: var(--r-full);
   font-size: 10.5px;
@@ -105,19 +110,19 @@
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   opacity: 0;
-  transform: translateY(-3px);
-  transition: all var(--ease);
+  transform: translate(-50%, -3px);
+  transition: opacity var(--ease), transform var(--ease);
   white-space: nowrap;
 }
 .piece:hover .piece-name,
-.piece.on .piece-name { opacity: 1; transform: none; }
+.piece.on .piece-name { opacity: 1; transform: translate(-50%, 0); }
 
 .piece-hp {
   position: absolute;
   top: -11px;
   left: 50%;
   transform: translateX(-50%);
-  width: 46px;
+  width: 96%;
   height: 4px;
   border-radius: var(--r-full);
   background: rgba(3,6,7,.8);

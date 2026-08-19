@@ -204,20 +204,45 @@ function WallAndRulerLayer({ walls, wallsVisible, wallDraft, wallHover, rulerDra
   );
 }
 
-function MovementRouteLayer({ preview }) {
+function MovementRouteLayer({ preview, boardSize }) {
   if (!preview?.route?.length) return null;
   const reachable = preview.route.slice(0, (preview.reachableIndex || 0) + 1);
   const over = preview.route.slice(preview.reachableIndex || 0);
   const points = (route) => route.map((point) => `${point.xPercent},${point.yPercent}`).join(" ");
   const start = preview.route[0];
-  const landing = preview.route[preview.landingIndex || 0] || start;
+  const landingIndex = preview.landingIndex || 0;
+  const landing = preview.route[landingIndex] || start;
+  const approach = preview.route[Math.max(0, landingIndex - 1)] || start;
+  // The layer is stretched, so percentages are converted to board pixels before
+  // any angle or radius is computed. Drawn in pixels, a circle stays a circle
+  // and the arrowhead keeps pointing the way the token is actually travelling.
+  const toPixels = (point) => ({
+    x: (point.xPercent / 100) * boardSize.width,
+    y: (point.yPercent / 100) * boardSize.height,
+  });
+  const startPixel = toPixels(start);
+  const landingPixel = toPixels(landing);
+  const approachPixel = toPixels(approach);
+  const angle = Math.atan2(landingPixel.y - approachPixel.y, landingPixel.x - approachPixel.x) * 180 / Math.PI;
   return (
     <>
       <svg className="nf-state-table-movement-route" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
         {reachable.length > 1 && <polyline className="nf-state-table-movement-reachable" points={points(reachable)} fill="none" vectorEffect="non-scaling-stroke" />}
         {over.length > 1 && <polyline className="nf-state-table-movement-over" points={points(over)} fill="none" vectorEffect="non-scaling-stroke" />}
-        <circle className="nf-state-table-movement-start" cx={start.xPercent} cy={start.yPercent} r="0.75" vectorEffect="non-scaling-stroke" />
-        {preview.landingIndex > 0 && <circle className="nf-state-table-movement-stop" cx={landing.xPercent} cy={landing.yPercent} r="0.75" vectorEffect="non-scaling-stroke" />}
+      </svg>
+      <svg
+        className="nf-state-table-movement-marks"
+        viewBox={`0 0 ${boardSize.width} ${boardSize.height}`}
+        aria-hidden="true"
+      >
+        <circle className="nf-state-table-movement-start" cx={startPixel.x} cy={startPixel.y} r="5" />
+        {landingIndex > 0 && (
+          <path
+            className="nf-state-table-movement-stop"
+            d="M 0 0 L -14 -8 L -9 0 L -14 8 Z"
+            transform={`translate(${landingPixel.x} ${landingPixel.y}) rotate(${angle})`}
+          />
+        )}
       </svg>
       <span className={`nf-state-table-movement-label tag numeral${preview.overBudget ? " nf-state-table-movement-label-over" : ""}`} style={{ left: `${landing.xPercent}%`, top: `${landing.yPercent}%` }}>
         {preview.costFeet} ft{preview.overBudget ? " · limit" : ""}
@@ -1316,7 +1341,7 @@ export default function TableScreen({
             {!isPlay && <div className="map-grid nf-state-table-scene-grid" aria-hidden="true" />}
             <div className="map-fog" aria-hidden="true" />
             <WallAndRulerLayer walls={walls} wallsVisible={wallsVisible} wallDraft={wallDraft} wallHover={wallHover} rulerDraft={rulerDraft} rulerFeet={rulerFeet} />
-            {isActiveBattle && <MovementRouteLayer preview={routePreview} />}
+            {isActiveBattle && <MovementRouteLayer preview={routePreview} boardSize={sceneSize} />}
             {isActiveBattle && attackDraft && <AttackRangeLayer model={attackDraft.rangeModel} />}
             {!isPlay && visibleChests.map((chest) => {
               const option = battleChestOptions.find((entry) => entry.chest.id === chest.id);
@@ -1365,7 +1390,7 @@ export default function TableScreen({
               return (
               <button
                 key={token.id}
-                className={`piece${selectedId === token.id ? " on" : ""}${isActiveBattle && token.id === active?.id ? " acting" : ""}${tokenPreview?.id === token.id && tokenPreview.blocked ? " blocked" : ""}${arrivalId === token.id ? " nf-state-table-arriving" : ""}${targetState?.ok ? " nf-state-table-targetable" : ""}${impact?.targetId === token.id ? ` nf-state-table-hit${impact.critical ? " nf-state-table-critical" : ""}` : ""}`}
+                className={`piece${selectedId === token.id ? " on" : ""}${isActiveBattle && token.id === active?.id ? " acting" : ""}${tokenPreview?.id === token.id && tokenPreview.blocked ? " blocked" : ""}${arrivalId === token.id ? " nf-state-table-arriving" : ""}${targetState?.ok ? " nf-state-table-targetable" : ""}${isBattle && token.hp <= 0 ? " nf-state-token-down" : ""}${impact?.targetId === token.id ? ` nf-state-table-hit${impact.critical ? " nf-state-table-critical" : ""}` : ""}`}
                 style={{ left: `${token.position.xPercent}%`, top: `${token.position.yPercent}%`, "--piece": token.color }}
                 onPointerDown={(event) => onTokenPointerDown(event, token)}
                 onKeyDown={(event) => onTokenKeyDown(event, token)}
@@ -1373,6 +1398,9 @@ export default function TableScreen({
                 aria-label={attackDraft ? targetState?.ok ? `Attack ${token.name}` : `${token.name} unavailable as target` : `${token.name}${isPlay || isSetup || (isActiveBattle && token.id === active?.id) ? ", use arrow keys to move" : ""}`}
               >
                 <span className="piece-disc">{initials(token.name)}</span>
+                {isBattle && token.hp <= 0 && (
+                  <span className="nf-state-token-down-mark" aria-hidden="true"><X size={26} strokeWidth={3.2} /></span>
+                )}
                 <span className="piece-name">{token.name}</span>
                 {isBattle && <span className="piece-hp"><i style={{ width: `${(token.hp / token.maxHp) * 100}%`, background: healthTone(token.hp, token.maxHp) }} /></span>}
                 {isBattle && conditions.length > 0 && <span className="nf-state-table-condition-badges" aria-label={`${conditions.length} conditions`}>{conditions.map((condition) => <i key={condition.id} title={`${condition.name}: ${condition.note}`} style={{ "--nf-condition": condition.color }}>{condition.abbreviation}</i>)}</span>}
