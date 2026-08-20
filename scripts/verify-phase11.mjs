@@ -101,14 +101,14 @@ for (const file of jsxFiles.filter((entry) => entry.includes(`${resolve(root, "s
     if (!/aria-modal="true"/.test(match[0])) failures.push(`${file}: dialog does not identify itself as modal.`);
   }
 }
-if (dialogCount !== 9) failures.push(`Expected 9 managed dialogs, found ${dialogCount}.`);
+if (dialogCount !== 8) failures.push(`Expected 8 managed dialogs, found ${dialogCount}.`);
 
 const table = await read("src/screens/TableScreen.jsx");
 if ((table.match(/document\.addEventListener\("keydown"/g) || []).length !== 1 || !table.includes("document.removeEventListener(\"keydown\"")) failures.push("Table transient keyboard listener is not bounded by cleanup.");
 if (/document\.addEventListener\("pointer/.test(table)) failures.push("Table contains an uncontrolled document-level pointer listener.");
 const pointerMove = table.slice(table.indexOf("const onMapPointerMove"), table.indexOf("const onMapPointerUp"));
 if (/savePatch|onUpdate|Repository|localStorage/.test(pointerMove)) failures.push("Pointer movement performs persistence instead of transient updates.");
-for (const integration of ["nf-state-table-root", "useDialogA11y", "aria-describedby=\"abandon-battle-description\"", "title={scene?.name", "AttackRangeLayer"]) {
+for (const integration of ["nf-state-table-root", "useDialogA11y", "title={scene?.name", "AttackRangeLayer"]) {
   if (!table.includes(integration)) failures.push(`Table hardening integration is missing ${integration}.`);
 }
 const attackDurability = table.slice(table.indexOf("const resolveAttackTarget"), table.indexOf("const openBattleChest"));

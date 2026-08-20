@@ -302,7 +302,7 @@ export default function CommandBar({
           </div>
 
           <div
-            className={`nf-state-command-speed glass${remaining <= 0 ? " nf-state-command-speed-empty" : ""}`}
+            className={`nf-state-command-speed glass${remaining <= 0 ? " nf-state-command-speed-empty" : ""}${resources?.dashed ? " nf-state-command-speed-dashed" : ""}`}
             title={remaining > 0
               ? `${remaining} of ${maximum} feet of movement left this turn.`
               : `${token.name} has used all ${maximum} feet of movement this turn.`}

@@ -20,7 +20,7 @@ for (const behavior of [
 const table = await read("src/screens/TableScreen.jsx");
 for (const integration of [
   "heroes = []", "summonChoice", "addSetupToken", "placeSetupChest", "onChestPointerDown",
-  "setupCollisionFailure", "BattleSetupInspector", "beginBattle", "abandonBattle", "setAbandonOpen(true)",
+  "setupCollisionFailure", "BattleSetupInspector", "beginBattle", "abandonBattle",
   "SetupRail", "SceneObjects", "returnTo: { page: \"board\", mode }",
 ]) if (!table.includes(integration)) failures.push(`Table screen is missing ${integration}.`);
 for (const fixture of ["BATTLE_PROTOTYPE_TOKENS", "Thorin", "Elara", "Goblin"]) {

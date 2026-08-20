@@ -109,6 +109,7 @@ try {
     initialCommandPanel: "attack",
   }));
   assert.match(dashedMarkup, /20\/20/);
+  assert.match(dashedMarkup, /nf-state-command-speed-dashed/);
   assert.match(dashedMarkup, /Dash was already used this turn/);
   assert.match(dashedMarkup, /Attack is unavailable after Dash/);
   assert.match(dashedMarkup, /Weapon Swap is unavailable after Dash/);
