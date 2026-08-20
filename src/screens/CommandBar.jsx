@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   ArchiveRestore,
+  Check,
   ChevronsRight,
   Hourglass,
   PackageOpen,
@@ -117,7 +118,7 @@ export default function CommandBar({
     },
     {
       id: "dash",
-      icon: ChevronsRight,
+      icon: dashArmed ? Check : ChevronsRight,
       label: dashArmed ? "Confirm" : "Dash",
       available: dashState.ok,
       reason: dashState.ok

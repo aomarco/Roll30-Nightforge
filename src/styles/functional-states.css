@@ -1190,11 +1190,22 @@
   box-shadow: inset 0 0 24px var(--jade-glow);
 }
 
-/* Dash asks twice; the armed press looks unmistakably different. */
+/* Dash asks twice; the armed press turns into a tick and changes color */
 .nf-state-command-key-armed {
-  color: var(--brass, #e5b567);
-  background: rgba(229,181,103,.14);
-  box-shadow: inset 0 -3px 0 var(--brass, #e5b567);
+  color: #ffe685 !important;
+  background: rgba(229, 181, 103, 0.22) !important;
+  box-shadow: inset 0 0 18px rgba(229, 181, 103, 0.35), inset 0 -3px 0 #ffe685 !important;
+}
+
+.nf-state-command-key-armed svg {
+  filter: drop-shadow(0 0 8px rgba(255, 230, 133, 0.75)) !important;
+  transform: scale(1.15);
+}
+
+.nf-state-command-key-armed:hover:not(:disabled) {
+  color: #ffffff !important;
+  background: rgba(229, 181, 103, 0.32) !important;
+  box-shadow: inset 0 0 24px rgba(229, 181, 103, 0.5), inset 0 -3px 0 #ffffff !important;
 }
 
 .nf-state-command-key-open {
