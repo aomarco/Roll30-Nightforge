@@ -23,11 +23,14 @@ import {
 } from "../domain/catalog.js";
 import {
   changeInventory,
+  mainHandRefusal,
+  offHandRefusal,
   removeInventoryItem,
   setArmor,
   setEnchantment,
   setMainHand,
   setOffHand,
+  setOffHandSlot,
   setShield,
   toggleWornItem,
   wornMagicBonuses,
@@ -133,8 +136,6 @@ function OwnedItemRow({ hero, item, run, open, busy }) {
   );
 }
 
-const SLOT_ICONS = { mainHand: Sword, offHand: Sword, armour: ShieldHalf, shield: ShieldHalf };
-
 function LoadoutPanel({ hero, run, error, clearError, busy }) {
   const ownedItems = hero.inventory.map((entry) => ITEM_BY_ID[entry.itemId]).filter(Boolean);
   const weapons = ownedItems.filter((item) => item.kind === "weapon");
@@ -144,12 +145,46 @@ function LoadoutPanel({ hero, run, error, clearError, busy }) {
     clearError();
     run(operation(event.target.value || null));
   };
+
+  // A shield takes a hand, so it shares the off-hand slot with light weapons
+  // instead of having one of its own. Shields lead, because raising one is the
+  // more common choice.
+  const offHandItemId = hero.shieldId || hero.loadout.offHand;
+  const offHandOptions = [...shields, ...weapons];
+
   const slots = [
-    { id: "mainHand", label: "Main hand", empty: "Empty", value: hero.loadout.mainHand, options: weapons, onChange: choose((id) => setMainHand(hero, id)) },
-    { id: "offHand", label: "Off hand", empty: "Empty", value: hero.loadout.offHand, options: weapons, onChange: choose((id) => setOffHand(hero, id)) },
-    { id: "armour", label: "Armour", empty: "Unarmoured", value: hero.armorId, options: armor, onChange: choose((id) => setArmor(hero, id)) },
-    { id: "shield", label: "Shield", empty: "No shield", value: hero.shieldId, options: shields, onChange: choose((id) => setShield(hero, id)) },
+    {
+      id: "armour",
+      label: "Armour",
+      empty: "Unarmoured",
+      icon: ShieldHalf,
+      value: hero.armorId,
+      options: armor,
+      refuse: () => null,
+      onChange: choose((id) => setArmor(hero, id)),
+    },
+    {
+      id: "mainHand",
+      label: "Main hand",
+      empty: "Empty",
+      icon: Sword,
+      value: hero.loadout.mainHand,
+      options: weapons,
+      refuse: (id) => mainHandRefusal(hero, id),
+      onChange: choose((id) => setMainHand(hero, id)),
+    },
+    {
+      id: "offHand",
+      label: "Off hand",
+      empty: "Empty",
+      icon: hero.shieldId ? ShieldHalf : Sword,
+      value: offHandItemId,
+      options: offHandOptions,
+      refuse: (id) => offHandRefusal(hero, id),
+      onChange: choose((id) => setOffHandSlot(hero, id)),
+    },
   ];
+
   return (
     <section className="nf-state-loadout">
       <div className="unit-top">
@@ -160,8 +195,15 @@ function LoadoutPanel({ hero, run, error, clearError, busy }) {
       <div className="nf-state-loadout-slots">
         {slots.map((slot) => {
           const item = slot.value ? ITEM_BY_ID[slot.value] : null;
-          const Icon = SLOT_ICONS[slot.id];
+          const Icon = slot.icon;
           const bonus = item ? hero.enchantments?.[item.id] || 0 : 0;
+          // Worked out once per slot so the note can explain a slot that has
+          // nothing legal left in it.
+          const choices = slot.options.map((option) => ({
+            option,
+            refusal: option.id === slot.value ? null : slot.refuse(option.id),
+          }));
+          const blockedAll = choices.length > 0 && choices.every((choice) => choice.refusal);
           return (
             <label className={`nf-state-loadout-slot${item ? " nf-state-loadout-slot-filled" : ""}`} key={slot.id}>
               <span className="nf-state-loadout-slot-head">
@@ -171,7 +213,13 @@ function LoadoutPanel({ hero, run, error, clearError, busy }) {
               <strong className="nf-state-loadout-slot-name">
                 {item ? `${item.name}${bonus ? ` +${bonus}` : ""}` : slot.empty}
               </strong>
-              <small className="nf-state-loadout-slot-note">{item ? itemSubtitle(item) : "Nothing equipped"}</small>
+              <small className="nf-state-loadout-slot-note">
+                {item
+                  ? itemSubtitle(item)
+                  : blockedAll
+                    ? choices[0].refusal
+                    : "Nothing equipped"}
+              </small>
               <select
                 className="sel"
                 aria-label={slot.label}
@@ -180,13 +228,17 @@ function LoadoutPanel({ hero, run, error, clearError, busy }) {
                 disabled={busy}
               >
                 <option value="">{slot.empty}</option>
-                {slot.options.map((option) => <option value={option.id} key={option.id}>{option.name}</option>)}
+                {choices.map(({ option, refusal }) => (
+                  <option value={option.id} key={option.id} disabled={Boolean(refusal)}>
+                    {option.name}{refusal ? ` — ${refusal}` : ""}
+                  </option>
+                ))}
               </select>
             </label>
           );
         })}
       </div>
-      <p className="note">Only owned equipment is listed. Two-Handed, shield, quantity, and Light dual-wield rules are enforced before saving.</p>
+      <p className="note">Only owned equipment is listed. Anything your current weapons forbid is greyed out with the reason beside it.</p>
     </section>
   );
 }

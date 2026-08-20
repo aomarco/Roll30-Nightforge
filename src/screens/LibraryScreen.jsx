@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowUpRight,
-  Grid3x3,
   Play,
   Plus,
   SlidersHorizontal,
@@ -22,8 +21,6 @@ const unavailable = () => ({
   recovery: "Open Nightforge through its application shell.",
   retryable: false,
 });
-const modeLabel = (kind) => (kind === "battle" ? "Battle" : "Play");
-const modeNote = (kind) => (kind === "battle" ? "Combat ready" : "Free play");
 const errorText = (error) =>
   error ? `${error.message} ${error.recovery || "Please retry."}` : "";
 
@@ -130,12 +127,11 @@ export default function LibraryScreen({
     if (result?.ok) setDeleting(null);
   };
 
-  const sceneTag = (scene) => (
-    <span className={`tag ${scene.kind === "battle" ? "tag-foe" : "tag-jade"}`}>
-      {scene.kind === "battle" ? <Swords size={12} /> : <Sparkles size={12} />}
-      {modeLabel(scene.kind)}
-    </span>
-  );
+  // Battle scenes carry no badge — the grid speaks for itself once you are in
+  // one, and the owner asked for the shouty "BATTLE" tag to go.
+  const sceneTag = (scene) => (scene.kind === "battle" ? null : (
+    <span className="tag tag-jade"><Sparkles size={12} /> Play</span>
+  ));
 
   return (
     <div className={`scroller nf-state-screen-root nf-state-library-root${busy ? " nf-state-busy" : ""}`}>
@@ -207,19 +203,15 @@ export default function LibraryScreen({
             </div>
 
             <div className="stage-body">
-              <div className="stage-tags">
-                {sceneTag(featured)}
-                {featured.kind === "battle" && (
-                  <span className="tag"><Grid3x3 size={12} /> 5 ft grid</span>
-                )}
-              </div>
-              <span className="kicker">Continue where you left off</span>
+              {featured.kind !== "battle" && (
+                <div className="stage-tags">{sceneTag(featured)}</div>
+              )}
               <h2>{featured.name}</h2>
               <div className="stage-foot">
                 <button className="btn btn-key btn-lg" onClick={() => onOpen(featured)} disabled={busy}>
                   <Play size={17} fill="currentColor" /> Enter the table
                 </button>
-                <span className="prose-sm">{modeNote(featured.kind)}</span>
+                {featured.kind !== "battle" && <span className="prose-sm">Free play</span>}
               </div>
             </div>
           </section>
@@ -256,7 +248,7 @@ export default function LibraryScreen({
                 </SceneArt>
                 <span className="ledger-meta">
                   <strong>{scene.name}</strong>
-                  <small>{scene.kind === "battle" ? "5 ft grid · Combat ready" : "Free play"}</small>
+                  {scene.kind !== "battle" && <small>Free play</small>}
                 </span>
               </button>
 

@@ -8,7 +8,6 @@ import {
   EyeOff,
   Grid3x3,
   Hammer,
-  LayoutGrid,
   Minus,
   Move,
   Package,
@@ -82,12 +81,16 @@ import {
   prepareBattleStart,
   removeChest,
   removeToken,
+  isOnCellCentre,
   rulerDistanceFeet,
+  sceneObjectAt,
+  sceneObjectsWithin,
   sceneViewport,
   sceneWorldSize,
   setArtworkScale,
   setupCellForPosition,
   setupPositionForCell,
+  snapScenePosition,
   snapSetupPosition,
   updateChest,
   updateToken,
@@ -102,6 +105,8 @@ import AttackCinematic from "./AttackCinematic.jsx";
 import BattleCompletion from "./BattleCompletion.jsx";
 import ChestLootDrawer from "./ChestLootDrawer.jsx";
 import CommandBar from "./CommandBar.jsx";
+import SceneObjects from "./SceneObjects.jsx";
+import SetupRail from "./SetupRail.jsx";
 import RetrievalCinematic from "./RetrievalCinematic.jsx";
 
 const okay = () => ({ ok: true });
@@ -428,6 +433,7 @@ export default function TableScreen({
   random = Math.random,
   initialCamera = DEFAULT_CAMERA,
   initialDrawerOpen = false,
+  initialInspectorDrawer = null,
   initialTool = null,
   initialRulerDraft = null,
   initialWallDraft = null,
@@ -476,6 +482,9 @@ export default function TableScreen({
   const [impact, setImpact] = useState(initialImpact);
   const [arrivalId, setArrivalId] = useState(null);
   const [localError, setLocalError] = useState(null);
+  const [deleteMarquee, setDeleteMarquee] = useState(null);
+  const [summonPickerOpen, setSummonPickerOpen] = useState(false);
+  const artworkRef = useRef(null);
   const { url: artworkUrl, error: artworkError } = useArtworkUrl(scene, artworkRepository, suppliedArtworkUrl);
   const busy = persistence.status === "saving";
   const combatLocked = Boolean(cinematic || retrievalCinematic);
@@ -637,6 +646,28 @@ export default function TableScreen({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [abandonOpen, activeTool, attackDraft, combatLocked, drawerOpen, lootChestId, wallDraft, walls]);
 
+  /**
+   * Heal scenes saved before every path snapped. One pass when a scene opens
+   * puts any stray token or chest back onto its cell centre, so an old map
+   * fixes itself instead of needing every piece nudged by hand.
+   */
+  const healedSceneRef = useRef(null);
+  useEffect(() => {
+    if (!scene?.id || busy || healedSceneRef.current === scene.id) return;
+    const strayTokens = tableTokens.some((token) => !isOnCellCentre(token.position));
+    const strayChests = chests.some((chest) => !isOnCellCentre(chest.position));
+    healedSceneRef.current = scene.id;
+    if (!strayTokens && !strayChests) return;
+    const patch = {};
+    if (strayTokens) {
+      patch.tokens = tableTokens.map((token) => ({ ...token, position: snapScenePosition(token.position) }));
+    }
+    if (strayChests) {
+      patch.chests = chests.map((chest) => ({ ...chest, position: snapScenePosition(chest.position) }));
+    }
+    savePatch(patch);
+  }, [scene?.id, busy]);
+
   const localPoint = (event) => {
     const rect = planeRef.current?.getBoundingClientRect();
     return rect ? clientPointToPercent({ x: event.clientX, y: event.clientY }, rect) : { xPercent: 50, yPercent: 50 };
@@ -666,6 +697,11 @@ export default function TableScreen({
       return;
     }
     capturePointer(event.pointerId);
+    if (activeTool === "delete") {
+      setInteraction({ kind: "delete", pointerId: event.pointerId, start: point });
+      setDeleteMarquee({ start: point, end: point, count: 0 });
+      return;
+    }
     if (activeTool === "ruler") {
       const draft = { start: point, end: point };
       setRulerDraft(draft);
@@ -738,18 +774,8 @@ export default function TableScreen({
     setSelectedId(token.id);
     setSelectedChestId(null);
 
-    if (isPlay) {
-      savePatch({
-        tokens: updateToken(playTokens, token.id, {
-          position: {
-            xPercent: token.position.xPercent + delta.xPercent,
-            yPercent: token.position.yPercent + delta.yPercent,
-          },
-        }),
-      });
-      return;
-    }
-
+    // Every mode steps a whole cell at a time. Play used to nudge by one
+    // percentage point, which is what left tokens sitting between squares.
     const viewport = setupViewport();
     const currentCell = setupCellForPosition(token.position, viewport);
     const destination = setupPositionForCell({
@@ -758,6 +784,11 @@ export default function TableScreen({
     }, viewport);
     const destinationCell = setupCellForPosition(destination, viewport);
     if (destinationCell.column === currentCell.column && destinationCell.row === currentCell.row) return;
+
+    if (isPlay) {
+      savePatch({ tokens: updateToken(playTokens, token.id, { position: destination }) });
+      return;
+    }
 
     if (isSetup) {
       if (!canOccupySetupPosition(destination, {
@@ -827,10 +858,24 @@ export default function TableScreen({
     if (interaction.kind === "artwork") {
       setMapView(adjustArtworkBy(interaction.mapView, { x: event.clientX - interaction.client.x, y: event.clientY - interaction.client.y }, camera.zoom));
     }
+    if (interaction.kind === "artwork-scale") {
+      const distance = Math.hypot(event.clientX - interaction.centre.x, event.clientY - interaction.centre.y);
+      setMapView(setArtworkScale(mapView, interaction.scale * (distance / interaction.startDistance)));
+    }
+    if (interaction.kind === "delete") {
+      const rectangle = { start: interaction.start, end: point };
+      const caught = sceneObjectsWithin(rectangle, { tokens: tableTokens, chests, walls });
+      setDeleteMarquee({
+        ...rectangle,
+        count: caught.tokenIds.length + caught.chestIds.length + caught.wallIds.length,
+      });
+    }
     if (interaction.kind === "ruler") setRulerDraft({ start: interaction.start, end: point });
     if (interaction.kind === "token") {
       const proposed = { xPercent: point.xPercent + interaction.offset.xPercent, yPercent: point.yPercent + interaction.offset.yPercent };
-      const position = isSetup ? snapSetupPosition(proposed, setupViewport()) : proposed;
+      // Snapped in every mode, so the preview shows the square the token will
+      // actually land on rather than wherever the pointer happens to be.
+      const position = snapSetupPosition(proposed, setupViewport());
       const blocked = isSetup && !canOccupySetupPosition(position, {
         tokens: tableTokens,
         chests,
@@ -871,10 +916,24 @@ export default function TableScreen({
       setMapView(finalView);
       savePatch({ mapView: finalView });
     }
+    if (interaction.kind === "artwork-scale") {
+      const distance = Math.hypot(event.clientX - interaction.centre.x, event.clientY - interaction.centre.y);
+      const next = setArtworkScale(mapView, interaction.scale * (distance / interaction.startDistance));
+      setMapView(next);
+      savePatch({ mapView: next });
+    }
+    if (interaction.kind === "delete") {
+      // A short press is a click on one object; anything longer is a box.
+      const dragged = Math.abs(point.xPercent - interaction.start.xPercent) > 0.8
+        || Math.abs(point.yPercent - interaction.start.yPercent) > 1.3;
+      if (dragged) deleteSceneObjectsWithin({ start: interaction.start, end: point });
+      else deleteSceneObject(sceneObjectAt(interaction.start, { tokens: tableTokens, chests, walls }));
+      setDeleteMarquee(null);
+    }
     if (interaction.kind === "ruler") setRulerDraft({ start: interaction.start, end: point });
     if (interaction.kind === "token") {
       const proposed = { xPercent: point.xPercent + interaction.offset.xPercent, yPercent: point.yPercent + interaction.offset.yPercent };
-      const position = isSetup ? snapSetupPosition(proposed, setupViewport()) : proposed;
+      const position = snapSetupPosition(proposed, setupViewport());
       if (isSetup && !canOccupySetupPosition(position, {
         tokens: tableTokens,
         chests,
@@ -922,6 +981,7 @@ export default function TableScreen({
     if (interaction.kind === "artwork") setMapView(normalizeMapView(scene?.mapView));
     if (interaction.kind === "token") setTokenPreview(null);
     if (interaction.kind === "chest") setChestPreview(null);
+    if (interaction.kind === "delete") setDeleteMarquee(null);
     if (interaction.kind === "ruler") setRulerDraft(null);
     if (interaction.kind === "movement") setMovementPreview(null);
     setInteraction(null);
@@ -948,6 +1008,27 @@ export default function TableScreen({
     if (nextTool !== "ruler") setRulerDraft(null);
     if (!nextTool?.startsWith("wall-")) cancelWall();
     setDrawerOpen(false);
+  };
+
+  /**
+   * Corner handles on the backdrop, the way an image behaves in any editing
+   * tool: drag the middle to move it, pull a corner to resize it. Scaling is
+   * uniform about the image's own centre, so the picture never distorts.
+   */
+  const onArtworkHandleDown = (event) => {
+    if (activeTool !== "artwork" || !canAdjustArtwork || event.button !== 0) return;
+    event.stopPropagation();
+    const rect = artworkRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const centre = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    capturePointer(event.pointerId);
+    setInteraction({
+      kind: "artwork-scale",
+      pointerId: event.pointerId,
+      centre,
+      startDistance: Math.max(1, Math.hypot(event.clientX - centre.x, event.clientY - centre.y)),
+      scale: mapView.scale,
+    });
   };
 
   const scaleArtwork = (delta) => {
@@ -981,7 +1062,7 @@ export default function TableScreen({
     if (result.ok) setSelectedId(next[0]?.id || null);
   };
 
-  const addSetupToken = () => {
+  const addSetupToken = (heroChoice = summonChoice) => {
     const position = findOpenSetupPosition({ xPercent: 50, yPercent: 50 }, {
       tokens: tableTokens,
       chests,
@@ -1003,7 +1084,7 @@ export default function TableScreen({
       return tokenId;
     }
     const id = tokenId.value;
-    const hero = heroes.find((entry) => entry.id === summonChoice);
+    const hero = heroes.find((entry) => entry.id === heroChoice);
     const token = hero
       ? createHeroTokenSnapshot(hero, { id, ordinal: tableTokens.length, position })
       : createManualToken({ id, ordinal: tableTokens.length, position });
@@ -1074,12 +1155,51 @@ export default function TableScreen({
 
   const removeSelectedSetupChest = () => {
     if (!selectedChest || !isSetup) return;
-    const next = removeChest(chests, selectedChest.id);
+    removeSetupChestById(selectedChest.id);
+  };
+
+  const removeSetupTokenById = (tokenId) => {
+    if (!isSetup) return;
+    const next = removeToken(tableTokens, tokenId);
+    const result = savePatch({ tokens: next });
+    if (result.ok && selectedId === tokenId) setSelectedId(next[0]?.id || null);
+  };
+
+  const removeSetupChestById = (chestId) => {
+    if (!isSetup) return;
+    const next = removeChest(chests, chestId);
     const result = savePatch({ chests: next });
-    if (result.ok) {
+    if (result.ok && selectedChestId === chestId) {
       setSelectedChestId(null);
       setSelectedId(tableTokens[0]?.id || null);
     }
+  };
+
+  /**
+   * The Delete tool. A click removes whatever is under the pointer; a drag
+   * removes everything the box catches. Walls are included, which is the only
+   * way to take one off the board — they could previously only be added.
+   */
+  const deleteSceneObject = (target) => {
+    if (!target || !isSetup) return;
+    if (target.kind === "token") removeSetupTokenById(target.id);
+    else if (target.kind === "chest") removeSetupChestById(target.id);
+    else if (target.kind === "wall") savePatch({ walls: walls.filter((wall) => wall.id !== target.id) });
+  };
+
+  const deleteSceneObjectsWithin = (rectangle) => {
+    if (!isSetup) return;
+    const caught = sceneObjectsWithin(rectangle, { tokens: tableTokens, chests, walls });
+    const total = caught.tokenIds.length + caught.chestIds.length + caught.wallIds.length;
+    if (!total) return;
+    const patch = {};
+    if (caught.tokenIds.length) patch.tokens = tableTokens.filter((token) => !caught.tokenIds.includes(token.id));
+    if (caught.chestIds.length) patch.chests = chests.filter((chest) => !caught.chestIds.includes(chest.id));
+    if (caught.wallIds.length) patch.walls = walls.filter((wall) => !caught.wallIds.includes(wall.id));
+    const result = savePatch(patch);
+    if (!result.ok) return;
+    if (caught.tokenIds.includes(selectedId)) setSelectedId(null);
+    if (caught.chestIds.includes(selectedChestId)) setSelectedChestId(null);
   };
 
   const beginBattle = () => {
@@ -1159,7 +1279,7 @@ export default function TableScreen({
     // half a second, which is why nothing could be followed.
     const timings = reducedMotion
       ? { natural: 80, modifiers: 160, verdict: 240, damage: 320, impact: 420, close: 760 }
-      : { natural: 950, modifiers: 1650, verdict: 2550, damage: 3200, impact: 4050, close: 5200 };
+      : { natural: 1300, modifiers: 2400, verdict: 3800, damage: 4900, impact: 6100, close: 7800 };
     const schedule = (callback, delay) => {
       const timer = setTimeout(callback, delay);
       cinematicTimersRef.current.push(timer);
@@ -1307,14 +1427,16 @@ export default function TableScreen({
   };
 
   const toolLabel = activeTool === "artwork"
-    ? "Drag the Table to adjust artwork"
+    ? "Drag the backdrop to move it · pull a corner to resize"
     : activeTool === "wall-full"
       ? "Click points for a full wall · Escape to finish"
       : activeTool === "wall-half"
         ? "Click points for a half-wall · Escape to finish"
         : activeTool === "ruler"
           ? "Drag across the Table to measure"
-          : null;
+          : activeTool === "delete"
+            ? "Click an object to delete it · drag a box for several"
+            : null;
   const orderedTokens = isBattle
     ? (scene?.encounter?.initiativeOrder || []).map((tokenId) => tableTokens.find((token) => token.id === tokenId)).filter(Boolean)
     : tableTokens;
@@ -1341,7 +1463,7 @@ export default function TableScreen({
   return (
     <div className={`table nf-state-table-root${busy ? " nf-state-busy" : ""}${combatLocked ? " nf-state-combat-locked" : ""}${isCompleteBattle ? " nf-state-battle-complete-root" : ""}`}>
       <div
-        className={`map nf-state-table-map${activeTool ? ` nf-state-table-tool-${activeTool}` : ""}${attackDraft ? " nf-state-table-attack-mode" : ""}`}
+        className={`map nf-state-table-map${isSetup ? " nf-state-table-map-inset" : ""}${activeTool ? ` nf-state-table-tool-${activeTool}` : ""}${attackDraft ? " nf-state-table-attack-mode" : ""}`}
         ref={mapRef}
         onPointerDown={onMapPointerDown}
         onPointerMove={onMapPointerMove}
@@ -1365,8 +1487,34 @@ export default function TableScreen({
             }}
           >
             {(artworkUrl || scene?.blankCanvas) && (
-              <div className="nf-state-table-artwork" style={{ transform: `translate(${mapView.x}px, ${mapView.y}px) scale(${mapView.scale})`, backgroundColor: scene?.blankCanvas ? "#fff" : undefined }}>
+              <div ref={artworkRef} className={`nf-state-table-artwork${activeTool === "artwork" ? " nf-state-table-artwork-editing" : ""}`} style={{ transform: `translate(${mapView.x}px, ${mapView.y}px) scale(${mapView.scale})`, backgroundColor: scene?.blankCanvas ? "#fff" : undefined }}>
                 {artworkUrl && <img src={artworkUrl} alt="" draggable="false" />}
+                {activeTool === "artwork" && ["nw", "ne", "se", "sw"].map((corner) => (
+                  <span
+                    className={`nf-state-table-artwork-handle nf-state-table-artwork-handle-${corner}`}
+                    key={corner}
+                    onPointerDown={onArtworkHandleDown}
+                    aria-hidden="true"
+                  />
+                ))}
+              </div>
+            )}
+            {deleteMarquee && (
+              <div
+                className="nf-state-table-marquee"
+                style={{
+                  left: `${Math.min(deleteMarquee.start.xPercent, deleteMarquee.end.xPercent)}%`,
+                  top: `${Math.min(deleteMarquee.start.yPercent, deleteMarquee.end.yPercent)}%`,
+                  width: `${Math.abs(deleteMarquee.end.xPercent - deleteMarquee.start.xPercent)}%`,
+                  height: `${Math.abs(deleteMarquee.end.yPercent - deleteMarquee.start.yPercent)}%`,
+                }}
+                aria-hidden="true"
+              >
+                {deleteMarquee.count > 0 && (
+                  <span className="nf-state-table-marquee-count numeral">
+                    {deleteMarquee.count} object{deleteMarquee.count === 1 ? "" : "s"}
+                  </span>
+                )}
               </div>
             )}
             {!isPlay && <div className="map-grid nf-state-table-scene-grid" aria-hidden="true" />}
@@ -1452,18 +1600,35 @@ export default function TableScreen({
 
       <div className="hud hud-tc glass grained">
         <div className="phase">
-          {isPlay ? <button className="on" disabled aria-current="page"><Sparkles size={14} /> Play</button> : <><button className={isSetup ? "on" : ""} onClick={() => isBattle ? setAbandonOpen(true) : setMode("setup")}><Hammer size={14} /> Setup</button><button className={isBattle ? "on" : ""} onClick={isSetup ? beginBattle : isCompleteBattle ? restartBattle : undefined} disabled={busy}><Swords size={14} /> {isCompleteBattle ? "Restart Battle" : "Battle"}</button></>}
+          {isPlay
+            ? <button className="on" disabled aria-current="page"><Sparkles size={14} /> Play</button>
+            : isSetup
+              // One clear thing to do next, rather than a pair of mode pills.
+              ? <button className="nf-state-table-start" onClick={beginBattle} disabled={busy}><Swords size={16} /> Start Battle</button>
+              : <><button onClick={() => setAbandonOpen(true)}><Hammer size={14} /> Setup</button><button className="on" onClick={isCompleteBattle ? restartBattle : undefined} disabled={busy}><Swords size={14} /> {isCompleteBattle ? "Restart Battle" : "Battle"}</button></>}
         </div>
       </div>
 
       <div className="hud hud-tr glass grained">
-        <button className="tag tag-brass nf-state-table-tools-trigger" onClick={() => setDrawerOpen(true)} title="Table tools — 5 ft grid" aria-label="Table tools — 5 ft grid"><Grid3x3 size={12} /> 5 ft</button>
-        <span className="hud-div" />
-        <button className="glyph" onClick={() => go({ page: "settings", returnTo: { page: "board", mode } })} title="Scene settings"><SlidersHorizontal size={17} /></button>
-        <button className="glyph" onClick={() => go({ page: "home" })} title="All maps"><LayoutGrid size={17} /></button>
+        {/* Setup keeps its tools on the rail; Play and Battle still reach them
+            through this chip, which doubles as the grid readout. */}
+        {!isSetup && <>
+          <button className="tag tag-brass nf-state-table-tools-trigger" onClick={() => setDrawerOpen(true)} title="Table tools — 5 ft grid" aria-label="Table tools — 5 ft grid"><Grid3x3 size={12} /> 5 ft</button>
+          <span className="hud-div" />
+        </>}
+        <button className="glyph" onClick={() => go({ page: "settings", returnTo: { page: "board", mode } })} title="Scene settings" aria-label="Scene settings"><SlidersHorizontal size={17} /></button>
       </div>
 
-      {toolLabel && <div className="nf-state-table-tool-status glass grained" role="status"><span className="tag tag-jade">{toolLabel}</span><button className="glyph" onClick={exitTool} title="Exit current tool" aria-label="Exit current tool"><X size={15} /></button></div>}
+      {toolLabel && <div className="nf-state-table-tool-status glass grained" role="status">
+        <span className={`tag ${activeTool === "delete" ? "tag-foe" : "tag-jade"}`}>{toolLabel}</span>
+        {/* Finishing a wall used to live in a modal that had to be open at the
+            same time as the wall you were drawing. It belongs here instead. */}
+        {activeTool?.startsWith("wall-") && <>
+          <button className="btn btn-line btn-sm" onClick={cancelWall} disabled={!wallDraft?.points?.length}>Cancel</button>
+          <button className="btn btn-key btn-sm" onClick={finishWall} disabled={(wallDraft?.points?.length || 0) < 2}>Finish wall</button>
+        </>}
+        <button className="glyph" onClick={exitTool} title="Exit current tool" aria-label="Exit current tool"><X size={15} /></button>
+      </div>}
       {movementPreview && <div className="nf-state-table-tool-status glass grained" role="status"><span className={`tag ${movementPreview.ok ? routePreview?.overBudget ? "tag-foe" : "tag-jade" : "tag-foe"}`}>{movementPreview.ok ? routePreview.overBudget ? `${routePreview.costFeet} ft reachable · ${routePreview.requestedFeet - routePreview.costFeet} ft over` : `${routePreview.costFeet} ft route · release to move` : movementPreview.message}</span></div>}
       {attackDraft && <div className="nf-state-table-tool-status nf-state-table-attack-status glass grained" role="status"><span className="tag tag-jade">Choose a target · {attackDraft.rangeModel.option.weapon.name}</span>{attackDraft.rangeModel.bands.map((band) => <span className={`tag nf-state-table-range-key nf-state-table-range-key-${band.tone}`} key={band.id}>{band.label}</span>)}<button className="glyph" onClick={() => setAttackDraft(null)} title="Cancel targeting" aria-label="Cancel targeting"><X size={15} /></button></div>}
       {visibleError && !drawerOpen && (
@@ -1485,14 +1650,37 @@ export default function TableScreen({
           )
       )}
 
-      <aside className="dock dock-left glass grained">
-        <header className="dock-head"><div><span className="kicker kicker-jade">{isPlay ? "Free play" : isBattle ? "Turn order" : "Encounter"}</span><h2>{isPlay ? "Build the cast" : isBattle ? "Initiative" : "Build the scene"}</h2></div></header>
+      {isSetup && (
+        <SetupRail
+          activeTool={activeTool}
+          chooseTool={chooseTool}
+          heroes={heroes}
+          summonToken={addSetupToken}
+          addChest={placeSetupChest}
+          zoomIn={() => zoomBy(0.2)}
+          zoomOut={() => zoomBy(-0.2)}
+          resetView={() => setCamera({ ...DEFAULT_CAMERA })}
+          toggleWalls={() => savePatch({ wallsVisible: !wallsVisible })}
+          wallsVisible={wallsVisible}
+          canAdjustArtwork={canAdjustArtwork}
+          busy={busy}
+          pickerOpen={summonPickerOpen}
+          setPickerOpen={setSummonPickerOpen}
+        />
+      )}
+
+      {!isSetup && <aside className={`dock dock-left glass grained${isBattle ? " nf-state-dock-initiative" : ""}`}>
+        <header className="dock-head">
+          <div><span className="kicker kicker-jade">{isPlay ? "Free play" : "Turn order"}</span><h2>{isPlay ? "Build the cast" : "Initiative"}</h2></div>
+          {isBattle && (
+            <span className="nf-state-initiative-round" title={`Round ${scene.encounter.round}`}>
+              <em>Round</em>
+              <strong className="numeral">{scene.encounter.round}</strong>
+            </span>
+          )}
+        </header>
         {isBattle ? (
           <div className="dock-body nf-state-initiative">
-            <div className="nf-state-initiative-round">
-              <span className="kicker kicker-brass">Round</span>
-              <strong className="numeral">{scene.encounter.round}</strong>
-            </div>
             <ol className="nf-state-initiative-list">
               {orderedTokens.map((token, index) => (
                 <li key={token.id}>
@@ -1516,12 +1704,7 @@ export default function TableScreen({
           <div className="dock-body">
             <section className="unit">
               <div className="unit-top"><span className="unit-label">Summon a token</span></div>
-              <select className="sel" aria-label="Token to summon" value={isPlay ? "" : summonChoice} onChange={(event) => setSummonChoice(event.target.value)}>
-                <option value="">Blank token</option>
-                {!isPlay && heroes.map((hero) => <option value={hero.id} key={hero.id}>{hero.name}</option>)}
-              </select>
-              <button className="btn btn-key btn-sm btn-wide" onClick={isPlay ? addPlayToken : addSetupToken} disabled={busy}><Plus size={15} strokeWidth={2.4} /> Add to map</button>
-              {isSetup && <button className="btn btn-line btn-sm btn-wide" onClick={placeSetupChest} disabled={busy}><Package size={14} /> Place a chest</button>}
+              <button className="btn btn-key btn-sm btn-wide" onClick={addPlayToken} disabled={busy}><Plus size={15} strokeWidth={2.4} /> Add to map</button>
             </section>
             <section className="unit">
               <div className="unit-top"><span className="unit-label">On the map</span><span className="tag numeral">{tableTokens.length}</span></div>
@@ -1530,18 +1713,42 @@ export default function TableScreen({
                 {!tableTokens.length && <p className="note">No tokens are on this Table yet.</p>}
               </div>
             </section>
-            {isSetup && <section className="unit"><div className="unit-top"><span className="unit-label">Chests</span><span className="tag numeral">{chests.length}</span></div><div className="cast">{chests.map((chest, index) => <button key={chest.id} className={`cast-row${selectedChestId === chest.id ? " on" : ""}`} onClick={() => { setSelectedChestId(chest.id); setSelectedId(null); }}><span className="sigil nf-state-table-chest-sigil"><Package size={15} /></span><span className="cast-meta"><strong>Chest {index + 1}</strong><small>{chest.inventory.reduce((total, entry) => total + entry.quantity, 0)} items</small></span><Pip tone="ally" /></button>)}</div></section>}
-            {isSetup && <p className="whisper">Arrange the scene, then press Battle to snap every token and roll initiative.</p>}
-            {isPlay && <p className="whisper">Drag tokens freely across the Table. Camera position and ruler marks remain view-only.</p>}
+            <p className="whisper">Drag tokens across the Table. They settle onto the nearest square. Camera position and ruler marks remain view-only.</p>
           </div>
         )}
-      </aside>
+      </aside>}
 
-      <aside className="dock dock-right glass grained">
-        {isSetup ? <>
-          {(selected || selectedChest) && <header className="dock-head">{selected ? <span className="sigil sigil-lg" style={{ background: selected.color }}>{initials(selected.name)}</span> : <span className="sigil sigil-lg nf-state-table-chest-sigil"><Package size={18} /></span>}<div><span className="kicker">{selected ? "Selected token" : "Selected chest"}</span><h2>{selected?.name || "Battle chest"}</h2></div></header>}
-          <BattleSetupInspector token={selected} chest={selectedChest} busy={busy} error={visibleError} saveToken={saveSelectedSetupToken} applyTokenEquipment={applySelectedTokenEquipment} removeToken={removeSelectedSetupToken} changeChestItem={changeSelectedChestItem} removeChest={removeSelectedSetupChest} />
-        </> : selected ? <>
+      {isSetup && (
+        <div className="dock dock-right nf-state-scene-column">
+          <BattleSetupInspector
+            token={selected}
+            chest={selectedChest}
+            busy={busy}
+            saveToken={saveSelectedSetupToken}
+            applyTokenEquipment={applySelectedTokenEquipment}
+            removeToken={removeSelectedSetupToken}
+            changeChestItem={changeSelectedChestItem}
+            removeChest={removeSelectedSetupChest}
+            initialDrawer={initialInspectorDrawer}
+          />
+          <SceneObjects
+            tokens={tableTokens}
+            chests={chests}
+            selectedTokenId={selectedId}
+            selectedChestId={selectedChestId}
+            selectToken={(tokenId) => { setSelectedId(tokenId); setSelectedChestId(null); }}
+            selectChest={(chestId) => { setSelectedChestId(chestId); setSelectedId(null); }}
+            addToken={() => setSummonPickerOpen(true)}
+            addChest={placeSetupChest}
+            removeToken={removeSetupTokenById}
+            removeChest={removeSetupChestById}
+            busy={busy}
+          />
+        </div>
+      )}
+
+      {!isSetup && <aside className="dock dock-right glass grained">
+        {selected ? <>
           <header className="dock-head"><span className="sigil sigil-lg" style={{ background: selected.color }}>{initials(selected.name)}</span><div><span className="kicker">Selected token</span><h2>{selected.name}</h2></div></header>
           <div className="dock-body">
             {isPlay ? (
@@ -1557,7 +1764,7 @@ export default function TableScreen({
             {isPlay && <button className="btn btn-hazard btn-sm btn-wide" onClick={removeSelectedPlayToken} disabled={busy}><Trash2 size={15} /> Remove token</button>}
           </div>
         </> : selectedChest ? <><header className="dock-head"><span className="sigil sigil-lg nf-state-table-chest-sigil"><Package size={18} /></span><div><span className="kicker">Selected chest</span><h2>Battle chest</h2></div></header><div className="dock-body"><section className="unit"><div className="unit-top"><span className="unit-label">Contents</span><span className={`tag ${selectedChest.inventory.length ? "tag-brass" : ""}`}>{selectedChest.inventory.length ? isActiveBattle ? "Bonus Action" : "Final state" : "Empty"}</span></div><div className="nf-state-table-chest-owned">{selectedChest.inventory.map((entry) => <span key={entry.itemId}><strong>{getItem(entry.itemId)?.name || entry.itemId}</strong><em className="numeral">×{entry.quantity}</em></span>)}{!selectedChest.inventory.length && <p className="note">This chest is empty.</p>}</div><p className="note">Chest movement and Setup editing stay locked. An adjacent active token can open it through the Bonus command; depleted contents persist through restart.</p></section></div></> : <div className="void-state"><span className="void-orb"><CircleDot size={26} /></span><h3>Nothing selected</h3><p>Pick a token on the map or in the cast list to inspect it.</p></div>}
-      </aside>
+      </aside>}
 
       {isActiveBattle && active && (
         <CommandBar
@@ -1570,7 +1777,6 @@ export default function TableScreen({
           chestOptions={battleChestOptions}
           retrievalOptions={battleRetrievalOptions}
           busy={busy || combatLocked}
-          error={visibleError}
           attack={startAttack}
           dash={useDash}
           swap={useWeaponSwap}

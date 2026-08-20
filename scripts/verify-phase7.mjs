@@ -21,7 +21,7 @@ const table = await read("src/screens/TableScreen.jsx");
 for (const integration of [
   "heroes = []", "summonChoice", "addSetupToken", "placeSetupChest", "onChestPointerDown",
   "setupCollisionFailure", "BattleSetupInspector", "beginBattle", "abandonBattle", "setAbandonOpen(true)",
-  "Place a chest", "returnTo: { page: \"board\", mode }",
+  "SetupRail", "SceneObjects", "returnTo: { page: \"board\", mode }",
 ]) if (!table.includes(integration)) failures.push(`Table screen is missing ${integration}.`);
 for (const fixture of ["BATTLE_PROTOTYPE_TOKENS", "Thorin", "Elara", "Goblin"]) {
   if (table.includes(fixture)) failures.push(`Deferred prototype fixture remains in the real Phase 7 Table: ${fixture}.`);
@@ -30,7 +30,7 @@ if (!table.includes("const isBattle = !isPlay && Boolean(scene?.encounter)")) fa
 
 const inspector = await read("src/screens/BattleSetupInspector.jsx");
 for (const control of [
-  "Editable token", "Save token details", "Hero snapshot", "Read only", "GearChapter",
+  "Editable token", "Save token details", "Hero snapshot", "Token actions", "GearChapter",
   "Fill chest", "ITEM_CATALOG", "changeItem", "Remove chest", "Creature size", "Initiative bonus",
 ]) if (!inspector.includes(control)) failures.push(`Battle Setup inspector is missing ${control}.`);
 if (!(await read("src/screens/GearChapter.jsx")).includes("Only owned equipment is listed")) failures.push("Per-battle Gear does not retain the owned-equipment legality control.");

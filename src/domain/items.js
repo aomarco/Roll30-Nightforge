@@ -151,6 +151,63 @@ export function setShield(hero, itemId, catalogById = ITEM_BY_ID) {
   return success({ shieldId: itemId });
 }
 
+/**
+ * A shield occupies a hand, exactly as an off-hand weapon does, so the sheet
+ * presents one off-hand slot holding either. The record keeps `shieldId` and
+ * `loadout.offHand` as separate fields — armour class reads `shieldId` — and
+ * this setter simply makes sure only one of them is ever filled.
+ */
+export function setOffHandSlot(hero, itemId, catalogById = ITEM_BY_ID) {
+  if (itemId === null) {
+    return success({ loadout: { ...hero.loadout, offHand: null }, shieldId: null });
+  }
+  const item = getItem(itemId, catalogById);
+  if (isShield(item)) {
+    const withFreeHand = { ...hero, loadout: { ...hero.loadout, offHand: null } };
+    const result = setShield(withFreeHand, itemId, catalogById);
+    if (!result.ok) return result;
+    return success({ loadout: { ...hero.loadout, offHand: null }, ...result.value });
+  }
+  const withoutShield = { ...hero, shieldId: null };
+  const result = setOffHand(withoutShield, itemId, catalogById);
+  if (!result.ok) return result;
+  return success({ ...result.value, shieldId: null });
+}
+
+/**
+ * Why an item cannot be equipped right now, in a few words, or null if it can.
+ *
+ * These mirror setMainHand/setOffHand/setShield exactly. They exist so the
+ * dropdowns can grey out an illegal choice up front instead of accepting the
+ * click and then refusing it.
+ */
+export function mainHandRefusal(hero, itemId, catalogById = ITEM_BY_ID) {
+  const item = getItem(itemId, catalogById);
+  if (!isWeapon(item) || !ownsItem(hero, itemId)) return "Not an owned weapon";
+  if (isTwoHanded(item) && hero?.loadout?.offHand) return "Off hand is not free";
+  if (isTwoHanded(item) && hero?.shieldId) return "Shield is raised";
+  if (hero?.loadout?.offHand) {
+    const off = getItem(hero.loadout.offHand, catalogById);
+    if (!isLightMelee(item) || !isLightMelee(off)) return "Dual wield needs two Light weapons";
+    if (hero.loadout.offHand === itemId && !ownsItem(hero, itemId, 2)) return "Needs quantity 2";
+  }
+  return null;
+}
+
+export function offHandRefusal(hero, itemId, catalogById = ITEM_BY_ID) {
+  const item = getItem(itemId, catalogById);
+  if (!item || !ownsItem(hero, itemId)) return "Not owned";
+  const main = getItem(hero?.loadout?.mainHand, catalogById);
+  if (isShield(item)) return isTwoHanded(main) ? "Two-Handed weapon in use" : null;
+  if (!isWeapon(item)) return "Not a weapon";
+  if (!main || !ownsItem(hero, main.id)) return "Equip a main hand first";
+  if (isTwoHanded(main)) return "Two-Handed weapon in use";
+  if (!isLightMelee(main)) return "Main hand is not Light";
+  if (!isLightMelee(item)) return "Not a Light melee weapon";
+  if (main.id === itemId && !ownsItem(hero, itemId, 2)) return "Needs quantity 2";
+  return null;
+}
+
 export function setEnchantment(hero, itemId, bonus, catalogById = ITEM_BY_ID) {
   const item = getItem(itemId, catalogById);
   if (!ownsItem(hero, itemId)) return failure("ITEM_NOT_OWNED", "Only an owned item can be enchanted.");

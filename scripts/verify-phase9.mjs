@@ -102,7 +102,7 @@ for (const control of ["Off-hand attack", "Battle chests", "Physical weapons", "
 }
 
 const cinematic = await read("src/screens/AttackCinematic.jsx");
-for (const state of ["spin", "natural", "modifiers", "verdict", "damage", "impact", "failed", "rejected", "Natural 1 always misses", "Critical hit"]) {
+for (const state of ["spin", "natural", "modifiers", "verdict", "damage", "impact", "rejected", "Natural 1 always misses", "Critical hit"]) {
   if (!cinematic.includes(state)) failures.push(`Attack cinematic is missing ${state}.`);
 }
 

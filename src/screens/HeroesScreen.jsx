@@ -98,12 +98,10 @@ export default function HeroesScreen({
   onReplacePortrait = async () => okay(),
   onRemovePortrait = async () => okay(),
   flushRef = null,
-  initialChapter = "identity",
   initialRetiringId = null,
 }) {
   const [portraitBusy, setPortraitBusy] = useState(false);
   const [activeId, setActiveId] = useState(() => heroes[0]?.id || null);
-  const [chapter, setChapter] = useState(initialChapter);
   const [retiring, setRetiring] = useState(
     () => heroes.find((hero) => hero.id === initialRetiringId) || null,
   );
@@ -199,7 +197,6 @@ export default function HeroesScreen({
   const selectHero = (heroId) => {
     if (!flushDraft().ok) return;
     setActiveId(heroId);
-    setChapter("identity");
   };
 
   const createHero = () => {
@@ -210,7 +207,6 @@ export default function HeroesScreen({
       return;
     }
     setActiveId(result.value.id);
-    setChapter("identity");
     setLocalError(null);
   };
 
@@ -224,7 +220,6 @@ export default function HeroesScreen({
     const nextHero = heroes.find((hero) => hero.id !== retiredId) || null;
     setActiveId(nextHero?.id || null);
     setRetiring(null);
-    setChapter("identity");
     setLocalError(null);
   };
 
@@ -439,14 +434,9 @@ export default function HeroesScreen({
               </div>
             </section>
 
-            <nav className="chapters">
-              <button className={"chapter" + (chapter === "identity" ? " on" : "")} onClick={() => setChapter("identity")}>Identity</button>
-              <button className={"chapter" + (chapter === "abilities" ? " on" : "")} onClick={() => setChapter("abilities")}>Abilities</button>
-              <button className={"chapter" + (chapter === "gear" ? " on" : "")} onClick={() => setChapter("gear")}>Gear</button>
-            </nav>
-
-            {chapter === "identity" && (
-              <section className="sheet enter" key="identity">
+            {/* One page. Identity, abilities and gear used to hide behind three
+                toggles; they are all one scroll now. */}
+            <section className="sheet enter" key="identity">
                 <header className="sheet-head">
                   <div><span className="kicker">Identity</span><h3>Name &amp; origin</h3></div>
                   <p className="note">Who they are before the dice hit the table.</p>
@@ -518,11 +508,9 @@ export default function HeroesScreen({
                     </div>
                   </div>
                 </div>
-              </section>
-            )}
+            </section>
 
-            {chapter === "abilities" && (
-              <section className="sheet enter" key="abilities">
+            <section className="sheet enter" key="abilities">
                 <header className="sheet-head">
                   <div>
                     <span className="kicker">Ability scores</span>
@@ -628,11 +616,9 @@ export default function HeroesScreen({
                     </section>
                   )}
                 </div>
-              </section>
-            )}
-            {chapter === "gear" && (
-              <GearChapter key={activeHero.id} hero={activeHero} apply={apply} busy={busy} />
-            )}
+            </section>
+
+            <GearChapter key={activeHero.id} hero={activeHero} apply={apply} busy={busy} />
           </>
         )}
       </div>

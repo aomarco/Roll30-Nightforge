@@ -42,7 +42,7 @@ try {
   assert.match(playMarkup, /Lantern Bearer/);
   assert.match(playMarkup, /Free position/);
   assert.match(playMarkup, /No turn limits/);
-  assert.match(playMarkup, /Drag tokens freely across the Table/);
+  assert.match(playMarkup, /Drag tokens across the Table/);
   assert.match(playMarkup, /translate\(120px, -40px\) scale\(1.5\)/);
   assert.match(playMarkup, /translate\(25px, -18px\) scale\(1.4\)/);
   assert.doesNotMatch(playMarkup, /nf-state-initiative-list|piece-hp|Battle geometry/);
@@ -92,7 +92,7 @@ try {
     initialTool: "artwork",
   }));
   assert.match(activeArtwork, /blob:nightforge-artwork/);
-  assert.match(activeArtwork, /Drag the Table to adjust artwork/);
+  assert.match(activeArtwork, /Drag the backdrop to move it/);
   assert.match(activeArtwork, /Exit current tool/);
 
   const rulerAndDraft = renderToStaticMarkup(React.createElement(TableScreen, {

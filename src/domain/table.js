@@ -112,9 +112,49 @@ export const clientPointToPercent = (point, transformedRect) => ({
   yPercent: ((finite(point?.y) - finite(transformedRect?.top)) / Math.max(1, finite(transformedRect?.height, 1))) * 100,
 });
 
-export const normalizePosition = (position = {}) => ({
+/** The stored numbers, before anything is said about which cell they land in. */
+const rawPosition = (position = {}) => ({
   xPercent: finite(position.xPercent ?? position.x, 50),
   yPercent: finite(position.yPercent ?? position.y, 50),
+});
+
+/**
+ * Snap onto the centre of the scene cell a position falls inside.
+ *
+ * Written against SCENE_COLUMNS/SCENE_ROWS directly rather than through
+ * setupCellForPosition, because that helper takes a viewport and this one is
+ * about the real board every saved scene uses.
+ */
+export const snapScenePosition = (position) => {
+  const { xPercent, yPercent } = rawPosition(position);
+  const column = clamp(Math.floor((xPercent / 100) * SCENE_COLUMNS), 0, SCENE_COLUMNS - 1);
+  const row = clamp(Math.floor((yPercent / 100) * SCENE_ROWS), 0, SCENE_ROWS - 1);
+  return {
+    xPercent: ((column + 0.5) / SCENE_COLUMNS) * 100,
+    yPercent: ((row + 0.5) / SCENE_ROWS) * 100,
+  };
+};
+
+/** True when a position is already sitting exactly on a cell centre. */
+export const isOnCellCentre = (position) => {
+  const current = rawPosition(position);
+  const snapped = snapScenePosition(current);
+  return Math.abs(current.xPercent - snapped.xPercent) < 0.0001
+    && Math.abs(current.yPercent - snapped.yPercent) < 0.0001;
+};
+
+/**
+ * The stored numbers, defaulting to the centre *cell* rather than to 50/50.
+ * On a 20x12 board 50/50 is a cell corner, so any record that fell back to it
+ * rendered half a cell out in both directions.
+ *
+ * Snapping itself happens a layer up, in the Table screen, because the grid
+ * helpers here are deliberately viewport-parameterised and a record has no
+ * viewport attached to it.
+ */
+export const normalizePosition = (position = {}) => ({
+  xPercent: finite(position.xPercent ?? position.x, 52.5),
+  yPercent: finite(position.yPercent ?? position.y, 54.166666666666664),
 });
 
 const colorPattern = /^#[0-9a-f]{6}$/i;
@@ -183,14 +223,17 @@ export const normalizeTableTokens = (tokens) =>
     normalizeTableToken(token, { id: token?.id, ordinal }));
 
 export function createPlayToken({ id, ordinal = 0, name } = {}) {
-  const angle = ordinal * 0.9;
-  const radius = Math.min(18, ordinal * 2.2);
+  // Fanned across distinct cells near the middle of the board. The old
+  // trigonometric ring produced positions between squares, and once positions
+  // snap it also dropped the first several tokens onto the same cell.
+  const column = clamp(Math.floor(SCENE_COLUMNS / 2) - 2 + (ordinal % 5), 0, SCENE_COLUMNS - 1);
+  const row = clamp(Math.floor(SCENE_ROWS / 2) - 1 + Math.floor(ordinal / 5), 0, SCENE_ROWS - 1);
   return normalizeTableToken({
     id,
     name: name || `Token ${ordinal + 1}`,
     position: {
-      xPercent: 50 + Math.cos(angle) * radius,
-      yPercent: 50 + Math.sin(angle) * radius,
+      xPercent: ((column + 0.5) / SCENE_COLUMNS) * 100,
+      yPercent: ((row + 0.5) / SCENE_ROWS) * 100,
     },
   }, { id, ordinal });
 }
@@ -402,7 +445,7 @@ export function setupGridMetrics({ width, height, gridSize } = {}) {
 
 export function setupCellForPosition(position, viewport) {
   const metrics = setupGridMetrics(viewport);
-  const normalized = normalizePosition(position);
+  const normalized = rawPosition(position);
   return {
     column: Math.max(0, Math.min(metrics.columns - 1, Math.floor((normalized.xPercent / 100) * metrics.width / metrics.cellSize))),
     row: Math.max(0, Math.min(metrics.rows - 1, Math.floor((normalized.yPercent / 100) * metrics.height / metrics.cellSize))),
@@ -694,6 +737,88 @@ export function createWall({ id, type, points }) {
   const wall = normalizeWall({ id, type, points });
   if (!wall) throw new TypeError("A persisted wall requires an id and at least two points.");
   return wall;
+}
+
+/**
+ * Percentages are not isotropic — the board is 20 cells wide and 12 tall, so
+ * one percent across is not one percent down. Everything the Delete tool
+ * measures is converted into cell units first, where distances are honest.
+ */
+const toCellSpace = (position) => {
+  const { xPercent, yPercent } = rawPosition(position);
+  return { x: (xPercent / 100) * SCENE_COLUMNS, y: (yPercent / 100) * SCENE_ROWS };
+};
+
+const distanceToSegment = (point, start, end) => {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const lengthSquared = dx * dx + dy * dy;
+  if (lengthSquared === 0) return Math.hypot(point.x - start.x, point.y - start.y);
+  const along = clamp(((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared, 0, 1);
+  return Math.hypot(point.x - (start.x + along * dx), point.y - (start.y + along * dy));
+};
+
+/** Distance in grid cells from a board position to the nearest part of a wall. */
+export function wallDistanceInCells(wall, position) {
+  const point = toCellSpace(position);
+  const points = (wall?.points || []).map(toCellSpace);
+  let nearest = Infinity;
+  for (let index = 1; index < points.length; index += 1) {
+    nearest = Math.min(nearest, distanceToSegment(point, points[index - 1], points[index]));
+  }
+  return nearest;
+}
+
+/** Half a cell: a token fills its square, so that is the whole of its target. */
+const PICK_RADIUS_CELLS = 0.5;
+/** Walls are drawn thin, so they need a little slack to be clickable. */
+const WALL_PICK_CELLS = 0.35;
+
+/**
+ * What sits under a pointer, topmost first: token, then chest, then wall.
+ * Returns null when the pointer is over empty board.
+ */
+export function sceneObjectAt(position, { tokens = [], chests = [], walls = [] } = {}) {
+  const target = toCellSpace(position);
+  const near = (candidate) => Math.hypot(target.x - candidate.x, target.y - candidate.y) <= PICK_RADIUS_CELLS;
+
+  for (const token of normalizeTableTokens(tokens)) {
+    if (near(toCellSpace(token.position))) return { kind: "token", id: token.id };
+  }
+  for (const chest of normalizeChests(chests)) {
+    if (near(toCellSpace(chest.position))) return { kind: "chest", id: chest.id };
+  }
+
+  let closest = null;
+  for (const wall of normalizeWalls(walls)) {
+    const distance = wallDistanceInCells(wall, position);
+    if (distance <= WALL_PICK_CELLS && (!closest || distance < closest.distance)) {
+      closest = { kind: "wall", id: wall.id, distance };
+    }
+  }
+  return closest ? { kind: "wall", id: closest.id } : null;
+}
+
+/**
+ * Everything caught inside a drag rectangle. Tokens and chests count when
+ * their square is inside it; a wall counts when any of its corners is.
+ */
+export function sceneObjectsWithin(rectangle, { tokens = [], chests = [], walls = [] } = {}) {
+  const start = rawPosition(rectangle?.start);
+  const end = rawPosition(rectangle?.end);
+  const left = Math.min(start.xPercent, end.xPercent);
+  const right = Math.max(start.xPercent, end.xPercent);
+  const top = Math.min(start.yPercent, end.yPercent);
+  const bottom = Math.max(start.yPercent, end.yPercent);
+  const inside = (position) => {
+    const { xPercent, yPercent } = rawPosition(position);
+    return xPercent >= left && xPercent <= right && yPercent >= top && yPercent <= bottom;
+  };
+  return {
+    tokenIds: normalizeTableTokens(tokens).filter((token) => inside(token.position)).map((token) => token.id),
+    chestIds: normalizeChests(chests).filter((chest) => inside(chest.position)).map((chest) => chest.id),
+    wallIds: normalizeWalls(walls).filter((wall) => wall.points.some(inside)).map((wall) => wall.id),
+  };
 }
 
 export function rulerDistanceFeet(start, end, { width, height, gridSize } = {}) {

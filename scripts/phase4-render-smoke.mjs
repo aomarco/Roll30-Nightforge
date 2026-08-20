@@ -89,8 +89,11 @@ try {
   assert.match(identity, /Lawful Good/);
   assert.match(identity, /Soldier/);
   assert.match(identity, /Dwarvish · granted/);
-  assert.match(identity, />Gear</);
-  assert.doesNotMatch(identity, /Longsword|Plate Armor|Potion of Healing/);
+  // The sheet is one page now: identity, abilities and gear all render at
+  // once, so gear content is expected here rather than hidden behind a tab.
+  assert.match(identity, /Gear &amp; treasures/);
+  assert.match(identity, /27-point buy/);
+  assert.doesNotMatch(identity, /class="chapters"/);
 
   const fighterAbilities = renderToStaticMarkup(
     React.createElement(HeroesScreen, {

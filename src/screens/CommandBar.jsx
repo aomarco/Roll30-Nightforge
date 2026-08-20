@@ -1,25 +1,30 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   ArchiveRestore,
-  Footprints,
-  Gauge,
+  ChevronsRight,
+  Hourglass,
   PackageOpen,
   RefreshCw,
-  ShieldHalf,
-  Swords,
-  Wind,
+  Sparkles,
+  Sword,
   X,
 } from "lucide-react";
 
 import { ITEM_BY_ID, itemSubtitle } from "../domain/catalog.js";
 import { movementMaximum, movementRemaining, validateSwapLoadout } from "../domain/combat.js";
 
-const errorText = (error) => error ? `${error.message} ${error.recovery || "Retry the command."}` : "";
+/** One segment per five feet, which is the unit the whole game counts in. */
+const SPEED_SEGMENT_FEET = 5;
+const MAX_SPEED_SEGMENTS = 20;
 
 /**
- * The whole turn lives in one bar. Attack, Dash, Swap and End Turn are always
- * visible, and choosing Attack or Bonus grows the bar upward into the space
- * above it rather than opening a window over the board.
+ * The whole turn lives in one bar: a segmented Speed meter, four command
+ * sections divided by hairlines, and End Turn as a ring on the right.
+ *
+ * There are no separate resource chips any more. A command that cannot be used
+ * turns red and goes dead, and hovering it still explains why — which is the
+ * same information the old "Action Attack" / "Bonus Ready" text carried, minus
+ * the clutter.
  */
 export default function CommandBar({
   token,
@@ -31,7 +36,6 @@ export default function CommandBar({
   chestOptions = [],
   retrievalOptions = [],
   busy = false,
-  error = null,
   attack,
   dash,
   swap,
@@ -71,89 +75,68 @@ export default function CommandBar({
     });
   };
 
-  const movementSpent = maximum > 0 && remaining <= 0;
-  const meters = [
+  const totalSegments = Math.min(
+    MAX_SPEED_SEGMENTS,
+    Math.max(1, Math.round(maximum / SPEED_SEGMENT_FEET)),
+  );
+  const filledSegments = maximum > 0
+    ? Math.max(0, Math.min(totalSegments, Math.round((remaining / maximum) * totalSegments)))
+    : 0;
+
+  // The Bonus panel still holds chests and weapon retrieval, so it stays
+  // reachable whenever it has anything inside it — even after the Bonus Action
+  // itself is spent, because an already-open chest can still be looted.
+  const bonusHasContent = bonusState.ok || chestOptions.length > 0 || retrievalOptions.length > 0;
+
+  const commands = [
     {
-      id: "movement",
-      icon: Wind,
-      label: "Movement",
-      value: `${remaining} ft`,
-      state: movementSpent ? "spent" : "ready",
-      reason: movementSpent
-        ? `${token.name} has used all ${maximum} feet of movement this turn.`
-        : `${remaining} of ${maximum} feet remaining this turn.`,
+      id: "attack",
+      icon: Sword,
+      label: "Attack",
+      available: attackState.ok,
+      reason: attackState.ok
+        ? `${attackState.value.options.length} equipped weapon${attackState.value.options.length === 1 ? "" : "s"} ready.`
+        : attackState.message,
+      onClick: () => togglePanel("attack"),
+      expands: true,
     },
     {
-      id: "action",
-      icon: Swords,
-      label: "Action",
-      value: resources.actionSpent ? resources.actionType || "Spent" : "Ready",
-      state: resources.actionSpent ? "spent" : "ready",
-      reason: resources.actionSpent
-        ? `The Action was spent on ${resources.actionType || "another command"}. End the turn to refresh it.`
-        : "The Action is available: Attack, Dash or Swap weapons.",
-    },
-    {
-      id: "bonus",
-      icon: ShieldHalf,
-      label: "Bonus",
-      value: resources.bonusActionSpent ? resources.bonusActionType || "Spent" : "Ready",
-      state: resources.bonusActionSpent ? "spent" : "ready",
-      reason: resources.bonusActionSpent
-        ? `The Bonus Action was spent on ${resources.bonusActionType || "another command"}. End the turn to refresh it.`
-        : "The Bonus Action is available: off-hand attack, open a chest or retrieve a weapon.",
+      id: "dash",
+      icon: ChevronsRight,
+      label: "Dash",
+      available: dashState.ok,
+      reason: dashState.ok ? `Adds ${token.baseSpeed} feet of movement.` : dashState.message,
+      onClick: dash,
+      expands: false,
     },
     {
       id: "swap",
       icon: RefreshCw,
       label: "Swap",
-      value: resources.swapped ? resources.swapChoice || "Used" : "Ready",
-      state: resources.swapped ? "spent" : "ready",
-      reason: resources.swapped
-        ? `Weapons were already swapped this turn${resources.swapChoice ? ` (${resources.swapChoice} branch)` : ""}.`
-        : "A weapon swap is still available this turn.",
-    },
-  ];
-
-  const commands = [
-    {
-      id: "attack",
-      icon: Swords,
-      label: "Attack",
-      state: attackState,
-      onClick: () => togglePanel("attack"),
-      hint: attackState.ok ? `${attackState.value.options.length} equipped` : attackState.message,
-    },
-    {
-      id: "dash",
-      icon: Gauge,
-      label: "Dash",
-      state: dashState,
-      onClick: dash,
-      hint: dashState.ok ? `Add ${token.baseSpeed} ft` : dashState.message,
-    },
-    {
-      id: "swap",
-      icon: RefreshCw,
-      label: "Swap weapon",
-      state: swapState,
+      available: swapState.ok,
+      reason: swapState.ok ? "One weapon swap is still available this turn." : swapState.message,
       onClick: () => togglePanel("swap"),
-      hint: swapState.ok ? "Once this turn" : swapState.message,
+      expands: true,
     },
     {
       id: "bonus",
-      icon: ShieldHalf,
-      label: "Bonus",
-      state: { ok: true },
+      icon: Sparkles,
+      label: "Bonus action",
+      available: bonusHasContent,
+      reason: bonusHasContent
+        ? resources.bonusActionSpent
+          ? `Bonus Action spent on ${resources.bonusActionType || "another command"}. Opened chests can still be looted.`
+          : "Off-hand attack, open a chest or retrieve a weapon."
+        : bonusState.message,
       onClick: () => togglePanel("bonus"),
-      hint: resources.bonusActionSpent ? resources.bonusActionType || "Spent" : "Available",
+      expands: true,
     },
   ];
 
   return (
-    <div className={`nf-state-command-bar glass grained${panel ? " nf-state-command-bar-open" : ""}`}>
+    <div className={`nf-state-command-bar${panel ? " nf-state-command-bar-open" : ""}`}>
       {panel && (
-        <div className="nf-state-command-panel" role="group" aria-label={`${panel} options`}>
+        <div className="nf-state-command-panel glass grained" role="group" aria-label={`${panel} options`}>
           <div className="nf-state-command-panel-top">
             <span className="kicker kicker-brass">
               {panel === "attack"
@@ -162,8 +145,6 @@ export default function CommandBar({
             </span>
             <button className="glyph" onClick={() => setPanel(null)} aria-label="Close options"><X size={16} /></button>
           </div>
-
-          {error && <div className="nf-state-inline-error" role="alert"><strong>Command not completed</strong><span>{errorText(error)}</span></div>}
 
           {panel === "attack" && attackState.ok && (
             <div className="nf-state-command-options">
@@ -175,7 +156,7 @@ export default function CommandBar({
                   disabled={busy || !option.supply.ok}
                   title={option.supply.ok ? "Enter targeting mode" : option.supply.message}
                 >
-                  <Swords size={16} />
+                  <Sword size={16} />
                   <span>
                     <strong>{option.weapon.name}</strong>
                     <small>{option.supply.ok ? `${option.hand === "mainHand" ? "Main hand" : "Off hand"} · ${itemSubtitle(option.weapon)}` : option.supply.message}</small>
@@ -205,8 +186,9 @@ export default function CommandBar({
                   {weapons.map(({ item, quantity }) => <option value={item.id} key={item.id}>{item.name}{item.id === draft.mainHand && quantity < 2 ? " · needs quantity 2" : ""}</option>)}
                 </select>
               </label>
-              {!validation.ok && <div className="nf-state-inline-error" role="status"><strong>Choose another loadout</strong><span>{validation.message}</span></div>}
-              <p className="note">Swap then Attack causes disadvantage and blocks movement. Moving before or after Swap blocks Attack and Dash while preserving unused movement.</p>
+              <p className="note">{validation.ok
+                ? "Swap then Attack causes disadvantage and blocks movement. Moving before or after Swap blocks Attack and Dash while preserving unused movement."
+                : validation.message}</p>
               <button className="btn btn-key btn-wide" onClick={() => swap(draft)} disabled={busy || !validation.ok}><RefreshCw size={15} /> Confirm weapon swap</button>
             </div>
           )}
@@ -228,7 +210,7 @@ export default function CommandBar({
                 disabled={busy || !bonusState.ok}
                 title={bonusState.ok ? "Enter off-hand targeting mode" : bonusState.message}
               >
-                <ShieldHalf size={16} />
+                <Sword size={16} />
                 <span>
                   <strong>Off-hand attack</strong>
                   <small>{bonusState.ok ? `${bonusState.value.options[0].weapon.name} · ${itemSubtitle(bonusState.value.options[0].weapon)}` : bonusState.message}</small>
@@ -278,38 +260,53 @@ export default function CommandBar({
       )}
 
       <div className="nf-state-command-deck">
-        <div className="nf-state-command-meters">
-          {meters.map((meter) => (
-            <span
-              className={`nf-state-command-meter nf-state-command-meter-${meter.state} nf-state-command-meter-${meter.id}`}
-              key={meter.id}
-              title={meter.reason}
-              tabIndex={0}
-            >
-              <meter.icon size={14} />
-              <em>{meter.label}</em>
-              <strong className="numeral">{meter.value}</strong>
+        <div className="nf-state-command-console">
+          <div
+            className={`nf-state-command-speed glass${remaining <= 0 ? " nf-state-command-speed-empty" : ""}`}
+            title={remaining > 0
+              ? `${remaining} of ${maximum} feet of movement left this turn.`
+              : `${token.name} has used all ${maximum} feet of movement this turn.`}
+          >
+            <em>Speed</em>
+            <span className="nf-state-command-speed-track" role="img" aria-label={`${remaining} of ${maximum} feet of movement remaining`}>
+              {Array.from({ length: totalSegments }, (unused, index) => (
+                <i
+                  className={`nf-state-command-speed-cell${index < filledSegments ? " nf-state-command-speed-cell-on" : ""}`}
+                  key={index}
+                />
+              ))}
             </span>
-          ))}
+            <strong className="numeral">{remaining}/{maximum}</strong>
+          </div>
+
+          <div className="nf-state-command-actions glass grained">
+            {commands.map((command) => (
+              // The tooltip lives on the wrapper because a disabled button
+              // does not reliably raise the hover events a title needs.
+              <span className="nf-state-command-slot" key={command.id} title={command.reason}>
+                <button
+                  className={`nf-state-command-key nf-state-command-key-${command.id} ${command.available ? "nf-state-command-key-ready" : "nf-state-command-key-blocked"}${panel === command.id ? " nf-state-command-key-open" : ""}`}
+                  onClick={command.onClick}
+                  disabled={busy || !command.available}
+                  aria-expanded={command.expands ? panel === command.id : undefined}
+                >
+                  <command.icon size={20} strokeWidth={2} />
+                  <em>{command.label}</em>
+                </button>
+              </span>
+            ))}
+          </div>
         </div>
 
-        <div className="nf-state-command-actions">
-          {commands.map((command) => (
-            <button
-              className={`btn btn-sm ${panel === command.id ? "btn-key" : "btn-line"}`}
-              key={command.id}
-              onClick={command.onClick}
-              disabled={busy || !command.state.ok}
-              title={command.state.ok ? command.hint : command.state.message}
-              aria-expanded={["attack", "swap", "bonus"].includes(command.id) ? panel === command.id : undefined}
-            >
-              <command.icon size={15} /> {command.label}
-            </button>
-          ))}
-          <button className="btn btn-key btn-sm nf-state-command-end" onClick={end} disabled={busy}>
-            <Footprints size={15} /> End Turn
-          </button>
-        </div>
+        <button
+          className="nf-state-command-end glass"
+          onClick={end}
+          disabled={busy}
+          title={`End ${token.name}'s turn and pass initiative on.`}
+        >
+          <Hourglass size={26} strokeWidth={1.9} />
+          <em>End Turn</em>
+        </button>
       </div>
     </div>
   );

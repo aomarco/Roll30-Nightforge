@@ -123,7 +123,7 @@ const retrievalCinematicIndex = retrievalDurability.indexOf("setRetrievalCinemat
 if (retrievalSaveIndex < 0 || retrievalCinematicIndex < 0 || retrievalSaveIndex > retrievalCinematicIndex) {
   failures.push("Rolled retrieval persistence occurs after its cinematic begins.");
 }
-for (const contract of ["onTokenKeyDown", "onChestKeyDown", "aria-label=\"Token to summon\""]) {
+for (const contract of ["onTokenKeyDown", "onChestKeyDown", "aria-label=\"Exit current tool\"", "aria-label=\"Scene settings\""]) {
   if (!table.includes(contract)) failures.push(`Table keyboard/accessibility hardening is missing ${contract}.`);
 }
 

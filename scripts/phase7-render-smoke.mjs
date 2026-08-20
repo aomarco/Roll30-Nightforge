@@ -46,20 +46,47 @@ try {
   }));
   assert.match(manualMarkup, /Ashen Gate/);
   assert.match(manualMarkup, /Setup mode/);
-  assert.match(manualMarkup, /Blank token/);
-  assert.match(manualMarkup, /Mira Ashfall/);
-  assert.match(manualMarkup, /Place a chest/);
   assert.match(manualMarkup, /Gate Guard/);
   assert.match(manualMarkup, /Manual token/);
-  assert.match(manualMarkup, /Editable token/);
-  assert.match(manualMarkup, /Save token details/);
-  assert.match(manualMarkup, /Initiative bonus/);
-  assert.match(manualMarkup, /Creature size/);
-  assert.match(manualMarkup, /Gear &amp; treasures/);
-  assert.match(manualMarkup, /Loadout/);
+  assert.match(manualMarkup, /Objects on map/);
   assert.match(manualMarkup, /Chest 1/);
   assert.match(manualMarkup, /aria-label="Chest with 2 items, use arrow keys to move"/);
   assert.doesNotMatch(manualMarkup, /Thorin|Elara|Goblin/);
+
+  // Tools moved onto a permanent rail, and every editor now opens from the
+  // selected card's overflow menu rather than filling the dock.
+  assert.match(manualMarkup, /nf-state-rail/);
+  assert.match(manualMarkup, /aria-label="Add token"/);
+  assert.match(manualMarkup, /aria-label="Add chest"/);
+  assert.match(manualMarkup, /aria-label="Half wall"/);
+  assert.match(manualMarkup, /aria-label="Ruler"/);
+  assert.match(manualMarkup, /aria-label="Delete"/);
+  assert.match(manualMarkup, /aria-label="Token actions"/);
+  assert.match(manualMarkup, /Start Battle/);
+
+  const statsMarkup = renderToStaticMarkup(React.createElement(TableScreen, {
+    ...handlers,
+    scene: setup,
+    mode: "setup",
+    heroes: [hero],
+    initialSelectedId: manual.id,
+    initialInspectorDrawer: "stats",
+  }));
+  assert.match(statsMarkup, /Editable token/);
+  assert.match(statsMarkup, /Save token details/);
+  assert.match(statsMarkup, /Initiative bonus/);
+  assert.match(statsMarkup, /Creature size/);
+
+  const gearMarkup = renderToStaticMarkup(React.createElement(TableScreen, {
+    ...handlers,
+    scene: setup,
+    mode: "setup",
+    heroes: [hero],
+    initialSelectedId: manual.id,
+    initialInspectorDrawer: "gear",
+  }));
+  assert.match(gearMarkup, /Gear &amp; treasures/);
+  assert.match(gearMarkup, /Loadout/);
 
   const heroMarkup = renderToStaticMarkup(React.createElement(TableScreen, {
     ...handlers,
@@ -69,12 +96,21 @@ try {
     initialSelectedId: heroToken.id,
   }));
   assert.match(heroMarkup, /Hero snapshot/);
-  assert.match(heroMarkup, /Read only/);
-  assert.match(heroMarkup, /Later Hero edits do not change this token/);
   assert.match(heroMarkup, /Strength/);
   assert.match(heroMarkup, /Dexterity/);
   assert.match(heroMarkup, /Initiative/);
-  assert.match(heroMarkup, /Only owned equipment is listed/);
+  // A hero snapshot has no editable statistics, so its menu offers gear only.
+  assert.doesNotMatch(heroMarkup, /Edit stats/);
+
+  const heroGearMarkup = renderToStaticMarkup(React.createElement(TableScreen, {
+    ...handlers,
+    scene: setup,
+    mode: "setup",
+    heroes: [hero],
+    initialSelectedId: heroToken.id,
+    initialInspectorDrawer: "gear",
+  }));
+  assert.match(heroGearMarkup, /Only owned equipment is listed/);
 
   const chestMarkup = renderToStaticMarkup(React.createElement(TableScreen, {
     ...handlers,
@@ -84,12 +120,23 @@ try {
     initialSelectedId: null,
     initialSelectedChestId: chest.id,
   }));
-  assert.match(chestMarkup, /Selected chest/);
   assert.match(chestMarkup, /Battle chest/);
-  assert.match(chestMarkup, /Blocks movement/);
+  assert.match(chestMarkup, /Blocks/);
+  assert.match(chestMarkup, /Movement/);
   assert.match(chestMarkup, /Dagger/);
-  assert.match(chestMarkup, /Open chest inventory/);
-  assert.match(chestMarkup, /Remove chest/);
+  assert.match(chestMarkup, /aria-label="Chest actions"/);
+
+  const chestContentsMarkup = renderToStaticMarkup(React.createElement(TableScreen, {
+    ...handlers,
+    scene: setup,
+    mode: "setup",
+    heroes: [hero],
+    initialSelectedId: null,
+    initialSelectedChestId: chest.id,
+    initialInspectorDrawer: "chest",
+  }));
+  assert.match(chestContentsMarkup, /Fill chest/);
+  assert.match(chestContentsMarkup, /Search the complete catalog/);
 
   const started = table.prepareBattleStart(setup, {
     viewport: { width: 880, height: 528, gridSize: 44 },

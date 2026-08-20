@@ -1,6 +1,10 @@
 import { Shield, Sparkles, Swords, Target } from "lucide-react";
 
-const STAGES = ["spin", "natural", "modifiers", "verdict", "damage", "impact", "failed"];
+const STAGES = ["spin", "natural", "modifiers", "verdict", "damage", "impact"];
+
+/** Milliseconds between one modifier row appearing and the next. */
+const MODIFIER_STAGGER = 240;
+const DAMAGE_STAGGER = 170;
 
 const signed = (value) => (value >= 0 ? `+${value}` : String(value).replace("-", "−"));
 
@@ -70,16 +74,16 @@ export default function AttackCinematic({ cinematic, skip }) {
             {showModifiers && (
               <ul className="nf-state-cinematic-modifiers">
                 {modifierRows.map((row, index) => (
-                  <li key={row.id} style={{ animationDelay: `${index * 180}ms` }}>
+                  <li key={row.id} style={{ animationDelay: `${index * MODIFIER_STAGGER}ms` }}>
                     <span>{row.label}</span>
                     <strong className="numeral">{row.value}</strong>
                   </li>
                 ))}
-                <li className="nf-state-cinematic-total" style={{ animationDelay: `${modifierRows.length * 180}ms` }}>
+                <li className="nf-state-cinematic-total" style={{ animationDelay: `${modifierRows.length * MODIFIER_STAGGER}ms` }}>
                   <span>Total</span>
                   <strong className="numeral">{outcome.attackTotal}</strong>
                 </li>
-                <li className="nf-state-cinematic-target" style={{ animationDelay: `${(modifierRows.length + 1) * 180}ms` }}>
+                <li className="nf-state-cinematic-target" style={{ animationDelay: `${(modifierRows.length + 1) * MODIFIER_STAGGER}ms` }}>
                   <span><Shield size={12} /> Target AC</span>
                   <strong className="numeral">{outcome.targetAc}</strong>
                 </li>
@@ -100,7 +104,7 @@ export default function AttackCinematic({ cinematic, skip }) {
             <div className="nf-state-cinematic-damage">
               <div className="nf-state-cinematic-damage-dice">
                 {outcome.damage.rolls.map((roll, index) => (
-                  <span key={index} style={{ animationDelay: `${index * 120}ms` }}>{roll}</span>
+                  <span key={index} style={{ animationDelay: `${index * DAMAGE_STAGGER}ms` }}>{roll}</span>
                 ))}
               </div>
               <strong className="numeral">{outcome.damage.total}</strong>

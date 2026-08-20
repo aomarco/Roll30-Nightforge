@@ -83,17 +83,17 @@ if (!table.includes("bonusState={bonusState}")) failures.push("The command bar d
 
 const drawer = await read("src/screens/CommandBar.jsx");
 for (const control of [
-  "Movement",
-  "Action",
+  "Speed",
+  "Attack",
   "Choose attack weapon",
   "Dash",
-  "Swap weapon",
+  "Swap",
   "Swap draft",
   "Confirm weapon swap",
   "End Turn",
   "validateSwapLoadout",
 ]) if (!drawer.includes(control)) failures.push(`Combat Commands drawer is missing ${control}.`);
-if (!/onClick=\{end\} disabled=\{busy\}/.test(drawer)) failures.push("End Turn is not independently reachable after Action is spent.");
+if (!/onClick=\{end\}\s+disabled=\{busy\}/.test(drawer)) failures.push("End Turn is not independently reachable after Action is spent.");
 if (!drawer.includes("togglePanel(\"attack\")")) failures.push("The Attack command is not connected through the command bar.");
 
 const functionalCss = (await read("src/styles/functional-states.css")).replace(/\/\*[\s\S]*?\*\//g, "");
@@ -105,7 +105,8 @@ for (const requiredClass of [
   ".nf-state-table-arriving",
   ".nf-state-command-pip",
   ".nf-state-command-bar",
-  ".nf-state-command-meter",
+  ".nf-state-command-key",
+  ".nf-state-command-speed",
   ".nf-state-command-swap",
 ]) if (!functionalCss.includes(requiredClass)) failures.push(`Missing Phase 8 functional style ${requiredClass}.`);
 for (const match of functionalCss.matchAll(/([^{}]+)\{/g)) {

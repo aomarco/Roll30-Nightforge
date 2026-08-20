@@ -135,7 +135,9 @@ try {
   assert.match(bonusMarkup, /No Battle chests or thrown weapons are present/);
   assert.match(bonusMarkup, /Physical weapons/);
   assert.match(bonusMarkup, /No automatic End Turn/);
-  assert.match(bonusMarkup, /nf-state-command-meter-bonus/);
+  // The Bonus resource chip is gone; the command section itself now carries
+  // the state, ready in jade or blocked in red.
+  assert.match(bonusMarkup, /nf-state-command-key-bonus/);
 
   const unavailableBonusMarkup = renderToStaticMarkup(React.createElement(TableScreen, {
     ...handlers,

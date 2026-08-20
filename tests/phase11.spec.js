@@ -225,12 +225,12 @@ test("managed-screen visual baselines remain deterministic", async ({ page }) =>
   await settleLayout(page);
   await page.keyboard.press("Escape");
 
+  // The sheet is a single page now, so identity, abilities and gear are all
+  // on screen at once instead of behind three chapter toggles.
   await page.getByRole("button", { name: "Heroes", exact: true }).click();
   await settleLayout(page);
-  await page.getByRole("button", { name: "Abilities", exact: true }).click();
-  await settleLayout(page);
-  await page.getByRole("button", { name: "Gear", exact: true }).click();
-  await settleLayout(page);
+  await expect(page.getByRole("heading", { name: "27-point buy" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Gear & treasures" })).toBeVisible();
 
   await page.getByRole("navigation").getByRole("button", { name: "Library", exact: true }).click();
   await page.getByRole("button", { name: `Settings for ${battle.name}` }).click();
@@ -313,8 +313,6 @@ test("every enabled form control has a programmatic accessible name", async ({ p
 
   await page.getByRole("button", { name: "Heroes", exact: true }).click();
   await expectEveryEnabledFormControlNamed(page);
-  await page.getByRole("button", { name: "Gear", exact: true }).click();
-  await expectEveryEnabledFormControlNamed(page);
   await page.getByRole("button", { name: "Add item", exact: true }).click();
   await expectEveryEnabledFormControlNamed(page);
   await page.keyboard.press("Escape");
@@ -326,14 +324,15 @@ test("every enabled form control has a programmatic accessible name", async ({ p
   await page.getByRole("main").getByRole("button", { name: "Enter the table", exact: true }).click();
   await expectEveryEnabledFormControlNamed(page);
   await page.getByRole("button", { name: /Chest with \d+ items, use arrow keys to move/ }).click();
-  await page.getByRole("button", { name: "Open chest inventory", exact: true }).click();
+  // Chest editing moved behind the selected card's overflow menu.
+  await page.getByRole("button", { name: "Chest actions", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Chest contents…", exact: true }).click();
   await expectEveryEnabledFormControlNamed(page);
 });
 
 test("owned equipment records open from the keyboard without nested controls", async ({ page }) => {
   await open(page, { heroes: [heroFixture()] });
   await page.getByRole("button", { name: "Heroes", exact: true }).click();
-  await page.getByRole("button", { name: "Gear", exact: true }).click();
   const openItem = page.getByRole("button", { name: /^Open .+ equipment record$/ }).first();
   await openItem.focus();
   await page.keyboard.press("Enter");
@@ -408,8 +407,10 @@ test("a rolled attack is durably saved before its cinematic can be interrupted",
   await restoredPage.evaluate(() => document.fonts.ready);
   await expect(restoredPage.getByText("Gathering your scenes…")).toHaveCount(0);
   await restoredPage.getByRole("main").getByRole("button", { name: "Enter the table", exact: true }).click();
-  await expect(restoredPage.locator(".nf-state-command-meter-action")).toContainText(/attack/i);
-  await expect(restoredPage.locator(".nf-state-command-meter-action")).toHaveClass(/nf-state-command-meter-spent/);
+  // The spent Action now shows on the Attack command itself, which goes red
+  // and dead rather than being described by a separate chip.
+  await expect(restoredPage.locator(".nf-state-command-key-attack")).toHaveClass(/nf-state-command-key-blocked/);
+  await expect(restoredPage.locator(".nf-state-command-key-attack")).toBeDisabled();
   await restoredPage.close();
 });
 
@@ -618,7 +619,6 @@ test("Table docks and turn controls remain above the map at compact and 150 perc
 test("large inventories remain searchable and responsive with the complete catalog", async ({ page }) => {
   await open(page, { heroes: [heroFixture({ completeInventory: true })] });
   await page.getByRole("button", { name: "Heroes", exact: true }).click();
-  await page.getByRole("button", { name: "Gear", exact: true }).click();
   await expect(page.locator(".loot")).toHaveCount(ITEM_CATALOG.length);
   const search = page.getByPlaceholder("Search your inventory…");
   await search.fill("longsword");

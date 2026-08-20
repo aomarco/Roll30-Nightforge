@@ -570,9 +570,18 @@ a { color: inherit; text-decoration: none; }
   to { opacity: 1; max-height: 42vh; transform: none; }
 }
 
+/* Messages live at the top of the table now, so they drop in from above.
+   Both keyframes keep the -50% that centres the element: a plain
+   `transform: none` here would silently cancel the centring, because an
+   animated value always beats the rule's own declaration. */
 @keyframes nf-refusal-in {
-  from { opacity: 0; transform: translate(-50%, 8px); }
+  from { opacity: 0; transform: translate(-50%, -8px); }
   to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+@keyframes nf-cinematic-in {
+  from { opacity: 0; transform: translate(-50%, calc(-50% + 14px)) scale(.97); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 }
 
 @keyframes nf-die-tumble {

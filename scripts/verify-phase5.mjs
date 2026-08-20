@@ -43,7 +43,10 @@ for (const behavior of [
   if (!gearScreen.includes(behavior)) failures.push(`Gear chapter is missing ${behavior}.`);
 }
 const heroesScreen = await read("src/screens/HeroesScreen.jsx");
-if (!heroesScreen.includes("GearChapter") || !heroesScreen.includes('setChapter("gear")')) failures.push("Heroes screen does not connect the existing Gear chapter.");
+// The sheet is one page now, so gear is rendered directly rather than reached
+// through a chapter toggle.
+if (!heroesScreen.includes("GearChapter") || !heroesScreen.includes("hero={activeHero}")) failures.push("Heroes screen does not connect the existing Gear chapter.");
+if (heroesScreen.includes('setChapter(')) failures.push("Heroes screen still splits the sheet into chapters.");
 
 const functionalCss = (await read("src/styles/functional-states.css")).replace(/\/\*[\s\S]*?\*\//g, "");
 for (const match of functionalCss.matchAll(/([^{}]+)\{/g)) {
