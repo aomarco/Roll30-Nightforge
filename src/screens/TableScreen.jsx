@@ -88,6 +88,8 @@ import {
   sceneViewport,
   sceneWorldSize,
   setArtworkScale,
+  setArtworkScaleAxes,
+  restoreSetupTokens,
   setupCellForPosition,
   setupPositionForCell,
   snapScenePosition,
@@ -439,7 +441,6 @@ export default function TableScreen({
   initialWallDraft = null,
   initialSelectedId = undefined,
   initialSelectedChestId = null,
-  initialAbandonOpen = false,
   initialCommandPanel = null,
   initialMovementPreview = null,
   initialSwapDraft = null,
@@ -473,7 +474,6 @@ export default function TableScreen({
   const [wallDraft, setWallDraft] = useState(initialWallDraft);
   const [wallHover, setWallHover] = useState(null);
   const [rulerDraft, setRulerDraft] = useState(initialRulerDraft);
-  const [abandonOpen, setAbandonOpen] = useState(initialAbandonOpen);
   const [movementPreview, setMovementPreview] = useState(initialMovementPreview);
   const [attackDraft, setAttackDraft] = useState(initialAttackDraft);
   const [cinematic, setCinematic] = useState(initialCinematic);
@@ -500,7 +500,6 @@ export default function TableScreen({
   const selectedChest = visibleChests.find((chest) => chest.id === selectedChestId) || null;
   const lootChest = chests.find((chest) => chest.id === lootChestId) || null;
   const visibleError = localError || persistence.error || artworkError;
-  const abandonDialogRef = useDialogA11y({ open: abandonOpen, onClose: () => setAbandonOpen(false) });
   const walls = scene?.walls || [];
   const wallsVisible = scene?.wallsVisible !== false;
   const canAdjustArtwork = Boolean(artworkUrl || scene?.blankCanvas);
@@ -562,7 +561,7 @@ export default function TableScreen({
 
   useEffect(() => {
     if (!interaction || interaction.kind !== "artwork") setMapView(normalizeMapView(scene?.mapView));
-  }, [scene?.mapView?.scale, scene?.mapView?.x, scene?.mapView?.y]);
+  }, [scene?.mapView?.scale, scene?.mapView?.scaleX, scene?.mapView?.scaleY, scene?.mapView?.x, scene?.mapView?.y]);
 
   useEffect(() => {
     setMovementPreview(null);
@@ -631,10 +630,6 @@ export default function TableScreen({
         setLootChestId(null);
         return;
       }
-      if (abandonOpen) {
-        setAbandonOpen(false);
-        return;
-      }
       if (activeTool?.startsWith("wall-") && wallDraft?.points?.length) {
         finishWall();
         return;
@@ -644,7 +639,7 @@ export default function TableScreen({
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [abandonOpen, activeTool, attackDraft, combatLocked, drawerOpen, lootChestId, wallDraft, walls]);
+  }, [activeTool, attackDraft, combatLocked, drawerOpen, lootChestId, wallDraft, walls]);
 
   /**
    * Heal scenes saved before every path snapped. One pass when a scene opens
@@ -859,8 +854,7 @@ export default function TableScreen({
       setMapView(adjustArtworkBy(interaction.mapView, { x: event.clientX - interaction.client.x, y: event.clientY - interaction.client.y }, camera.zoom));
     }
     if (interaction.kind === "artwork-scale") {
-      const distance = Math.hypot(event.clientX - interaction.centre.x, event.clientY - interaction.centre.y);
-      setMapView(setArtworkScale(mapView, interaction.scale * (distance / interaction.startDistance)));
+      setMapView(artworkScaleFrom(interaction, event));
     }
     if (interaction.kind === "delete") {
       const rectangle = { start: interaction.start, end: point };
@@ -917,8 +911,7 @@ export default function TableScreen({
       savePatch({ mapView: finalView });
     }
     if (interaction.kind === "artwork-scale") {
-      const distance = Math.hypot(event.clientX - interaction.centre.x, event.clientY - interaction.centre.y);
-      const next = setArtworkScale(mapView, interaction.scale * (distance / interaction.startDistance));
+      const next = artworkScaleFrom(interaction, event);
       setMapView(next);
       savePatch({ mapView: next });
     }
@@ -1015,6 +1008,19 @@ export default function TableScreen({
    * tool: drag the middle to move it, pull a corner to resize it. Scaling is
    * uniform about the image's own centre, so the picture never distorts.
    */
+  const artworkScaleFrom = (interaction, event) => {
+    if (event.shiftKey) {
+      // Shift lets the two axes come apart, the way any image editor does it.
+      return setArtworkScaleAxes(
+        mapView,
+        interaction.scaleX * (Math.abs(event.clientX - interaction.centre.x) / interaction.startX),
+        interaction.scaleY * (Math.abs(event.clientY - interaction.centre.y) / interaction.startY),
+      );
+    }
+    const distance = Math.hypot(event.clientX - interaction.centre.x, event.clientY - interaction.centre.y);
+    return setArtworkScale(mapView, interaction.scale * (distance / interaction.startDistance));
+  };
+
   const onArtworkHandleDown = (event) => {
     if (activeTool !== "artwork" || !canAdjustArtwork || event.button !== 0) return;
     event.stopPropagation();
@@ -1027,7 +1033,11 @@ export default function TableScreen({
       pointerId: event.pointerId,
       centre,
       startDistance: Math.max(1, Math.hypot(event.clientX - centre.x, event.clientY - centre.y)),
+      startX: Math.max(1, Math.abs(event.clientX - centre.x)),
+      startY: Math.max(1, Math.abs(event.clientY - centre.y)),
       scale: mapView.scale,
+      scaleX: mapView.scaleX,
+      scaleY: mapView.scaleY,
     });
   };
 
@@ -1217,10 +1227,19 @@ export default function TableScreen({
     return result;
   };
 
+  /**
+   * Leaving a battle throws the fight away entirely. Every token goes back to
+   * full HP, no conditions and the square it stood on in Setup, so nothing a
+   * battle did to a token can leak into the next one.
+   */
   const abandonBattle = () => {
-    const result = savePatch({ encounter: null });
+    const result = savePatch({
+      encounter: null,
+      tokens: restoreSetupTokens(tableTokens, scene?.encounter?.setupTokens),
+    });
     if (result.ok) {
-      setAbandonOpen(false);
+      setMovementPreview(null);
+      setAttackDraft(null);
       setMode("setup");
     }
     return result;
@@ -1427,7 +1446,7 @@ export default function TableScreen({
   };
 
   const toolLabel = activeTool === "artwork"
-    ? "Drag the backdrop to move it · pull a corner to resize"
+    ? null
     : activeTool === "wall-full"
       ? "Click points for a full wall · Escape to finish"
       : activeTool === "wall-half"
@@ -1487,7 +1506,7 @@ export default function TableScreen({
             }}
           >
             {(artworkUrl || scene?.blankCanvas) && (
-              <div ref={artworkRef} className={`nf-state-table-artwork${activeTool === "artwork" ? " nf-state-table-artwork-editing" : ""}`} style={{ transform: `translate(${mapView.x}px, ${mapView.y}px) scale(${mapView.scale})`, backgroundColor: scene?.blankCanvas ? "#fff" : undefined }}>
+              <div ref={artworkRef} className={`nf-state-table-artwork${activeTool === "artwork" ? " nf-state-table-artwork-editing" : ""}`} style={{ transform: `translate(${mapView.x}px, ${mapView.y}px) scale(${mapView.scaleX}, ${mapView.scaleY})`, backgroundColor: scene?.blankCanvas ? "#fff" : undefined }}>
                 {artworkUrl && <img src={artworkUrl} alt="" draggable="false" />}
                 {activeTool === "artwork" && ["nw", "ne", "se", "sw"].map((corner) => (
                   <span
@@ -1598,21 +1617,18 @@ export default function TableScreen({
         <div className="hud-scene"><span className="kicker" title={scene?.name || "Untitled scene"}>{scene?.name || "Untitled scene"}</span><strong>{isPlay ? "Free play" : isCompleteBattle ? scene.encounter.winnerTokenId ? `${tableTokens.find((token) => token.id === scene.encounter.winnerTokenId)?.name || "Winner"} · Battle complete` : "No survivor · Battle complete" : isActiveBattle ? "Battle" : "Setup mode"}</strong></div>
       </div>
 
-      <div className="hud hud-tc glass grained">
+      {/* The one thing to do next sits beside Scene settings, top right. */}
+      <div className="hud hud-tr glass grained">
         <div className="phase">
           {isPlay
             ? <button className="on" disabled aria-current="page"><Sparkles size={14} /> Play</button>
             : isSetup
-              // One clear thing to do next, rather than a pair of mode pills.
               ? <button className="nf-state-table-start" onClick={beginBattle} disabled={busy}><Swords size={16} /> Start Battle</button>
               : isCompleteBattle
-                ? <><button onClick={() => setAbandonOpen(true)}><Hammer size={14} /> Exit Battle</button><button className="on" onClick={restartBattle} disabled={busy}><Swords size={14} /> Restart Battle</button></>
-                // One way out of a live battle, not a pair of mode pills.
-                : <button className="nf-state-table-start" onClick={() => setAbandonOpen(true)}><Hammer size={16} /> Exit Battle</button>}
+                ? <><button onClick={abandonBattle} disabled={busy}><Hammer size={14} /> Exit Battle</button><button className="on" onClick={restartBattle} disabled={busy}><Swords size={14} /> Restart Battle</button></>
+                : <button className="nf-state-table-start" onClick={abandonBattle} disabled={busy}><Hammer size={16} /> Exit Battle</button>}
         </div>
-      </div>
-
-      <div className="hud hud-tr glass grained">
+        <span className="hud-div" />
         {/* Setup keeps its tools on the rail; Play and Battle still reach them
             through this chip, which doubles as the grid readout. */}
         {isPlay && <>
@@ -1797,7 +1813,6 @@ export default function TableScreen({
       {lootChest && isActiveBattle && <ChestLootDrawer chest={lootChest} busy={busy || combatLocked} error={visibleError} take={takeChestItem} close={() => setLootChestId(null)} />}
       {cinematic && <AttackCinematic cinematic={cinematic} skip={skipCinematic} />}
       {retrievalCinematic && <RetrievalCinematic cinematic={retrievalCinematic} />}
-      {abandonOpen && <PortalLayer><div className="veil" onClick={() => setAbandonOpen(false)} /><aside ref={abandonDialogRef} className="drawer nf-state-dialog" role="dialog" aria-modal="true" aria-labelledby="abandon-battle-title" aria-describedby="abandon-battle-description" tabIndex={-1}><div className="drawer-top"><div><span className="kicker">Return to Setup</span><h2 id="abandon-battle-title">Abandon this encounter?</h2></div><button className="glyph" onClick={() => setAbandonOpen(false)} aria-label="Close"><X size={17} /></button></div><div className="drawer-body">{visibleError && <div className="nf-state-inline-error" role="alert"><strong>Battle not abandoned</strong><span>{errorText(visibleError)}</span></div>}<p className="prose" id="abandon-battle-description">Return <strong>{scene?.name}</strong> to editable Battle Setup?</p><p className="note">Current token HP and positions are preserved. Initiative, turn resources, and physical battle items are cleared.</p></div><div className="drawer-foot"><button className="btn btn-line" onClick={() => setAbandonOpen(false)} autoFocus>Continue Battle</button><button className="btn btn-hazard" onClick={abandonBattle} disabled={busy}><Hammer size={15} /> Abandon Battle</button></div></aside></PortalLayer>}
     </div>
   );
 }

@@ -38,11 +38,23 @@ export const normalizeCamera = (camera = {}) => ({
   zoom: clampCameraZoom(camera.zoom ?? 1),
 });
 
-export const normalizeMapView = (mapView = {}) => ({
-  scale: clampMapScale(mapView.scale ?? 1),
-  x: finite(mapView.x),
-  y: finite(mapView.y),
-});
+export const normalizeMapView = (mapView = {}) => {
+  // `scale` stays the single number the readout and the +/- buttons speak in.
+  // The two axes are only ever apart when a corner was pulled with Shift held.
+  const scale = clampMapScale(mapView.scale ?? 1);
+  const result = {
+    scale,
+    x: finite(mapView.x),
+    y: finite(mapView.y),
+  };
+  if (mapView.scaleX !== undefined && mapView.scaleX !== null) {
+    result.scaleX = clampMapScale(mapView.scaleX);
+  }
+  if (mapView.scaleY !== undefined && mapView.scaleY !== null) {
+    result.scaleY = clampMapScale(mapView.scaleY);
+  }
+  return result;
+};
 
 export function zoomCameraAt(camera, nextZoom, anchor = { x: 0, y: 0 }) {
   const current = normalizeCamera(camera);
@@ -102,10 +114,22 @@ export const adjustArtworkBy = (mapView, screenDelta = {}, cameraZoom = 1) => {
   };
 };
 
-export const setArtworkScale = (mapView, scale) => ({
-  ...normalizeMapView(mapView),
-  scale: clampMapScale(scale),
-});
+export const setArtworkScale = (mapView, scale) => {
+  const normalized = normalizeMapView(mapView);
+  delete normalized.scaleX;
+  delete normalized.scaleY;
+  return {
+    ...normalized,
+    scale: clampMapScale(scale),
+  };
+};
+
+/** Shift-dragging a corner stretches the picture, so the axes move apart. */
+export const setArtworkScaleAxes = (mapView, scaleX, scaleY) => {
+  const x = clampMapScale(scaleX);
+  const y = clampMapScale(scaleY);
+  return { ...normalizeMapView(mapView), scale: x, scaleX: x, scaleY: y };
+};
 
 export const clientPointToPercent = (point, transformedRect) => ({
   xPercent: ((finite(point?.x) - finite(transformedRect?.left)) / Math.max(1, finite(transformedRect?.width, 1))) * 100,
@@ -639,7 +663,39 @@ export function normalizeEncounter(encounter, tokens = []) {
     ammunitionRecovered: Boolean(encounter.ammunitionRecovered),
     winnerTokenId: tokenIds.has(encounter.winnerTokenId) ? encounter.winnerTokenId : null,
     log: normalizeEncounterLog(encounter.log),
+    setupTokens: normalizeSetupSnapshot(encounter.setupTokens, tokenIds),
   };
+}
+
+/**
+ * What every token looked like the moment Battle began. Leaving a battle rolls
+ * the table back to this, so a fight never leaves damage behind in Setup.
+ */
+export function normalizeSetupSnapshot(snapshot, tokenIds) {
+  if (!snapshot || typeof snapshot !== "object") return {};
+  const entries = [];
+  for (const [tokenId, entry] of Object.entries(snapshot)) {
+    if (!tokenIds.has(tokenId) || !entry) continue;
+    entries.push([tokenId, {
+      position: normalizePosition(entry.position),
+      hp: Math.max(0, Math.floor(finite(entry.hp))),
+    }]);
+  }
+  return Object.fromEntries(entries);
+}
+
+/** The token list as it should look once the encounter is thrown away. */
+export function restoreSetupTokens(tokens, snapshot) {
+  const restored = normalizeTableTokens(tokens);
+  return restored.map((token) => {
+    const saved = snapshot?.[token.id];
+    return {
+      ...token,
+      hp: token.maxHp,
+      conditions: [],
+      position: saved ? normalizePosition(saved.position) : token.position,
+    };
+  });
 }
 
 export function prepareBattleStart(scene, { viewport, random = Math.random } = {}) {
@@ -714,6 +770,7 @@ export function prepareBattleStart(scene, { viewport, random = Math.random } = {
     ammunitionRecovered: false,
     winnerTokenId: null,
     log: [`Battle began with ${snappedTokens.length} tokens.`],
+    setupTokens: Object.fromEntries(snappedTokens.map((token) => [token.id, { position: token.position, hp: token.hp }])),
   };
   return { ok: true, value: { tokens: snappedTokens, chests: snappedChests, encounter } };
 }

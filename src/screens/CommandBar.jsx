@@ -16,6 +16,8 @@ import { movementMaximum, movementRemaining, validateSwapLoadout } from "../doma
 /** One segment per five feet, which is the unit the whole game counts in. */
 const SPEED_SEGMENT_FEET = 5;
 const MAX_SPEED_SEGMENTS = 20;
+/** Health gets the same row of squares, one per five hit points. */
+const HP_SEGMENT_POINTS = 5;
 
 /**
  * The whole turn lives in one bar: a segmented Speed meter, four command
@@ -90,6 +92,13 @@ export default function CommandBar({
   );
   const filledSegments = maximum > 0
     ? Math.max(0, Math.min(totalSegments, Math.round((remaining / maximum) * totalSegments)))
+    : 0;
+
+  // Health reads the same way movement does: one row of squares, red instead
+  // of jade, sitting to the left of Speed.
+  const hpTotalSegments = Math.min(MAX_SPEED_SEGMENTS, Math.max(1, Math.round(token.maxHp / HP_SEGMENT_POINTS)));
+  const hpFilledSegments = token.maxHp > 0
+    ? Math.max(0, Math.min(hpTotalSegments, Math.round((Math.max(0, token.hp) / token.maxHp) * hpTotalSegments)))
     : 0;
 
   // The Bonus panel still holds chests and weapon retrieval, so it stays
@@ -279,6 +288,23 @@ export default function CommandBar({
 
       <div className="nf-state-command-deck">
         <div className="nf-state-command-console">
+          <div className="nf-state-command-gauges">
+          <div
+            className={`nf-state-command-health glass${token.hp <= 0 ? " nf-state-command-health-empty" : ""}`}
+            title={`${Math.max(0, token.hp)} of ${token.maxHp} hit points remaining.`}
+          >
+            <em>HP</em>
+            <span className="nf-state-command-speed-track" role="img" aria-label={`${Math.max(0, token.hp)} of ${token.maxHp} hit points remaining`}>
+              {Array.from({ length: hpTotalSegments }, (unused, index) => (
+                <i
+                  className={`nf-state-command-speed-cell nf-state-command-health-cell${index < hpFilledSegments ? " nf-state-command-health-cell-on" : ""}`}
+                  key={index}
+                />
+              ))}
+            </span>
+            <strong className="numeral">{Math.max(0, token.hp)}/{token.maxHp}</strong>
+          </div>
+
           <div
             className={`nf-state-command-speed glass${remaining <= 0 ? " nf-state-command-speed-empty" : ""}`}
             title={remaining > 0
@@ -295,6 +321,7 @@ export default function CommandBar({
               ))}
             </span>
             <strong className="numeral">{remaining}/{maximum}</strong>
+          </div>
           </div>
 
           <div className="nf-state-command-actions glass grained">

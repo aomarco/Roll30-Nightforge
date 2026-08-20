@@ -1021,16 +1021,25 @@
   min-width: 0;
 }
 
-/* ----- segmented Speed meter, tucked into the top edge of the deck ----- */
-.nf-state-command-speed {
+/* ----- HP and Speed meters, tucked into the top edge of the deck ----- */
+.nf-state-command-gauges {
   position: absolute;
   z-index: 1;
   bottom: calc(100% - 14px);
   left: 26px;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: calc(100% - 52px);
+  min-width: 0;
+}
+
+.nf-state-command-speed,
+.nf-state-command-health {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  max-width: calc(100% - 52px);
+  min-width: 0;
   padding: 7px 16px 17px;
   border-radius: var(--r-md) var(--r-md) 0 0;
   border: 1px solid var(--jade-edge);
@@ -1039,7 +1048,26 @@
   cursor: help;
 }
 
-.nf-state-command-speed em {
+.nf-state-command-health { border-color: rgba(242,97,122,.42); }
+.nf-state-command-health strong { font-size: 12px; color: var(--danger); }
+
+/* Doubled class so these win over the jade .nf-state-command-speed-cell rules
+   below, which the health squares reuse for their size. */
+.nf-state-command-speed-cell.nf-state-command-health-cell {
+  background: rgba(242,97,122,.10);
+  border-color: rgba(242,97,122,.42);
+}
+
+.nf-state-command-health-cell.nf-state-command-health-cell-on {
+  background: linear-gradient(180deg, #ff8ea1, var(--danger));
+  border-color: #ff8ea1;
+  box-shadow: 0 0 8px rgba(242,97,122,.5);
+}
+
+.nf-state-command-health-empty strong { color: var(--ink-3); }
+
+.nf-state-command-speed em,
+.nf-state-command-health em {
   font-style: normal;
   font-weight: 600;
   letter-spacing: .04em;
@@ -1166,11 +1194,12 @@
   margin-left: -28px;
   border-radius: var(--r-full);
   border: 2px solid var(--jade);
+  background: linear-gradient(180deg, #17282d, #0a1114);
   color: var(--jade);
   font-size: 12px;
   font-weight: 600;
   box-shadow: 0 0 26px var(--jade-glow), inset 0 0 22px rgba(47,211,180,.14);
-  transition: color var(--swift), border-color var(--swift), box-shadow var(--swift);
+  transition: color var(--swift), border-color var(--swift), box-shadow var(--swift), background var(--swift);
 }
 
 .nf-state-command-end em { font-style: normal; }
@@ -1179,6 +1208,7 @@
 .nf-state-command-end:hover:not(:disabled) {
   color: var(--jade-hi);
   border-color: var(--jade-hi);
+  background: linear-gradient(180deg, #1f363c, #0a1114);
   box-shadow: 0 0 40px var(--jade-glow), inset 0 0 30px rgba(47,211,180,.22);
 }
 
