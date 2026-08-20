@@ -144,7 +144,7 @@ export default function CommandBar({
     },
     {
       id: "bonus",
-      icon: Sparkle,
+      icon: Sparkles,
       label: "Bonus action",
       available: bonusHasContent,
       reason: bonusHasContent

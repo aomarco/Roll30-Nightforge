@@ -1172,13 +1172,13 @@
   margin: auto;
 }
 
-/* Optical centering compensations */
+/* Optical centering compensations for outer pill corner radii */
 .nf-state-command-key-attack svg {
-  transform: translate(0.5px, -1px);
+  transform: translateX(5px);
 }
 
-.nf-state-command-key-dash svg {
-  transform: translateX(0.5px);
+.nf-state-command-key-bonus svg {
+  transform: translateX(-5px);
 }
 
 .nf-state-command-key-ready { color: var(--jade); }
