@@ -1026,21 +1026,22 @@
   position: absolute;
   z-index: 1;
   bottom: calc(100% - 14px);
-  left: 26px;
+  left: 20px;
   display: flex;
   align-items: flex-end;
   gap: 8px;
-  max-width: calc(100% - 52px);
-  min-width: 0;
+  max-width: calc(100% - 40px);
+  white-space: nowrap;
 }
 
 .nf-state-command-speed,
 .nf-state-command-health {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  min-width: 0;
-  padding: 7px 16px 17px;
+  gap: 8px;
+  flex: none;
+  white-space: nowrap;
+  padding: 6px 14px 18px;
   border-radius: var(--r-md) var(--r-md) 0 0;
   border: 1px solid var(--jade-edge);
   border-bottom: none;
@@ -1049,15 +1050,22 @@
 }
 
 .nf-state-command-health { border-color: rgba(242,97,122,.42); }
-.nf-state-command-health strong { font-size: 12px; color: var(--danger); }
+.nf-state-command-health strong {
+  font-size: 12px;
+  color: var(--danger);
+  white-space: nowrap;
+  flex: none;
+  letter-spacing: .02em;
+}
 
 /* ----- Continuous Pixel HP Bar ----- */
 .nf-state-command-health-track {
   position: relative;
   display: block;
-  width: 90px;
-  height: 8px;
-  border-radius: var(--r-full);
+  width: 80px;
+  height: 13px;
+  flex: none;
+  border-radius: 3px;
   background: rgba(242,97,122,.14);
   border: 1px solid rgba(242,97,122,.38);
   overflow: hidden;
@@ -1082,20 +1090,29 @@
   font-weight: 600;
   letter-spacing: .04em;
   color: var(--ink-2);
+  flex: none;
+  white-space: nowrap;
 }
 
-.nf-state-command-speed strong { font-size: 12px; color: var(--jade); }
+.nf-state-command-speed strong {
+  font-size: 12px;
+  color: var(--jade);
+  white-space: nowrap;
+  flex: none;
+  letter-spacing: .02em;
+}
 
 .nf-state-command-speed-track {
   display: inline-flex;
   gap: 3px;
+  flex: none;
   min-width: 0;
   overflow: hidden;
 }
 
 .nf-state-command-speed-cell {
-  width: 12px;
-  height: 15px;
+  width: 11px;
+  height: 13px;
   flex: none;
   border-radius: 2px;
   background: rgba(47,211,180,.10);
@@ -1149,7 +1166,20 @@
 }
 
 .nf-state-command-key em { font-style: normal; white-space: nowrap; }
-.nf-state-command-key svg { flex: none; margin: auto; }
+.nf-state-command-key svg {
+  flex: none;
+  display: block;
+  margin: auto;
+}
+
+/* Optical centering compensations */
+.nf-state-command-key-attack svg {
+  transform: translate(0.5px, -1px);
+}
+
+.nf-state-command-key-dash svg {
+  transform: translateX(0.5px);
+}
 
 .nf-state-command-key-ready { color: var(--jade); }
 .nf-state-command-key-ready svg { filter: drop-shadow(0 0 6px var(--jade-glow)); }

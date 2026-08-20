@@ -5,6 +5,7 @@ import {
   Hourglass,
   PackageOpen,
   RefreshCw,
+  Sparkle,
   Sparkles,
   Sword,
   X,
@@ -143,7 +144,7 @@ export default function CommandBar({
     },
     {
       id: "bonus",
-      icon: Sparkles,
+      icon: Sparkle,
       label: "Bonus action",
       available: bonusHasContent,
       reason: bonusHasContent
