@@ -129,6 +129,64 @@ export function nearbyThrownLanding(scene, targetPosition, viewport, tokens = sc
   return landing ? setupPositionForCell(landing, viewport) : null;
 }
 
+/**
+ * A thrown authored attack leaves the creature the same way a thrown catalog
+ * weapon does, but there is no item to remove from an inventory. The attack is
+ * marked thrown so it disappears from the command drawer, and a battle item
+ * carrying its name and id is dropped on the board so it can be recovered.
+ */
+function applyAuthoredThrowEffects({
+  scene, normalizedTokens, encounter, attacker, target,
+  attack, range, hit, viewport, battleItemId,
+} = {}) {
+  if (range.usage !== "thrown") {
+    return success({ tokens: normalizedTokens, encounter }, { supply: { kind: "none" } });
+  }
+  if (typeof battleItemId !== "string" || !battleItemId.trim()) return failure(
+    "BATTLE_ITEM_ID_REQUIRED",
+    "Nightforge could not create a stable identity for the thrown weapon.",
+    "Retry the attack.",
+    true,
+  );
+  const existingBattleItems = normalizeBattleItems(encounter?.battleItems, normalizedTokens);
+  if (existingBattleItems.some((item) => item.id === battleItemId.trim())) return failure(
+    "BATTLE_ITEM_ID_CONFLICT",
+    "That thrown-weapon identity is already present in this encounter.",
+    "Retry the attack with a fresh stable identity.",
+    true,
+  );
+  const embedded = hit;
+  const position = embedded
+    ? null
+    : nearbyThrownLanding(scene, target.position, viewport, normalizedTokens, encounter?.battleItems);
+  if (!embedded && !position) return failure(
+    "THROWN_LANDING_UNAVAILABLE",
+    `${attack.name} has no legal nearby cell where it can land.`,
+    "Clear a nearby cell or choose another attack.",
+    true,
+  );
+  const attacks = attacker.attacks.map((entry) =>
+    entry.id === attack.id ? { ...entry, thrown: true } : entry,
+  );
+  const battleItem = {
+    id: battleItemId.trim(),
+    itemId: null,
+    attackId: attack.id,
+    name: attack.name,
+    state: embedded ? "embedded" : "ground",
+    position,
+    carrierTokenId: embedded ? target.id : null,
+    sourceTokenId: attacker.id,
+  };
+  return success({
+    tokens: updateToken(normalizedTokens, attacker.id, { attacks }),
+    encounter: {
+      ...encounter,
+      battleItems: [...existingBattleItems, battleItem],
+    },
+  }, { supply: { kind: "authored-thrown", attackId: attack.id, embedded, battleItemId: battleItem.id }, battleItem });
+}
+
 export function applyAttackSupplyEffects({
   scene,
   tokens,
@@ -137,6 +195,7 @@ export function applyAttackSupplyEffects({
   targetId,
   weapon,
   hand,
+  authoredAttack = null,
   range,
   hit,
   viewport,
@@ -150,6 +209,12 @@ export function applyAttackSupplyEffects({
     "The attack participants are no longer present.",
     "Return to Battle and choose another target.",
   );
+  if (authoredAttack) {
+    return applyAuthoredThrowEffects({
+      scene, normalizedTokens, encounter, attacker, target,
+      attack: authoredAttack, range, hit, viewport, battleItemId,
+    });
+  }
   const available = attackSupplyAvailability(attacker, weapon, range);
   if (!available.ok) return available;
   if (available.value.kind === "none") return success({ tokens: normalizedTokens, encounter }, { supply: available.value });
@@ -339,6 +404,7 @@ export function openAdjacentChest(scene, chestId, viewport) {
           bonusActionSpent: true,
           bonusActionType: "open chest",
           openedChestId: chest.id,
+          openedLootTokenId: null,
         },
       },
       log: appendEncounterLog(scene.encounter.log, `${token.name} opens a chest.`),
@@ -378,18 +444,126 @@ export function takeOneFromOpenChest(scene, chestId, itemId, viewport) {
   }, { chestId, item, quantityRemaining: inventoryQuantity(chestInventory, itemId) });
 }
 
+/**
+ * Looting a defeated token works exactly like looting a chest: stand next to
+ * it, spend the Bonus Action to open it, then take one unit at a time. A body
+ * that has been emptied stays empty.
+ */
+export function lootTokenAvailability(scene, lootTokenId, viewport) {
+  const context = activeBonusContext(scene);
+  if (!context.ok) return context;
+  const quarry = context.value.tokens.find((entry) => entry.id === lootTokenId);
+  if (!quarry) return failure("LOOT_TOKEN_NOT_FOUND", "That token is no longer on this Table.", "Choose another token.");
+  if (quarry.id === context.value.token.id) return failure(
+    "LOOT_TOKEN_IS_SELF",
+    `${context.value.token.name} cannot loot itself.`,
+    "Choose a defeated token nearby.",
+  );
+  if (quarry.hp > 0) return failure(
+    "LOOT_TOKEN_ALIVE",
+    `${quarry.name} is still standing.`,
+    "Only a defeated token can be searched.",
+    true,
+  );
+  const actorCell = setupCellForPosition(context.value.token.position, viewport);
+  const quarryCell = setupCellForPosition(quarry.position, viewport);
+  if (!sameOrAdjacent(actorCell, quarryCell)) return failure(
+    "LOOT_TOKEN_NOT_ADJACENT",
+    `${context.value.token.name} is not adjacent to ${quarry.name}.`,
+    "Move onto an adjacent square before searching it.",
+    true,
+  );
+  const alreadyOpen = context.value.resources.openedLootTokenId === quarry.id &&
+    context.value.resources.bonusActionSpent && context.value.resources.bonusActionType === "search body";
+  if (!alreadyOpen && context.value.resources.bonusActionSpent) return failure(
+    "BONUS_ACTION_SPENT",
+    `The Bonus Action was already spent on ${context.value.resources.bonusActionType || "another command"}.`,
+    "End the turn to refresh it.",
+  );
+  return success({ ...context.value, quarry, alreadyOpen });
+}
+
+export const lootCommandOptions = (scene, viewport) => normalizeTableTokens(scene?.tokens)
+  .filter((token) => token.hp <= 0 && token.inventory.length)
+  .map((token) => ({
+    token,
+    availability: lootTokenAvailability(scene, token.id, viewport),
+  }));
+
+export function searchDefeatedToken(scene, lootTokenId, viewport) {
+  const available = lootTokenAvailability(scene, lootTokenId, viewport);
+  if (!available.ok) return available;
+  if (available.value.alreadyOpen) return success({ encounter: scene.encounter }, { quarry: available.value.quarry, resumed: true });
+  const { token, resources, quarry } = available.value;
+  return success({
+    encounter: {
+      ...scene.encounter,
+      resources: {
+        [token.id]: {
+          ...resources,
+          bonusActionSpent: true,
+          bonusActionType: "search body",
+          openedLootTokenId: quarry.id,
+          openedChestId: null,
+        },
+      },
+      log: appendEncounterLog(scene.encounter.log, `${token.name} searches ${quarry.name}.`),
+    },
+  }, { quarry, resumed: false });
+}
+
+export function takeOneFromDefeatedToken(scene, lootTokenId, itemId, viewport) {
+  const available = lootTokenAvailability(scene, lootTokenId, viewport);
+  if (!available.ok) return available;
+  const { token, resources, quarry } = available.value;
+  if (!available.value.alreadyOpen) return failure(
+    "LOOT_TOKEN_NOT_OPEN",
+    "This body was not searched by the active token this turn.",
+    "Search an adjacent defeated token with the Bonus Action first.",
+  );
+  const item = ITEM_BY_ID[itemId];
+  if (!item || inventoryQuantity(quarry.inventory, itemId) < 1) return failure(
+    "LOOT_ITEM_DEPLETED",
+    `That item is no longer on ${quarry.name}.`,
+    "Choose another item or close the drawer.",
+    true,
+  );
+  const quarryInventory = inventoryWithDelta(quarry.inventory, itemId, -1);
+  const takerInventory = inventoryWithDelta(token.inventory, itemId, 1);
+  const tokens = updateToken(
+    updateToken(available.value.tokens, quarry.id, { inventory: quarryInventory }),
+    token.id,
+    { inventory: takerInventory },
+  );
+  return success({
+    tokens,
+    encounter: {
+      ...scene.encounter,
+      resources: { [token.id]: resources },
+      log: appendEncounterLog(scene.encounter.log, `${token.name} takes 1 ${item.name} from ${quarry.name}.`),
+    },
+  }, { lootTokenId, item, quantityRemaining: inventoryQuantity(quarryInventory, itemId) });
+}
+
 export function retrievalAvailability(scene, battleItemId, viewport) {
   const context = activeBonusContext(scene);
   if (!context.ok) return context;
   const battleItem = normalizeBattleItems(scene?.encounter?.battleItems, context.value.tokens)
     .find((entry) => entry.id === battleItemId);
   if (!battleItem) return failure("BATTLE_ITEM_NOT_FOUND", "That physical weapon is no longer present.", "Choose another weapon marker.");
+  // A thrown authored attack belongs to the creature that threw it; nobody else
+  // has anything to gain by picking it up.
+  if (battleItem.attackId && battleItem.sourceTokenId !== context.value.token.id) return failure(
+    "AUTHORED_ITEM_NOT_OWNER",
+    `${battleItem.name} can only be recovered by whoever threw it.`,
+    "Wait for its owner's turn.",
+  );
   const actorCell = setupCellForPosition(context.value.token.position, viewport);
   if (battleItem.state === "ground") {
     const itemCell = setupCellForPosition(battleItem.position, viewport);
     if (!sameOrAdjacent(actorCell, itemCell)) return failure(
       "GROUND_ITEM_NOT_ADJACENT",
-      `${context.value.token.name} is not close enough to retrieve ${ITEM_BY_ID[battleItem.itemId]?.name || "that weapon"}.`,
+      `${context.value.token.name} is not close enough to retrieve ${battleItem.name || "that weapon"}.`,
       "Move onto the same or an adjacent square.",
       true,
     );
@@ -457,7 +631,8 @@ export function retrieveBattleItem(scene, battleItemId, viewport, { random = Mat
   const available = retrievalAvailability(scene, battleItemId, viewport);
   if (!available.ok) return available;
   const { token, resources, battleItem, retrievalKind } = available.value;
-  const weapon = ITEM_BY_ID[battleItem.itemId];
+  const weapon = battleItem.attackId ? null : ITEM_BY_ID[battleItem.itemId];
+  const weaponName = weapon?.name || battleItem.name;
   const roll = available.value.requiresRoll ? Math.floor(randomUnit(random) * 20) + 1 : null;
   const strengthModifier = abilityModifier(token.strength);
   const dexterityModifier = abilityModifier(token.dexterity);
@@ -469,12 +644,23 @@ export function retrieveBattleItem(scene, battleItemId, viewport, { random = Mat
         bonusActionSpent: true,
         bonusActionType: "retrieve weapon",
         openedChestId: null,
+        openedLootTokenId: null,
       }
     : resources;
   let tokens = available.value.tokens;
   let battleItems = normalizeBattleItems(scene.encounter.battleItems, tokens);
   let placement = null;
-  if (succeeded) {
+  if (succeeded && battleItem.attackId) {
+    // An authored attack is a capability, not an object: recovering it puts the
+    // attack back on its owner's list rather than an item into an inventory.
+    const owner = tokens.find((entry) => entry.id === battleItem.sourceTokenId);
+    const attacks = (owner?.attacks || []).map((entry) =>
+      entry.id === battleItem.attackId ? { ...entry, thrown: false } : entry,
+    );
+    tokens = updateToken(tokens, battleItem.sourceTokenId, { attacks });
+    placement = "attack";
+    battleItems = battleItems.filter((entry) => entry.id !== battleItem.id);
+  } else if (succeeded) {
     const recovered = giveRecoveredWeapon(tokens, token.id, battleItem.itemId);
     tokens = recovered.tokens;
     placement = recovered.placement;
@@ -485,14 +671,14 @@ export function retrieveBattleItem(scene, battleItemId, viewport, { random = Mat
     ...scene.encounter,
     resources: { [token.id]: nextResources },
     battleItems,
-    log: appendEncounterLog(scene.encounter.log, `${token.name} ${verdict} ${weapon.name}${total === null ? "" : ` (${total} vs DC 15)`}.`),
+    log: appendEncounterLog(scene.encounter.log, `${token.name} ${verdict} ${weaponName}${total === null ? "" : ` (${total} vs DC 15)`}.`),
   };
   const outcome = {
     actorId: token.id,
     actorName: token.name,
     battleItemId: battleItem.id,
-    weaponId: weapon.id,
-    weaponName: weapon.name,
+    weaponId: weapon?.id || null,
+    weaponName,
     retrievalKind,
     cost: available.value.cost,
     requiresRoll: available.value.requiresRoll,
@@ -517,6 +703,8 @@ export function restartCompletedBattle(scene, { random = Math.random } = {}) {
     ...token,
     hp: token.maxHp,
     conditions: [],
+    // Weapons thrown during the last run are back in hand.
+    attacks: token.attacks.map((attack) => ({ ...attack, thrown: false })),
   }));
   if (tokens.length < 2) return failure(
     "BATTLE_NEEDS_TOKENS",

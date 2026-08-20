@@ -200,6 +200,123 @@ const uniqueNormalizedRecords = (records, normalize) => {
   return normalized;
 };
 
+export const TOKEN_SIZES = Object.freeze(["tiny", "small", "medium", "large", "huge", "gargantuan"]);
+
+export const MAX_ATTACKS_PER_ACTION = 10;
+
+const attackSlug = (value, fallback) => {
+  const slug = String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return slug || fallback;
+};
+
+const proseSection = (value) =>
+  Array.isArray(value)
+    ? value.slice(0, 40).flatMap((entry) => {
+        const name = typeof entry?.name === "string" ? entry.name.trim().slice(0, 80) : "";
+        if (!name) return [];
+        return [{ name, desc: typeof entry?.desc === "string" ? entry.desc.slice(0, 1200) : "" }];
+      })
+    : [];
+
+const proseLine = (value) => (typeof value === "string" ? value.trim().slice(0, 300) : "");
+
+/**
+ * Everything on a stat block the engine cannot yet run: saving-throw actions,
+ * legendary actions, reactions, resistances and senses. Kept as reference text
+ * so the table can read it, deliberately not wired to any rule.
+ */
+export function normalizeStatBlockNotes(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return null;
+  const notes = {
+    multiattack: proseLine(input.multiattack),
+    resistances: proseLine(input.resistances),
+    immunities: proseLine(input.immunities),
+    vulnerabilities: proseLine(input.vulnerabilities),
+    conditionImmunities: proseLine(input.conditionImmunities),
+    senses: proseLine(input.senses),
+    languages: proseLine(input.languages),
+    traits: proseSection(input.traits),
+    otherActions: proseSection(input.otherActions),
+    legendaryActions: proseSection(input.legendaryActions),
+    reactions: proseSection(input.reactions),
+  };
+  const populated = Object.values(notes).some((value) => (Array.isArray(value) ? value.length : Boolean(value)));
+  return populated ? notes : null;
+}
+
+/**
+ * An authored attack is a capability, not an object. Heroes derive their attack
+ * options from the weapons in their hands; every other token carries the
+ * finished numbers the way a stat block writes them, with the ability modifier
+ * already folded into the damage.
+ */
+export function normalizeTokenAttack(input = {}, ordinal = 0) {
+  const name = typeof input.name === "string" && input.name.trim()
+    ? input.name.trim().slice(0, 60)
+    : `Attack ${ordinal + 1}`;
+  const rangeKind = input.rangeKind === "ranged" ? "ranged" : "melee";
+  const throwable = Boolean(input.throwable);
+  const normalFeet = Math.max(0, Math.floor(finite(input.normalFeet)));
+  const longFeet = Math.max(normalFeet, Math.floor(finite(input.longFeet)));
+  // A melee attack keeps distance bands only when it can be thrown; that is
+  // what turns "swing it" into "swing it or throw it".
+  const banded = rangeKind === "ranged" || throwable;
+  return {
+    id: typeof input.id === "string" && input.id.trim()
+      ? input.id.trim()
+      : attackSlug(name, `attack-${ordinal + 1}`),
+    name,
+    toHit: Math.max(-20, Math.min(20, Math.floor(finite(input.toHit)))),
+    damageDice: typeof input.damageDice === "string" && input.damageDice.trim()
+      ? input.damageDice.trim().slice(0, 20)
+      : "1d4",
+    damageType: typeof input.damageType === "string" && input.damageType.trim()
+      ? input.damageType.trim().slice(0, 30)
+      : null,
+    rangeKind,
+    reachFeet: rangeKind === "melee"
+      ? Math.max(5, Math.floor(finite(input.reachFeet, 5)))
+      : 5,
+    normalFeet: banded ? Math.max(5, normalFeet || 20) : 0,
+    longFeet: banded ? Math.max(5, longFeet || normalFeet || 20) : 0,
+    throwable,
+    // True while the weapon is lying on the board or lodged in a target. The
+    // attack stays on the list so it can be restored when it is recovered.
+    thrown: throwable && Boolean(input.thrown),
+    riders: Array.isArray(input.riders)
+      ? input.riders.slice(0, 4).flatMap((rider) => {
+          const dice = typeof rider?.damageDice === "string" ? rider.damageDice.trim().slice(0, 20) : "";
+          if (!dice) return [];
+          return [{
+            damageDice: dice,
+            damageType: typeof rider?.damageType === "string" && rider.damageType.trim()
+              ? rider.damageType.trim().slice(0, 30)
+              : null,
+          }];
+        })
+      : [],
+    note: typeof input.note === "string" ? input.note.slice(0, 600) : "",
+  };
+}
+
+export function normalizeTokenAttacks(attacks) {
+  if (!Array.isArray(attacks)) return [];
+  const seen = new Set();
+  const normalized = [];
+  for (const candidate of attacks.slice(0, 24)) {
+    const attack = normalizeTokenAttack(candidate, normalized.length);
+    let uniqueId = attack.id;
+    let suffix = 2;
+    while (seen.has(uniqueId)) {
+      uniqueId = `${attack.id}-${suffix}`;
+      suffix += 1;
+    }
+    seen.add(uniqueId);
+    normalized.push({ ...attack, id: uniqueId });
+  }
+  return normalized;
+}
+
 export function normalizeTableToken(input = {}, { id, ordinal = 0 } = {}) {
   const tokenId = typeof input.id === "string" && input.id.trim()
     ? input.id.trim()
@@ -230,7 +347,15 @@ export function normalizeTableToken(input = {}, { id, ordinal = 0 } = {}) {
       : [],
     level: Math.max(1, Math.min(20, Math.floor(finite(input.level, 1)))),
     initiativeBonus: Math.floor(finite(input.initiativeBonus)),
-    size: ["small", "medium", "large"].includes(input.size) ? input.size : "medium",
+    size: TOKEN_SIZES.includes(input.size) ? input.size : "medium",
+    attacks: normalizeTokenAttacks(input.attacks),
+    attacksPerAction: Math.max(1, Math.min(MAX_ATTACKS_PER_ACTION, Math.floor(finite(input.attacksPerAction, 1)))),
+    monsterId: typeof input.monsterId === "string" && input.monsterId.trim() ? input.monsterId.trim() : null,
+    creatureType: typeof input.creatureType === "string" && input.creatureType.trim() ? input.creatureType.trim() : null,
+    challengeRating: input.challengeRating === null || input.challengeRating === undefined || !Number.isFinite(Number(input.challengeRating))
+      ? null
+      : Number(input.challengeRating),
+    statBlockNotes: normalizeStatBlockNotes(input.statBlockNotes),
     inventory: inventoryResult.inventory,
     loadout: input.loadout || { mainHand: null, offHand: null },
     armorId: typeof input.armorId === "string" ? input.armorId : null,
@@ -278,6 +403,59 @@ export function createManualToken({ id, ordinal = 0, position, name, ...input } 
     id,
     name: name || `Token ${ordinal + 1}`,
     position,
+  }, { id, ordinal });
+}
+
+/**
+ * A monster is a manual token that arrives filled in. Everything it carries is
+ * an ordinary token field, so it stays editable afterwards and the board, the
+ * initiative order and the turn tracker need to know nothing about monsters.
+ */
+export function createMonsterToken(monster, { id, ordinal = 0, position, name } = {}) {
+  if (!monster?.id) throw new TypeError("A monster token requires a generated monster record.");
+  const speedNotes = Object.entries(monster.speed || {})
+    .filter(([, value]) => Number(value) > 0)
+    .map(([mode, value]) => `${mode} ${value} ft.`)
+    .join(", ");
+  const senseNotes = Object.entries(monster.senses || {})
+    .map(([sense, value]) => `${sense.replace(/_/g, " ")} ${value}`)
+    .join(", ");
+  return normalizeTableToken({
+    id,
+    name: name || monster.name,
+    position,
+    monsterId: monster.id,
+    creatureType: monster.subtype ? `${monster.creatureType} (${monster.subtype})` : monster.creatureType,
+    challengeRating: monster.challengeRating,
+    hp: monster.hp,
+    maxHp: monster.hp,
+    ac: monster.ac,
+    baseSpeed: monster.baseSpeed,
+    strength: monster.strength,
+    dexterity: monster.dexterity,
+    constitution: monster.constitution,
+    intelligence: monster.intelligence,
+    wisdom: monster.wisdom,
+    charisma: monster.charisma,
+    saveProficiencies: monster.saveProficiencies,
+    size: monster.size,
+    initiativeBonus: abilityModifier(monster.dexterity),
+    attacks: monster.attacks,
+    attacksPerAction: monster.attacksPerAction,
+    statBlockNotes: {
+      multiattack: monster.multiattackNote,
+      resistances: (monster.damageResistances || []).join(", "),
+      immunities: (monster.damageImmunities || []).join(", "),
+      vulnerabilities: (monster.damageVulnerabilities || []).join(", "),
+      conditionImmunities: (monster.conditionImmunities || []).join(", "),
+      senses: [senseNotes, speedNotes && `speed ${speedNotes}`].filter(Boolean).join(" · "),
+      languages: monster.languages,
+      traits: monster.traits,
+      otherActions: monster.otherActions,
+      legendaryActions: monster.legendaryActions,
+      reactions: monster.reactions,
+    },
+    conditions: [],
   }, { id, ordinal });
 }
 
@@ -544,6 +722,11 @@ export const createTurnResources = (token) => ({
   offHandWeaponId: null,
   offHandAttackHand: null,
   openedChestId: null,
+  openedLootTokenId: null,
+  // A creature with Multiattack spends one Action across several attack rolls,
+  // so the Action stays open until the allowance is used up.
+  attacksMade: 0,
+  attackAllowance: Math.max(1, Math.min(MAX_ATTACKS_PER_ACTION, Math.floor(finite(token?.attacksPerAction, 1)))),
 });
 
 export function normalizeTurnResources(resources, token) {
@@ -569,14 +752,30 @@ export function normalizeTurnResources(resources, token) {
     openedChestId: typeof resources?.openedChestId === "string" && resources.openedChestId.trim()
       ? resources.openedChestId.trim()
       : null,
+    openedLootTokenId: typeof resources?.openedLootTokenId === "string" && resources.openedLootTokenId.trim()
+      ? resources.openedLootTokenId.trim()
+      : null,
+    attackAllowance: defaults.attackAllowance,
+    attacksMade: Math.max(0, Math.min(defaults.attackAllowance, Math.floor(finite(resources?.attacksMade)))),
   };
 }
 
 export function normalizeBattleItem(input, tokens = []) {
   const id = typeof input?.id === "string" && input.id.trim() ? input.id.trim() : null;
-  const item = ITEM_BY_ID[input?.itemId];
-  if (!id || item?.kind !== "weapon") return null;
+  if (!id) return null;
   const tokenIds = new Set(normalizeTableTokens(tokens).map((token) => token.id));
+  const sourceTokenId = tokenIds.has(input.sourceTokenId) ? input.sourceTokenId : null;
+  // A thrown authored attack has no catalog record behind it, so it carries its
+  // own name and points back at the attack it should restore on recovery.
+  const attackId = typeof input?.attackId === "string" && input.attackId.trim() ? input.attackId.trim() : null;
+  const authored = Boolean(attackId);
+  const item = authored ? null : ITEM_BY_ID[input?.itemId];
+  if (authored) {
+    // Without a living owner there is nothing to give the attack back to.
+    if (!sourceTokenId) return null;
+  } else if (item?.kind !== "weapon") {
+    return null;
+  }
   const state = input.state === "embedded" ? "embedded" : "ground";
   const carrierTokenId = state === "embedded" && tokenIds.has(input.carrierTokenId)
     ? input.carrierTokenId
@@ -584,11 +783,15 @@ export function normalizeBattleItem(input, tokens = []) {
   if (state === "embedded" && !carrierTokenId) return null;
   return {
     id,
-    itemId: item.id,
+    itemId: authored ? null : item.id,
+    attackId,
+    name: authored
+      ? (typeof input.name === "string" && input.name.trim() ? input.name.trim().slice(0, 60) : "Thrown weapon")
+      : item.name,
     state,
     position: state === "ground" ? normalizePosition(input.position) : null,
     carrierTokenId,
-    sourceTokenId: tokenIds.has(input.sourceTokenId) ? input.sourceTokenId : null,
+    sourceTokenId,
   };
 }
 
@@ -745,7 +948,13 @@ export function prepareBattleStart(scene, { viewport, random = Math.random } = {
       recovery: "Remove an entity or increase the available Table area before starting Battle.",
       retryable: true,
     };
-    snappedTokens.push({ ...token, position, conditions: [] });
+    snappedTokens.push({
+      ...token,
+      position,
+      conditions: [],
+      // Every creature starts the encounter holding its own weapons.
+      attacks: token.attacks.map((attack) => ({ ...attack, thrown: false })),
+    });
   }
 
   const initiatives = Object.fromEntries(snappedTokens.map((token) => {

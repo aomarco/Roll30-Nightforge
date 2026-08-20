@@ -10,14 +10,19 @@ function PortalLayer({ children }) {
   return typeof document === "undefined" ? children : createPortal(children, document.body);
 }
 
-export default function ChestLootDrawer({ chest, busy = false, error = null, take, close }) {
+/**
+ * One drawer for both kinds of container. A defeated creature is looted exactly
+ * like a chest — stand next to it, spend the Bonus Action, take one unit at a
+ * time — so the only difference is what the copy calls it.
+ */
+export default function ChestLootDrawer({ chest, body = false, busy = false, error = null, take, close }) {
   const total = chest?.inventory?.reduce((sum, entry) => sum + entry.quantity, 0) || 0;
   const dialogRef = useDialogA11y({ onClose: close });
   return (
     <PortalLayer>
       <div className="veil" onClick={close} />
       <aside ref={dialogRef} className="drawer nf-state-dialog nf-state-loot-drawer" role="dialog" aria-modal="true" aria-labelledby="chest-loot-title" tabIndex={-1}>
-        <div className="drawer-top"><div><span className="kicker kicker-brass">Opened chest</span><h2 id="chest-loot-title">Take one item</h2></div><button className="glyph" onClick={close} aria-label="Close"><X size={17} /></button></div>
+        <div className="drawer-top"><div><span className="kicker kicker-brass">{body ? `Searching ${chest.name}` : "Opened chest"}</span><h2 id="chest-loot-title">Take one item</h2></div><button className="glyph" onClick={close} aria-label="Close"><X size={17} /></button></div>
         <div className="drawer-body">
           {error && <div className="nf-state-inline-error" role="alert"><strong>Loot was not saved</strong><span>{errorText(error)}</span></div>}
           <section className="unit">
@@ -31,9 +36,9 @@ export default function ChestLootDrawer({ chest, busy = false, error = null, tak
                   <em className="numeral">×{entry.quantity}</em>
                 </button>;
               })}
-              {!total && <div className="void-state nf-state-loot-empty"><span className="void-orb"><PackageOpen size={24} /></span><h3>Chest depleted</h3><p>This empty state is persisted and restart will not refill it.</p></div>}
+              {!total && <div className="void-state nf-state-loot-empty"><span className="void-orb"><PackageOpen size={24} /></span><h3>{body ? "Nothing left to take" : "Chest depleted"}</h3><p>This empty state is persisted and restart will not refill it.</p></div>}
             </div>
-            <p className="note">Each Take transfers exactly one unit. Opening spent the Bonus Action; taking items never advances initiative.</p>
+            <p className="note">Each Take transfers exactly one unit. {body ? "Searching" : "Opening"} spent the Bonus Action; taking items never advances initiative.</p>
           </section>
         </div>
         <div className="drawer-foot"><button className="btn btn-key" onClick={close}>Done looting</button></div>

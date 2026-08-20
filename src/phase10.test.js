@@ -217,6 +217,8 @@ test("a lodging thrown hit removes one copy, shifts the other hand, and embeds a
   assert.deepEqual(after.encounter.battleItems[0], {
     id: "thrown-dagger-1",
     itemId: "dagger",
+    attackId: null,
+    name: "Dagger",
     state: "embedded",
     position: null,
     carrierTokenId: "target",

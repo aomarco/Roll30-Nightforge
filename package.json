@@ -9,6 +9,7 @@
     "build:preview": "vite build --base=/Roll30-Nightforge/",
     "preview": "vite preview",
     "catalog:generate": "node scripts/generate-phase5-catalogs.mjs",
+    "monsters:generate": "node scripts/generate-monsters.mjs",
     "test": "node --test \"src/**/*.test.js\"",
     "verify:phase1": "node scripts/verify-phase1.mjs",
     "verify:phase2": "node scripts/verify-phase2.mjs",

@@ -3,6 +3,8 @@ import { createPortal } from "react-dom";
 import { CircleDot, Minus, MoreVertical, Package, Plus, Search, X } from "lucide-react";
 
 import { formatCost, getItem, itemSubtitle, ITEM_CATALOG } from "../domain/catalog.js";
+import { MAX_ATTACKS_PER_ACTION, TOKEN_SIZES } from "../domain/table.js";
+import { formatChallengeRating } from "../domain/monsters.js";
 import { useDialogA11y } from "../ui/useDialogA11y.js";
 import GearChapter from "./GearChapter.jsx";
 
@@ -13,9 +15,38 @@ const numericFields = [
   ["baseSpeed", "Speed (ft)", 0, null],
   ["strength", "Strength", 1, null],
   ["dexterity", "Dexterity", 1, null],
+  ["constitution", "Constitution", 1, null],
+  ["intelligence", "Intelligence", 1, null],
+  ["wisdom", "Wisdom", 1, null],
+  ["charisma", "Charisma", 1, null],
   ["level", "Level", 1, 20],
   ["initiativeBonus", "Initiative bonus", null, null],
+  ["attacksPerAction", "Attacks per Action", 1, MAX_ATTACKS_PER_ACTION],
 ];
+
+const blankAttack = (ordinal) => ({
+  id: `attack-${ordinal + 1}-${Math.random().toString(36).slice(2, 8)}`,
+  name: "",
+  toHit: 3,
+  damageDice: "1d6",
+  damageType: "",
+  rangeKind: "melee",
+  reachFeet: 5,
+  normalFeet: 20,
+  longFeet: 60,
+  throwable: false,
+  thrown: false,
+  riders: [],
+  note: "",
+});
+
+const attackSummary = (attack) => {
+  const reach = attack.rangeKind === "melee"
+    ? `${attack.reachFeet} ft`
+    : `${attack.normalFeet}/${attack.longFeet} ft`;
+  const damage = [attack.damageDice, attack.damageType].filter(Boolean).join(" ");
+  return `${signed(Number(attack.toHit) || 0)} to hit · ${damage} · ${reach}`;
+};
 
 const initials = (name) => (name || "?")
   .split(/\s+/)
@@ -63,10 +94,156 @@ const draftFromToken = (token) => ({
   baseSpeed: token?.baseSpeed ?? 30,
   strength: token?.strength ?? 10,
   dexterity: token?.dexterity ?? 10,
+  constitution: token?.constitution ?? 10,
+  intelligence: token?.intelligence ?? 10,
+  wisdom: token?.wisdom ?? 10,
+  charisma: token?.charisma ?? 10,
   level: token?.level ?? 1,
   initiativeBonus: token?.initiativeBonus ?? 0,
+  attacksPerAction: token?.attacksPerAction ?? 1,
   size: token?.size || "medium",
 });
+
+/**
+ * Attacks a creature simply has, rather than derives from the weapons in its
+ * hands. The numbers are written the way a stat block writes them: the to-hit
+ * is absolute and the damage already carries its modifier.
+ */
+function AttackEditor({ token, save, busy, close }) {
+  const [draft, setDraft] = useState(() => token.attacks.map((attack) => ({ ...attack })));
+  useEffect(() => setDraft(token.attacks.map((attack) => ({ ...attack }))), [token.id, token.attacks]);
+
+  const change = (index, field) => (event) => {
+    const value = event.target.type === "checkbox" ? event.target.checked : event.target.value;
+    setDraft((current) => current.map((attack, position) =>
+      position === index ? { ...attack, [field]: value } : attack,
+    ));
+  };
+  const add = () => setDraft((current) => [...current, blankAttack(current.length)]);
+  const remove = (index) => setDraft((current) => current.filter((_, position) => position !== index));
+  const submit = (event) => {
+    event.preventDefault();
+    const attacks = draft.map((attack, index) => ({
+      ...attack,
+      name: String(attack.name || "").trim() || `Attack ${index + 1}`,
+      toHit: Number(attack.toHit) || 0,
+      reachFeet: Number(attack.reachFeet) || 5,
+      normalFeet: Number(attack.normalFeet) || 20,
+      longFeet: Number(attack.longFeet) || 60,
+      damageType: String(attack.damageType || "").trim(),
+    }));
+    const result = save({ attacks });
+    if (!result || result.ok) close();
+  };
+
+  return (
+    <form className="unit nf-state-attack-editor" onSubmit={submit}>
+      <div className="unit-top">
+        <span className="unit-label">Attacks</span>
+        <span className="tag numeral">{draft.length}</span>
+      </div>
+      {!draft.length && <p className="note">This creature has no attacks yet. Add one to let it fight.</p>}
+      {draft.map((attack, index) => (
+        <fieldset className="nf-state-attack-row" key={attack.id}>
+          <legend className="nf-state-attack-legend">{attack.name || `Attack ${index + 1}`}</legend>
+          <label className="field">
+            <span className="label">Name</span>
+            <input className="inp" value={attack.name} onChange={change(index, "name")} placeholder="Wavy Sword" disabled={busy} />
+          </label>
+          <div className="grid-fields">
+            <div className="micro">
+              <label htmlFor={`to-hit-${attack.id}`}>To hit</label>
+              <input id={`to-hit-${attack.id}`} className="inp" type="number" value={attack.toHit} onChange={change(index, "toHit")} disabled={busy} />
+            </div>
+            <div className="micro">
+              <label htmlFor={`damage-${attack.id}`}>Damage</label>
+              <input id={`damage-${attack.id}`} className="inp" value={attack.damageDice} onChange={change(index, "damageDice")} placeholder="2d8+3" disabled={busy} />
+            </div>
+            <div className="micro">
+              <label htmlFor={`damage-type-${attack.id}`}>Damage type</label>
+              <input id={`damage-type-${attack.id}`} className="inp" value={attack.damageType || ""} onChange={change(index, "damageType")} placeholder="Slashing" disabled={busy} />
+            </div>
+            <div className="micro">
+              <label htmlFor={`range-kind-${attack.id}`}>Range</label>
+              <select id={`range-kind-${attack.id}`} className="sel" value={attack.rangeKind} onChange={change(index, "rangeKind")} disabled={busy}>
+                <option value="melee">Melee</option>
+                <option value="ranged">Ranged</option>
+              </select>
+            </div>
+            {attack.rangeKind === "melee" ? (
+              <div className="micro">
+                <label htmlFor={`reach-${attack.id}`}>Reach (ft)</label>
+                <input id={`reach-${attack.id}`} className="inp" type="number" min="5" step="5" value={attack.reachFeet} onChange={change(index, "reachFeet")} disabled={busy} />
+              </div>
+            ) : null}
+            {(attack.rangeKind === "ranged" || attack.throwable) && (
+              <>
+                <div className="micro">
+                  <label htmlFor={`normal-${attack.id}`}>Normal (ft)</label>
+                  <input id={`normal-${attack.id}`} className="inp" type="number" min="5" step="5" value={attack.normalFeet} onChange={change(index, "normalFeet")} disabled={busy} />
+                </div>
+                <div className="micro">
+                  <label htmlFor={`long-${attack.id}`}>Long (ft)</label>
+                  <input id={`long-${attack.id}`} className="inp" type="number" min="5" step="5" value={attack.longFeet} onChange={change(index, "longFeet")} disabled={busy} />
+                </div>
+              </>
+            )}
+          </div>
+          <div className="nf-state-attack-foot">
+            <label className="nf-state-attack-toggle">
+              <input type="checkbox" checked={Boolean(attack.throwable)} onChange={change(index, "throwable")} disabled={busy} />
+              <span>Throwable — leaves the creature and lands on the board</span>
+            </label>
+            <button className="btn btn-sm nf-state-attack-remove" type="button" onClick={() => remove(index)} disabled={busy}>Remove</button>
+          </div>
+        </fieldset>
+      ))}
+      <button className="btn btn-sm btn-wide" type="button" onClick={add} disabled={busy}>
+        <Plus size={13} /> Add attack
+      </button>
+      <button className="btn btn-key btn-sm btn-wide" type="submit" disabled={busy}>{busy ? "Saving…" : "Save attacks"}</button>
+    </form>
+  );
+}
+
+/**
+ * The parts of a stat block the engine cannot run yet - saving-throw actions,
+ * legendary actions, traits, resistances. Shown so the table can read and
+ * narrate them, deliberately not wired to any rule.
+ */
+function StatBlockNotes({ notes }) {
+  const lines = [
+    ["Multiattack", notes.multiattack],
+    ["Resistances", notes.resistances],
+    ["Immunities", notes.immunities],
+    ["Vulnerabilities", notes.vulnerabilities],
+    ["Condition immunities", notes.conditionImmunities],
+    ["Senses", notes.senses],
+    ["Languages", notes.languages],
+  ].filter(([, value]) => value);
+  const sections = [
+    ["Traits", notes.traits],
+    ["Other actions", notes.otherActions],
+    ["Legendary actions", notes.legendaryActions],
+    ["Reactions", notes.reactions],
+  ].filter(([, entries]) => entries.length);
+  return (
+    <div className="nf-state-statblock">
+      <p className="note">Reference only. Nothing here is applied by the rules engine.</p>
+      {lines.map(([label, value]) => (
+        <p className="nf-state-statblock-line" key={label}><strong>{label}:</strong> {value}</p>
+      ))}
+      {sections.map(([label, entries]) => (
+        <section className="nf-state-statblock-section" key={label}>
+          <h4>{label}</h4>
+          {entries.map((entry) => (
+            <p key={entry.name}><strong>{entry.name}.</strong> {entry.desc}</p>
+          ))}
+        </section>
+      ))}
+    </div>
+  );
+}
 
 function ManualTokenFields({ token, save, busy, close }) {
   const [draft, setDraft] = useState(() => draftFromToken(token));
@@ -106,9 +283,9 @@ function ManualTokenFields({ token, save, busy, close }) {
         <div className="micro wide">
           <label>Creature size</label>
           <select className="sel" aria-label="Creature size" value={draft.size} onChange={change("size")} disabled={busy}>
-            <option value="small">Small</option>
-            <option value="medium">Medium</option>
-            <option value="large">Large</option>
+            {TOKEN_SIZES.map((size) => (
+              <option value={size} key={size}>{size.charAt(0).toUpperCase() + size.slice(1)}</option>
+            ))}
           </select>
         </div>
       </div>
@@ -264,9 +441,18 @@ export default function BattleSetupInspector({
     ["Strength", token.strength],
     ["Dexterity", token.dexterity],
     ["Initiative", signed(token.initiativeBonus)],
-    ["Level", token.level],
+    token.monsterId
+      ? ["Challenge", formatChallengeRating(token.challengeRating)]
+      : ["Level", token.level],
     ["Size", token.size.charAt(0).toUpperCase() + token.size.slice(1)],
+    ...(token.attacksPerAction > 1 ? [["Attacks", `${token.attacksPerAction} per Action`]] : []),
   ];
+
+  const tokenKind = token.heroId
+    ? "Hero snapshot"
+    : token.monsterId
+      ? `Monster · ${token.creatureType || "creature"}`
+      : "Manual token";
 
   return (
     <>
@@ -277,7 +463,11 @@ export default function BattleSetupInspector({
           <OverflowMenu
             label="Token actions"
             items={[
-              ...(token.heroId ? [] : [{ label: "Edit stats…", onSelect: () => setDrawer("stats") }]),
+              ...(token.heroId ? [] : [
+                { label: "Edit stats…", onSelect: () => setDrawer("stats") },
+                { label: "Attacks…", onSelect: () => setDrawer("attacks") },
+              ]),
+              ...(token.statBlockNotes ? [{ label: "Stat block notes…", onSelect: () => setDrawer("statblock") }] : []),
               { label: "Gear & inventory…", onSelect: () => setDrawer("gear") },
               { label: "Remove token", hazard: true, disabled: busy, onSelect: removeToken },
             ]}
@@ -288,12 +478,33 @@ export default function BattleSetupInspector({
             <span key={label}><small>{label}</small><strong className="numeral">{value}</strong></span>
           ))}
         </div>
-        <p className="nf-state-scene-kind">{token.heroId ? "Hero snapshot" : "Manual token"}</p>
+        {!token.heroId && (
+          <div className="nf-state-scene-attacks">
+            {token.attacks.map((attack) => (
+              <span key={attack.id}>
+                <strong>{attack.name}</strong>
+                <em>{attackSummary(attack)}</em>
+              </span>
+            ))}
+            {!token.attacks.length && <p className="note">No attacks. This token cannot fight yet.</p>}
+          </div>
+        )}
+        <p className="nf-state-scene-kind">{tokenKind}</p>
       </section>
 
       {drawer === "stats" && (
         <Drawer kicker="Manual token" title="Edit statistics" id="token-stats-title" close={close} footer={false}>
           <ManualTokenFields token={token} save={saveToken} busy={busy} close={close} />
+        </Drawer>
+      )}
+      {drawer === "attacks" && (
+        <Drawer kicker={token.name} title="Attacks" id="token-attacks-title" close={close} footer={false}>
+          <AttackEditor token={token} save={saveToken} busy={busy} close={close} />
+        </Drawer>
+      )}
+      {drawer === "statblock" && token.statBlockNotes && (
+        <Drawer kicker={token.name} title="Stat block notes" id="token-statblock-title" close={close}>
+          <StatBlockNotes notes={token.statBlockNotes} />
         </Drawer>
       )}
       {drawer === "gear" && (

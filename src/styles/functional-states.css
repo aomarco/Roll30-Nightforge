@@ -2942,3 +2942,139 @@
   .nf-state-scene-column { width: min(250px, calc(50vw - 18px)); }
   .nf-state-rail { top: 148px; left: 10px; max-height: calc(100% - 168px); }
 }
+
+/* Monsters, authored attacks, and stat block reference notes. */
+
+.nf-state-monster-browser {
+  width: min(720px, calc(100vw - 24px));
+}
+
+.nf-state-monster-facets {
+  margin-top: 10px;
+}
+
+.nf-state-monster-list {
+  max-height: min(52vh, 460px);
+  overflow: auto;
+}
+
+.nf-state-monster-attacks {
+  color: var(--jade);
+  opacity: .85;
+}
+
+.nf-state-monster-empty {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 26px 12px;
+  text-align: center;
+}
+
+.nf-state-monster-loading,
+.nf-state-monster-error {
+  padding: 26px 12px;
+  text-align: center;
+}
+
+.nf-state-rail-picker-bestiary {
+  display: grid;
+  place-items: center;
+  color: var(--brass);
+}
+
+.nf-state-scene-attacks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.nf-state-scene-attacks > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  font-size: 12px;
+  background: rgba(0,0,0,.2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+
+.nf-state-scene-attacks em {
+  color: var(--brass);
+  font-style: normal;
+  font-size: 11px;
+}
+
+.nf-state-attack-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.nf-state-attack-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  margin: 0;
+  background: rgba(0,0,0,.2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+
+.nf-state-attack-legend {
+  padding: 0 6px;
+  color: var(--jade);
+  font-size: 11px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.nf-state-attack-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.nf-state-attack-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.nf-state-attack-remove {
+  color: var(--foe);
+}
+
+.nf-state-statblock {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.nf-state-statblock-line strong {
+  color: var(--jade);
+}
+
+.nf-state-statblock-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.nf-state-statblock-section h4 {
+  color: var(--brass);
+  font-size: 11px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}

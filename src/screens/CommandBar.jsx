@@ -19,6 +19,33 @@ import { movementMaximum, movementRemaining, validateSwapLoadout } from "../doma
 const SPEED_SEGMENT_FEET = 5;
 const MAX_SPEED_SEGMENTS = 20;
 
+const signed = (value) => (value >= 0 ? `+${value}` : String(value));
+
+/**
+ * A derived weapon reads as the hand it sits in; an authored attack reads as
+ * the numbers it was written with, because that is all there is to say.
+ */
+/**
+ * A hero readies weapons; a creature simply has attacks. The wording follows
+ * whichever kind of option is on offer.
+ */
+const attackReadyCopy = (options) => {
+  const noun = options.some((option) => option.authored) ? "attack" : "equipped weapon";
+  return `${options.length} ${noun}${options.length === 1 ? "" : "s"} ready.`;
+};
+
+const attackOptionDetail = (option) => {
+  if (!option.authored) {
+    return `${option.hand === "mainHand" ? "Main hand" : "Off hand"} · ${itemSubtitle(option.weapon)}`;
+  }
+  const { attack } = option;
+  const reach = attack.rangeKind === "melee"
+    ? `${attack.reachFeet} ft`
+    : `${attack.normalFeet}/${attack.longFeet} ft`;
+  const damage = [attack.damageDice, (attack.damageType || "").toLowerCase()].filter(Boolean).join(" ");
+  return `${signed(attack.toHit)} to hit · ${damage} · ${reach}${attack.throwable ? " · thrown" : ""}`;
+};
+
 /**
  * The whole turn lives in one bar: a segmented Speed meter, four command
  * sections divided by hairlines, and End Turn as a ring on the right.
@@ -37,12 +64,14 @@ export default function CommandBar({
   bonusState,
   chestOptions = [],
   retrievalOptions = [],
+  lootOptions = [],
   busy = false,
   attack,
   dash,
   swap,
   end,
   openChest,
+  searchBody,
   retrieve,
   initialPanel = null,
   initialSwapDraft = null,
@@ -102,7 +131,9 @@ export default function CommandBar({
   // The Bonus panel still holds chests and weapon retrieval, so it stays
   // reachable whenever it has anything inside it — even after the Bonus Action
   // itself is spent, because an already-open chest can still be looted.
-  const bonusHasContent = bonusState.ok || chestOptions.length > 0 || retrievalOptions.length > 0;
+  const bonusHasContent = bonusState.ok || chestOptions.length > 0 || retrievalOptions.length > 0 || lootOptions.length > 0;
+  // A creature with Multiattack keeps its Action open across several rolls.
+  const attacksRemaining = Math.max(0, resources.attackAllowance - resources.attacksMade);
 
   const commands = [
     {
@@ -111,7 +142,9 @@ export default function CommandBar({
       label: "Attack",
       available: attackState.ok,
       reason: attackState.ok
-        ? `${attackState.value.options.length} equipped weapon${attackState.value.options.length === 1 ? "" : "s"} ready.`
+        ? attacksRemaining > 1
+          ? `${attacksRemaining} attacks left in this Action.`
+          : attackReadyCopy(attackState.value.options)
         : attackState.message,
       onClick: () => togglePanel("attack"),
       expands: true,
@@ -177,14 +210,14 @@ export default function CommandBar({
                 <button
                   className="nf-state-command-option"
                   key={option.key}
-                  onClick={() => attack({ kind: "action", weaponId: option.weaponId, hand: option.hand })}
+                  onClick={() => attack({ kind: "action", weaponId: option.weaponId, hand: option.hand, attackId: option.attackId })}
                   disabled={busy || !option.supply.ok}
                   title={option.supply.ok ? "Enter targeting mode" : option.supply.message}
                 >
                   <Sword size={16} />
                   <span>
                     <strong>{option.weapon.name}</strong>
-                    <small>{option.supply.ok ? `${option.hand === "mainHand" ? "Main hand" : "Off hand"} · ${itemSubtitle(option.weapon)}` : option.supply.message}</small>
+                    <small>{option.supply.ok ? attackOptionDetail(option) : option.supply.message}</small>
                   </span>
                 </button>
               ))}
@@ -257,9 +290,25 @@ export default function CommandBar({
                   </span>
                 </button>
               ))}
+              <span className="nf-state-command-group">Fallen</span>
+              {lootOptions.map(({ token: body, availability }) => (
+                <button
+                  className="nf-state-command-option"
+                  key={body.id}
+                  onClick={() => searchBody(body.id)}
+                  disabled={busy || !availability.ok}
+                  title={availability.ok ? availability.value.alreadyOpen ? "Resume searching this body" : "Spend Bonus Action and search this body" : availability.message}
+                >
+                  <PackageOpen size={16} />
+                  <span>
+                    <strong>Search {body.name}</strong>
+                    <small>{availability.ok ? availability.value.alreadyOpen ? "Resume looting" : `${body.inventory.reduce((total, entry) => total + entry.quantity, 0)} items · adjacent` : availability.message}</small>
+                  </span>
+                </button>
+              ))}
               <span className="nf-state-command-group">Physical weapons</span>
               {retrievalOptions.map(({ battleItem, availability }) => {
-                const weapon = ITEM_BY_ID[battleItem.itemId];
+                const weapon = battleItem.attackId ? null : ITEM_BY_ID[battleItem.itemId];
                 return (
                   <button
                     className="nf-state-command-option"
@@ -270,14 +319,14 @@ export default function CommandBar({
                   >
                     <ArchiveRestore size={16} />
                     <span>
-                      <strong>Retrieve {weapon?.name || battleItem.itemId}</strong>
+                      <strong>Retrieve {weapon?.name || battleItem.name}</strong>
                       <small>{availability.ok ? `${availability.value.retrievalKind.replaceAll("-", " ")} · ${availability.value.cost}` : availability.message}</small>
                     </span>
                   </button>
                 );
               })}
-              {!chestOptions.length && !retrievalOptions.length && (
-                <p className="note">No Battle chests or thrown weapons are present in this encounter.</p>
+              {!chestOptions.length && !retrievalOptions.length && !lootOptions.length && (
+                <p className="note">No Battle chests, fallen creatures or thrown weapons are present in this encounter.</p>
               )}
             </div>
           )}

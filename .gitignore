@@ -8,3 +8,7 @@ test-results/
 .env.*
 !.env.example
 
+
+# SRD reference corpus: an external, caller-supplied input. The catalogs it
+# generates are committed; the source data deliberately is not.
+DND 5E Data/

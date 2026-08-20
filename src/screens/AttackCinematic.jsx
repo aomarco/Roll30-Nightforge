@@ -23,11 +23,15 @@ export default function AttackCinematic({ cinematic, skip }) {
   const showDamage = stageIndex >= 4 && outcome.hit;
   const showImpact = stageIndex >= 5;
 
-  const modifierRows = [
-    { id: "ability", label: `${outcome.ability.ability} modifier`, value: signed(outcome.ability.modifier) },
-    { id: "proficiency", label: "Proficiency", value: signed(outcome.proficiency) },
-    ...(outcome.magicAttackBonus ? [{ id: "magic", label: "Magic", value: signed(outcome.magicAttackBonus) }] : []),
-  ];
+  // An authored attack states one finished number; there is no ability
+  // modifier or proficiency bonus to break out of it.
+  const modifierRows = outcome.authored
+    ? [{ id: "authored", label: "Attack bonus", value: signed(outcome.attackBonus) }]
+    : [
+        { id: "ability", label: `${outcome.ability.ability} modifier`, value: signed(outcome.ability.modifier) },
+        { id: "proficiency", label: "Proficiency", value: signed(outcome.proficiency) },
+        ...(outcome.magicAttackBonus ? [{ id: "magic", label: "Magic", value: signed(outcome.magicAttackBonus) }] : []),
+      ];
 
   const verdictCopy = outcome.verdict === "critical"
     ? outcome.autoCritical

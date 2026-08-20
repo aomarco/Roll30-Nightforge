@@ -39,9 +39,47 @@ export const attackDistanceFeet = (from, to, viewport) => {
   return Math.max(Math.abs(end.column - start.column), Math.abs(end.row - start.row)) * 5;
 };
 
+const THROWN_AWAY = Object.freeze({
+  ok: false,
+  code: "AUTHORED_ATTACK_THROWN",
+  message: "That weapon has been thrown and is no longer in hand.",
+  recovery: "Retrieve it from the board before using it again.",
+  retryable: false,
+});
+
+/**
+ * Authored attacks describe a creature's own capabilities and already carry
+ * their to-hit and damage. A token that has any uses them instead of deriving
+ * options from the weapons in its hands.
+ */
+export const authoredAttackOptions = (token) =>
+  (token?.attacks || []).map((attack) => ({
+    hand: "attack",
+    attackId: attack.id,
+    attack,
+    authored: true,
+    weaponId: null,
+    weapon: {
+      id: attack.id,
+      name: attack.name,
+      kind: "authored-attack",
+      damageDice: attack.damageDice,
+      damageType: attack.damageType,
+      weaponRange: attack.rangeKind,
+      propertyIds: [],
+    },
+    damageDice: attack.damageDice,
+    supply: attack.thrown ? THROWN_AWAY : { ok: true, value: { kind: "none" } },
+    key: `attack:${attack.id}`,
+  }));
+
 export function attackOptionsForToken(token) {
+  if (token?.attacks?.length) return authoredAttackOptions(token);
   return equippedWeapons(token).map(({ hand, item, damageDice }) => ({
     hand: hand === "main" ? "mainHand" : "offHand",
+    attackId: null,
+    attack: null,
+    authored: false,
     weaponId: item.id,
     weapon: item,
     damageDice,
@@ -102,9 +140,39 @@ export function bonusAttackAvailability(scene) {
 const selectionAvailability = (scene, kind) =>
   kind === ATTACK_KIND_BONUS ? bonusAttackAvailability(scene) : mainAttackAvailability(scene);
 
-const selectedAttackOption = (available, weaponId, hand) => available.value.options.find((option) =>
-  option.weaponId === weaponId && (!hand || option.hand === hand),
+const selectedAttackOption = (available, weaponId, hand, attackId) => available.value.options.find((option) =>
+  option.authored
+    ? option.attackId === attackId
+    : option.weaponId === weaponId && (!hand || option.hand === hand),
 );
+
+/**
+ * A throwable authored attack behaves exactly like a thrown catalog weapon:
+ * used inside its reach it is a melee swing and stays in hand, used beyond it
+ * the weapon leaves the creature and lands on the board.
+ */
+const authoredRangeAtDistance = (attack, distanceFeet) => {
+  if (attack.rangeKind === "melee") {
+    if (distanceFeet <= attack.reachFeet) {
+      return {
+        usage: "melee",
+        tier: attack.reachFeet > 5 ? "reach" : "melee",
+        distanceFeet,
+        maximumFeet: attack.reachFeet,
+        color: "green",
+        disadvantage: false,
+      };
+    }
+    if (!attack.throwable) return null;
+    if (distanceFeet <= attack.normalFeet) return { usage: "thrown", tier: "thrown-normal", distanceFeet, maximumFeet: attack.normalFeet, color: "yellow", disadvantage: false };
+    if (distanceFeet <= attack.longFeet) return { usage: "thrown", tier: "thrown-long", distanceFeet, maximumFeet: attack.longFeet, color: "red", disadvantage: true };
+    return null;
+  }
+  const usage = attack.throwable ? "thrown" : "ranged";
+  if (distanceFeet <= attack.normalFeet) return { usage, tier: `${usage}-normal`, distanceFeet, maximumFeet: attack.normalFeet, color: "green", disadvantage: false };
+  if (distanceFeet <= attack.longFeet) return { usage, tier: `${usage}-long`, distanceFeet, maximumFeet: attack.longFeet, color: "yellow", disadvantage: true };
+  return null;
+};
 
 const weaponRangeAtDistance = (weapon, distanceFeet) => {
   const meleeMaximum = hasProperty(weapon, "reach") ? 10 : 5;
@@ -152,17 +220,19 @@ export function attackTargetEligibility(scene, {
   kind = ATTACK_KIND_ACTION,
   weaponId,
   hand,
+  attackId,
   targetId,
   viewport,
 } = {}) {
   const available = selectionAvailability(scene, kind);
   if (!available.ok) return available;
-  const option = selectedAttackOption(available, weaponId, hand);
+  const option = selectedAttackOption(available, weaponId, hand, attackId);
   if (!option) return failure(
     "ATTACK_WEAPON_UNAVAILABLE",
     "That weapon is not available for this attack.",
     "Choose one of the equipped weapons shown in the command drawer.",
   );
+  if (!option.supply.ok) return option.supply;
   const target = available.value.tokens.find((token) => token.id === targetId);
   if (!target || target.id === available.value.token.id) return failure(
     "ATTACK_TARGET_INVALID",
@@ -177,7 +247,9 @@ export function attackTargetEligibility(scene, {
     true,
   );
   const distanceFeet = attackDistanceFeet(available.value.token.position, target.position, viewport);
-  const range = weaponRangeAtDistance(option.weapon, distanceFeet);
+  const range = option.authored
+    ? authoredRangeAtDistance(option.attack, distanceFeet)
+    : weaponRangeAtDistance(option.weapon, distanceFeet);
   if (!range) return failure(
     "ATTACK_OUT_OF_RANGE",
     `${target.name} is outside ${option.weapon.name}'s attack range.`,
@@ -193,7 +265,13 @@ export function attackTargetEligibility(scene, {
     true,
     { distanceFeet, range, lineOfSight },
   );
-  const supply = attackSupplyAvailability(available.value.token, option.weapon, range);
+  // An authored attack has no catalog object behind it, so there is no
+  // ammunition to spend and no thrown-weapon whitelist to satisfy.
+  const supply = option.authored
+    ? success(range.usage === "thrown"
+        ? { kind: "authored-thrown", attackId: option.attackId }
+        : { kind: "none" })
+    : attackSupplyAvailability(available.value.token, option.weapon, range);
   if (!supply.ok) return supply;
   return success({ ...available.value, option, target, distanceFeet, range, lineOfSight, supply: supply.value });
 }
@@ -232,13 +310,25 @@ const attackAbility = (token, weapon) => {
     : { ability: "STR", modifier: strength };
 };
 
+/**
+ * Catalog weapons store their dice alone and pick up the ability modifier at
+ * roll time. A stat block writes the total instead ("1d6+2"), so the trailing
+ * term is parsed out here and carried as `flat` rather than being mistaken for
+ * a second ability modifier.
+ */
 export function parseDamageDefinition(definition) {
-  if (Number.isFinite(definition)) return { kind: "fixed", fixed: Math.max(0, Math.floor(definition)), count: 0, sides: 0 };
+  if (Number.isFinite(definition)) return { kind: "fixed", fixed: Math.max(0, Math.floor(definition)), count: 0, sides: 0, flat: 0 };
   const text = String(definition || "").trim();
-  if (/^\d+$/.test(text)) return { kind: "fixed", fixed: Math.max(0, Number(text)), count: 0, sides: 0 };
-  const match = text.match(/^(\d+)d(\d+)$/i);
-  if (!match) return { kind: "fixed", fixed: 0, count: 0, sides: 0 };
-  return { kind: "dice", fixed: 0, count: Math.max(0, Number(match[1])), sides: Math.max(1, Number(match[2])) };
+  if (/^\d+$/.test(text)) return { kind: "fixed", fixed: Math.max(0, Number(text)), count: 0, sides: 0, flat: 0 };
+  const match = text.match(/^(\d+)d(\d+)\s*([+-]\s*\d+)?$/i);
+  if (!match) return { kind: "fixed", fixed: 0, count: 0, sides: 0, flat: 0 };
+  return {
+    kind: "dice",
+    fixed: 0,
+    count: Math.max(0, Number(match[1])),
+    sides: Math.max(1, Number(match[2])),
+    flat: match[3] ? Number(match[3].replace(/\s+/g, "")) : 0,
+  };
 }
 
 export function rollWeaponDamage({ definition, critical = false, ability = 0, magic = 0, offHand = false, random = Math.random }) {
@@ -247,7 +337,8 @@ export function rollWeaponDamage({ definition, critical = false, ability = 0, ma
   const rolls = Array.from({ length: diceCount }, () => rollDie(parsed.sides, random));
   const diceTotal = parsed.kind === "fixed" ? parsed.fixed : rolls.reduce((total, roll) => total + roll, 0);
   const abilityDamage = offHand ? Math.min(0, ability) : ability;
-  const modifier = abilityDamage + Number(magic || 0);
+  // A critical doubles dice, never the flat term written into the definition.
+  const modifier = abilityDamage + Number(magic || 0) + parsed.flat;
   return {
     definition: String(definition),
     parsed,
@@ -256,12 +347,14 @@ export function rollWeaponDamage({ definition, critical = false, ability = 0, ma
     diceTotal,
     abilityModifier: abilityDamage,
     magicModifier: Number(magic || 0),
+    flatModifier: parsed.flat,
     modifier,
     total: Math.max(0, diceTotal + modifier),
   };
 }
 
 const dualWieldFollowup = (token, attackedOption) => {
+  if (attackedOption.authored) return null;
   const options = attackOptionsForToken(token);
   if (options.length !== 2) return null;
   if (options.some(({ weapon }) => weapon.weaponRange !== "melee" || !hasProperty(weapon, "light") || hasProperty(weapon, "two-handed"))) return null;
@@ -276,8 +369,14 @@ export function performWeaponAttack(scene, specification = {}, {
   const eligible = attackTargetEligibility(scene, { ...specification, kind });
   if (!eligible.ok) return eligible;
   const { token: attacker, target, option, resources, range, lineOfSight } = eligible.value;
-  const ability = attackAbility(attacker, option.weapon);
-  const magic = weaponMagicBonuses(attacker, option.weaponId);
+  // An authored attack states its own to-hit, so no ability modifier,
+  // proficiency bonus or magic bonus is derived or added on top of it.
+  const ability = option.authored
+    ? { ability: null, modifier: 0 }
+    : attackAbility(attacker, option.weapon);
+  const magic = option.authored
+    ? { attack: 0, damage: 0 }
+    : weaponMagicBonuses(attacker, option.weaponId);
   const sources = attackRollSources({ attacker, target, weapon: option.weapon, range, lineOfSight, resources, kind });
   const mode = combineAttackModes(sources);
   const rolls = Array.from({ length: mode === ATTACK_MODE_NORMAL ? 1 : 2 }, () => rollDie(20, random));
@@ -285,20 +384,24 @@ export function performWeaponAttack(scene, specification = {}, {
     ? (rolls[1] < rolls[0] ? 1 : 0)
     : (rolls[1] > rolls[0] ? 1 : 0);
   const naturalRoll = rolls[selectedIndex];
-  const proficiency = proficiencyBonus(attacker.level);
-  const attackBonus = ability.modifier + proficiency + magic.attack;
+  const proficiency = option.authored ? 0 : proficiencyBonus(attacker.level);
+  const attackBonus = option.authored
+    ? option.attack.toHit
+    : ability.modifier + proficiency + magic.attack;
   const attackTotal = naturalRoll + attackBonus;
   const hit = naturalRoll === 20 || (naturalRoll !== 1 && attackTotal >= target.ac);
   const autoCritical = hit && targetAutoCritical(target.conditions, range.usage === "melee" ? "melee" : "ranged");
   const critical = hit && (naturalRoll === 20 || autoCritical);
   const damage = hit ? rollWeaponDamage({
-    definition: range.usage === "thrown"
-      ? option.weapon.damageDice
-      : option.damageDice || effectiveDamageDice(attacker, option.weaponId),
+    definition: option.authored
+      ? option.attack.damageDice
+      : range.usage === "thrown"
+        ? option.weapon.damageDice
+        : option.damageDice || effectiveDamageDice(attacker, option.weaponId),
     critical,
     ability: ability.modifier,
     magic: magic.damage,
-    offHand: kind === ATTACK_KIND_BONUS,
+    offHand: !option.authored && kind === ATTACK_KIND_BONUS,
     random,
   }) : null;
   const nextTargetHp = hit ? Math.max(0, target.hp - damage.total) : target.hp;
@@ -313,9 +416,14 @@ export function performWeaponAttack(scene, specification = {}, {
     };
   } else {
     const followup = resources.swapped ? null : dualWieldFollowup(attacker, option);
+    // Multiattack spends one Action across several rolls: the Action only
+    // closes once the creature's whole allowance has been used.
+    const attacksMade = resources.attacksMade + 1;
+    const allowanceRemaining = attacksMade < resources.attackAllowance;
     nextResources = {
       ...resources,
-      actionSpent: true,
+      attacksMade,
+      actionSpent: !allowanceRemaining,
       actionType: "attack",
       mainWeaponAttacked: true,
       mainAttackWeaponId: option.weaponId,
@@ -339,6 +447,7 @@ export function performWeaponAttack(scene, specification = {}, {
     targetId: target.id,
     weapon: option.weapon,
     hand: option.hand,
+    authoredAttack: option.authored ? option.attack : null,
     range,
     hit,
     viewport: specification.viewport,
@@ -356,6 +465,12 @@ export function performWeaponAttack(scene, specification = {}, {
     weaponId: option.weaponId,
     weaponName: option.weapon.name,
     weaponHand: option.hand,
+    authored: Boolean(option.authored),
+    attackId: option.attackId || null,
+    damageType: option.authored ? option.attack.damageType : option.weapon.damageType || null,
+    riders: option.authored ? option.attack.riders : [],
+    attacksMade: supplied.value.encounter.resources?.[attacker.id]?.attacksMade ?? null,
+    attackAllowance: resources.attackAllowance,
     range,
     lineOfSight,
     sources,
@@ -423,7 +538,31 @@ function boundaryPath(cells, metrics) {
   return paths.join(" ");
 }
 
-const bandDefinitions = (weapon) => {
+const authoredBandDefinitions = (attack) => {
+  if (attack.rangeKind === "melee") {
+    const melee = {
+      id: attack.reachFeet > 5 ? "reach" : "melee",
+      maximumFeet: attack.reachFeet,
+      tone: "green",
+      label: `${attack.reachFeet > 5 ? "Reach" : "Melee"} · ${attack.reachFeet} ft`,
+    };
+    if (!attack.throwable) return [melee];
+    return [
+      { id: "thrown-long", maximumFeet: attack.longFeet, tone: "red", label: `Long throw · ${attack.longFeet} ft` },
+      { id: "thrown-normal", maximumFeet: attack.normalFeet, tone: "yellow", label: `Normal throw · ${attack.normalFeet} ft` },
+      melee,
+    ];
+  }
+  const noun = attack.throwable ? "throw" : "range";
+  return [
+    { id: "ranged-long", maximumFeet: attack.longFeet, tone: "yellow", label: `Long ${noun} · ${attack.longFeet} ft` },
+    { id: "ranged-normal", maximumFeet: attack.normalFeet, tone: "green", label: `Normal ${noun} · ${attack.normalFeet} ft` },
+  ];
+};
+
+const bandDefinitions = (option) => {
+  if (option.authored) return authoredBandDefinitions(option.attack);
+  const weapon = option.weapon;
   const meleeMaximum = hasProperty(weapon, "reach") ? 10 : 5;
   if (weapon.weaponRange === "melee" && weapon.throwRange) return [
     { id: "thrown-long", maximumFeet: weapon.throwRange.long, tone: "red", label: `Long throw · ${weapon.throwRange.long} ft` },
@@ -445,19 +584,21 @@ export function buildAttackRangeBands(scene, {
   kind = ATTACK_KIND_ACTION,
   weaponId,
   hand,
+  attackId,
   viewport,
 } = {}) {
   const available = selectionAvailability(scene, kind);
   if (!available.ok) return available;
-  const option = selectedAttackOption(available, weaponId, hand);
+  const option = selectedAttackOption(available, weaponId, hand, attackId);
   if (!option) return failure("ATTACK_WEAPON_UNAVAILABLE", "That weapon is not available for targeting.", "Choose an equipped weapon.");
+  if (!option.supply.ok) return option.supply;
   const metrics = setupGridMetrics(viewport);
   const origin = setupCellForPosition(available.value.token.position, viewport);
   const allCells = [];
   for (let row = 0; row < metrics.rows; row += 1) {
     for (let column = 0; column < metrics.columns; column += 1) allCells.push({ column, row });
   }
-  const bands = bandDefinitions(option.weapon).map((band) => {
+  const bands = bandDefinitions(option).map((band) => {
     const maximumCells = Math.floor(band.maximumFeet / 5);
     const cells = allCells.filter((cell) => Math.max(Math.abs(cell.column - origin.column), Math.abs(cell.row - origin.row)) <= maximumCells);
     return { ...band, path: boundaryPath(cells, metrics), cellCount: cells.length };

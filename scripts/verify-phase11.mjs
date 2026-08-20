@@ -101,7 +101,7 @@ for (const file of jsxFiles.filter((entry) => entry.includes(`${resolve(root, "s
     if (!/aria-modal="true"/.test(match[0])) failures.push(`${file}: dialog does not identify itself as modal.`);
   }
 }
-if (dialogCount !== 8) failures.push(`Expected 8 managed dialogs, found ${dialogCount}.`);
+if (dialogCount !== 9) failures.push(`Expected 9 managed dialogs, found ${dialogCount}.`);
 
 const table = await read("src/screens/TableScreen.jsx");
 if ((table.match(/document\.addEventListener\("keydown"/g) || []).length !== 1 || !table.includes("document.removeEventListener(\"keydown\"")) failures.push("Table transient keyboard listener is not bounded by cleanup.");

@@ -51,10 +51,13 @@ import {
 import { CONDITIONS, conditionById } from "../domain/conditions.js";
 import {
   chestCommandOptions,
+  lootCommandOptions,
   openAdjacentChest,
   restartCompletedBattle,
   retrievalCommandOptions,
   retrieveBattleItem,
+  searchDefeatedToken,
+  takeOneFromDefeatedToken,
   takeOneFromOpenChest,
 } from "../domain/encounter.js";
 import {
@@ -67,6 +70,7 @@ import {
   createTurnResources,
   createHeroTokenSnapshot,
   createManualToken,
+  createMonsterToken,
   createPlayToken,
   createWall,
   DEFAULT_CAMERA,
@@ -107,6 +111,7 @@ import AttackCinematic from "./AttackCinematic.jsx";
 import BattleCompletion from "./BattleCompletion.jsx";
 import ChestLootDrawer from "./ChestLootDrawer.jsx";
 import CommandBar from "./CommandBar.jsx";
+import MonsterBrowser from "./MonsterBrowser.jsx";
 import SceneObjects from "./SceneObjects.jsx";
 import SetupRail from "./SetupRail.jsx";
 import RetrievalCinematic from "./RetrievalCinematic.jsx";
@@ -448,6 +453,8 @@ export default function TableScreen({
   initialCinematic = null,
   initialRetrievalCinematic = null,
   initialLootChestId = null,
+  initialLootTokenId = null,
+  initialMonsterBrowserOpen = false,
   initialImpact = null,
   suppliedArtworkUrl = null,
 }) {
@@ -479,11 +486,13 @@ export default function TableScreen({
   const [cinematic, setCinematic] = useState(initialCinematic);
   const [retrievalCinematic, setRetrievalCinematic] = useState(initialRetrievalCinematic);
   const [lootChestId, setLootChestId] = useState(initialLootChestId);
+  const [lootTokenId, setLootTokenId] = useState(initialLootTokenId);
   const [impact, setImpact] = useState(initialImpact);
   const [arrivalId, setArrivalId] = useState(null);
   const [localError, setLocalError] = useState(null);
   const [deleteMarquee, setDeleteMarquee] = useState(null);
   const [summonPickerOpen, setSummonPickerOpen] = useState(false);
+  const [monsterBrowserOpen, setMonsterBrowserOpen] = useState(initialMonsterBrowserOpen);
   const artworkRef = useRef(null);
   const { url: artworkUrl, error: artworkError } = useArtworkUrl(scene, artworkRepository, suppliedArtworkUrl);
   const busy = persistence.status === "saving";
@@ -499,6 +508,7 @@ export default function TableScreen({
   const selected = visibleTokens.find((token) => token.id === selectedId) || null;
   const selectedChest = visibleChests.find((chest) => chest.id === selectedChestId) || null;
   const lootChest = chests.find((chest) => chest.id === lootChestId) || null;
+  const lootBody = tableTokens.find((token) => token.id === lootTokenId) || null;
   const visibleError = localError || persistence.error || artworkError;
   const walls = scene?.walls || [];
   const wallsVisible = scene?.wallsVisible !== false;
@@ -551,6 +561,8 @@ export default function TableScreen({
     setCinematic(null);
     setRetrievalCinematic(null);
     setLootChestId(null);
+    setLootTokenId(null);
+    setMonsterBrowserOpen(false);
     setImpact(null);
     clearCinematicTimers();
     clearRetrievalTimers();
@@ -566,6 +578,7 @@ export default function TableScreen({
     setMovementPreview(null);
     setAttackDraft(null);
     setLootChestId(null);
+    setLootTokenId(null);
     setInteraction((current) => current?.kind === "movement" ? null : current);
   }, [activeId]);
 
@@ -625,8 +638,9 @@ export default function TableScreen({
         setLocalError(null);
         return;
       }
-      if (lootChestId) {
+      if (lootChestId || lootTokenId) {
         setLootChestId(null);
+        setLootTokenId(null);
         return;
       }
       if (activeTool?.startsWith("wall-") && wallDraft?.points?.length) {
@@ -1071,7 +1085,11 @@ export default function TableScreen({
     if (result.ok) setSelectedId(next[0]?.id || null);
   };
 
-  const addSetupToken = (heroChoice = summonChoice) => {
+  /**
+   * Places a token built by `build`, once a free cell and a stable id exist.
+   * Heroes, blank tokens and monsters differ only in what they are built from.
+   */
+  const placeSetupToken = (build) => {
     const position = findOpenSetupPosition({ xPercent: 50, yPercent: 50 }, {
       tokens: tableTokens,
       chests,
@@ -1093,15 +1111,25 @@ export default function TableScreen({
       return tokenId;
     }
     const id = tokenId.value;
-    const hero = heroes.find((entry) => entry.id === heroChoice);
-    const token = hero
-      ? createHeroTokenSnapshot(hero, { id, ordinal: tableTokens.length, position })
-      : createManualToken({ id, ordinal: tableTokens.length, position });
+    const token = build({ id, ordinal: tableTokens.length, position });
     const result = savePatch({ tokens: [...tableTokens, token] });
     if (result.ok) {
       setSelectedId(token.id);
       setSelectedChestId(null);
     }
+    return result;
+  };
+
+  const addSetupToken = (heroChoice = summonChoice) => {
+    const hero = heroes.find((entry) => entry.id === heroChoice);
+    return placeSetupToken((placement) => hero
+      ? createHeroTokenSnapshot(hero, placement)
+      : createManualToken(placement));
+  };
+
+  const summonMonsterToken = (monster) => {
+    const result = placeSetupToken((placement) => createMonsterToken(monster, placement));
+    if (!result || result.ok) setMonsterBrowserOpen(false);
     return result;
   };
 
@@ -1351,6 +1379,36 @@ export default function TableScreen({
     return savePatch(taken.value);
   };
 
+  const searchBattleBody = (tokenId) => {
+    if (!isActiveBattle || combatLocked) return { ok: false, message: "Searching a body requires an active unlocked Battle." };
+    const opened = searchDefeatedToken(scene, tokenId, setupViewport());
+    if (!opened.ok) {
+      setLocalError(opened);
+      return opened;
+    }
+    if (opened.resumed) {
+      setLootTokenId(tokenId);
+      setLocalError(null);
+      return opened;
+    }
+    const saved = savePatch(opened.value);
+    if (saved.ok) {
+      setLootTokenId(tokenId);
+      setLootChestId(null);
+    }
+    return saved;
+  };
+
+  const takeBodyItem = (itemId) => {
+    if (!lootTokenId || combatLocked) return { ok: false, message: "No searched body is ready." };
+    const taken = takeOneFromDefeatedToken(scene, lootTokenId, itemId, setupViewport());
+    if (!taken.ok) {
+      setLocalError(taken);
+      return taken;
+    }
+    return savePatch(taken.value);
+  };
+
   const resolveRetrieval = (battleItemId) => {
     if (!isActiveBattle || combatLocked) return { ok: false, message: "Weapon retrieval requires an active unlocked Battle." };
     const resolved = retrieveBattleItem(scene, battleItemId, setupViewport(), { random });
@@ -1359,6 +1417,7 @@ export default function TableScreen({
       return resolved;
     }
     setLootChestId(null);
+    setLootTokenId(null);
     setLocalError(null);
     if (!resolved.outcome.requiresRoll) {
       const saved = savePatch(resolved.value);
@@ -1407,6 +1466,7 @@ export default function TableScreen({
       setSelectedId(restarted.activeTokenId);
       setSelectedChestId(null);
       setLootChestId(null);
+      setLootTokenId(null);
       setAttackDraft(null);
       setImpact(null);
       setMode("battle");
@@ -1438,6 +1498,7 @@ export default function TableScreen({
       setMovementPreview(null);
       setAttackDraft(null);
       setLootChestId(null);
+      setLootTokenId(null);
       setImpact(null);
       setInteraction(null);
     }
@@ -1467,6 +1528,7 @@ export default function TableScreen({
   const battleViewport = setupViewport();
   const battleChestOptions = isActiveBattle ? chestCommandOptions(scene, battleViewport) : [];
   const battleRetrievalOptions = isActiveBattle ? retrievalCommandOptions(scene, battleViewport) : [];
+  const battleLootOptions = isActiveBattle ? lootCommandOptions(scene, battleViewport) : [];
   const embeddedByCarrier = battleItems.filter((item) => item.state === "embedded").reduce((groups, item) => ({
     ...groups,
     [item.carrierTokenId]: [...(groups[item.carrierTokenId] || []), item],
@@ -1684,6 +1746,15 @@ export default function TableScreen({
           busy={busy}
           pickerOpen={summonPickerOpen}
           setPickerOpen={setSummonPickerOpen}
+          openMonsterBrowser={() => setMonsterBrowserOpen(true)}
+        />
+      )}
+
+      {monsterBrowserOpen && isSetup && (
+        <MonsterBrowser
+          summon={summonMonsterToken}
+          close={() => setMonsterBrowserOpen(false)}
+          busy={busy}
         />
       )}
 
@@ -1794,12 +1865,14 @@ export default function TableScreen({
           bonusState={bonusState}
           chestOptions={battleChestOptions}
           retrievalOptions={battleRetrievalOptions}
+          lootOptions={battleLootOptions}
           busy={busy || combatLocked}
           attack={startAttack}
           dash={useDash}
           swap={useWeaponSwap}
           end={finishTurn}
           openChest={openBattleChest}
+          searchBody={searchBattleBody}
           retrieve={resolveRetrieval}
           initialPanel={initialCommandPanel}
           initialSwapDraft={initialSwapDraft}
@@ -1810,6 +1883,7 @@ export default function TableScreen({
 
       {drawerOpen && <TableToolsDrawer isPlay={isPlay} camera={camera} mapView={mapView} activeTool={activeTool} wallDraft={wallDraft} wallsVisible={wallsVisible} canAdjustArtwork={canAdjustArtwork} busy={busy} error={visibleError} close={() => setDrawerOpen(false)} zoomBy={zoomBy} resetCamera={() => setCamera({ ...DEFAULT_CAMERA })} chooseTool={chooseTool} scaleArtwork={scaleArtwork} resetArtwork={resetArtwork} finishWall={finishWall} cancelWall={cancelWall} toggleWalls={() => savePatch({ wallsVisible: !wallsVisible })} exitTool={exitTool} />}
       {lootChest && isActiveBattle && <ChestLootDrawer chest={lootChest} busy={busy || combatLocked} error={visibleError} take={takeChestItem} close={() => setLootChestId(null)} />}
+      {lootBody && isActiveBattle && <ChestLootDrawer chest={lootBody} body busy={busy || combatLocked} error={visibleError} take={takeBodyItem} close={() => setLootTokenId(null)} />}
       {cinematic && <AttackCinematic cinematic={cinematic} skip={skipCinematic} />}
       {retrievalCinematic && <RetrievalCinematic cinematic={retrievalCinematic} />}
     </div>

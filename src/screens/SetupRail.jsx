@@ -8,6 +8,7 @@ import {
   Package,
   PenLine,
   RotateCcw,
+  Skull,
   Ruler,
   Trash2,
   UserPlus,
@@ -52,6 +53,7 @@ export default function SetupRail({
   chooseTool,
   heroes = [],
   summonToken,
+  openMonsterBrowser,
   addChest,
   zoomIn,
   zoomOut,
@@ -76,6 +78,11 @@ export default function SetupRail({
   const pick = (heroId) => {
     setPickerOpen(false);
     summonToken(heroId);
+  };
+
+  const browseMonsters = () => {
+    setPickerOpen(false);
+    openMonsterBrowser();
   };
 
   return (
@@ -165,6 +172,10 @@ export default function SetupRail({
             <button className="nf-state-rail-picker-item" role="menuitem" onClick={() => pick("")}>
               <span className="nf-state-rail-picker-face nf-state-rail-picker-blank">+</span>
               Blank token
+            </button>
+            <button className="nf-state-rail-picker-item" role="menuitem" onClick={browseMonsters}>
+              <span className="nf-state-rail-picker-face nf-state-rail-picker-bestiary"><Skull size={15} /></span>
+              Monster…
             </button>
             {heroes.map((hero) => (
               <button className="nf-state-rail-picker-item" role="menuitem" key={hero.id} onClick={() => pick(hero.id)}>

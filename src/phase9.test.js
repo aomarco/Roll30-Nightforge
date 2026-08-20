@@ -318,10 +318,19 @@ test("Natural 1 always misses and Natural 20 always hits and doubles dice only",
 });
 
 test("fixed damage stays fixed on a critical and final damage cannot be negative", () => {
-  assert.deepEqual(parseDamageDefinition("1"), { kind: "fixed", fixed: 1, count: 0, sides: 0 });
-  assert.deepEqual(parseDamageDefinition("2d6"), { kind: "dice", fixed: 0, count: 2, sides: 6 });
+  assert.deepEqual(parseDamageDefinition("1"), { kind: "fixed", fixed: 1, count: 0, sides: 0, flat: 0 });
+  assert.deepEqual(parseDamageDefinition("2d6"), { kind: "dice", fixed: 0, count: 2, sides: 6, flat: 0 });
   assert.equal(rollWeaponDamage({ definition: "1", critical: true, ability: -5 }).total, 0);
   assert.equal(rollWeaponDamage({ definition: "1", critical: true, ability: 3 }).total, 4);
+});
+
+test("a stat block damage definition carries its modifier without doubling it on a critical", () => {
+  assert.deepEqual(parseDamageDefinition("1d6+2"), { kind: "dice", fixed: 0, count: 1, sides: 6, flat: 2 });
+  assert.deepEqual(parseDamageDefinition("2d8-1"), { kind: "dice", fixed: 0, count: 2, sides: 8, flat: -1 });
+  // Two d6 rolled at 4 apiece, plus the flat 2 counted exactly once.
+  const critical = rollWeaponDamage({ definition: "1d6+2", critical: true, random: sequence(0.5, 0.5) });
+  assert.deepEqual(critical.rolls, [4, 4]);
+  assert.equal(critical.total, 10);
 });
 
 test("advantage keeps the high die, disadvantage keeps the low die, and damage remains normal", () => {

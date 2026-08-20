@@ -132,7 +132,7 @@ try {
   assert.match(bonusMarkup, /Off-hand attack/);
   assert.match(bonusMarkup, /Dagger/);
   assert.match(bonusMarkup, /Battle chests/);
-  assert.match(bonusMarkup, /No Battle chests or thrown weapons are present/);
+  assert.match(bonusMarkup, /No Battle chests, fallen creatures or thrown weapons are present/);
   assert.match(bonusMarkup, /Physical weapons/);
   assert.match(bonusMarkup, /No automatic End Turn/);
   // The Bonus resource chip is gone; the command section itself now carries
