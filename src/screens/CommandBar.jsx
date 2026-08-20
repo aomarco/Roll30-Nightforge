@@ -16,8 +16,6 @@ import { movementMaximum, movementRemaining, validateSwapLoadout } from "../doma
 /** One segment per five feet, which is the unit the whole game counts in. */
 const SPEED_SEGMENT_FEET = 5;
 const MAX_SPEED_SEGMENTS = 20;
-/** Health gets the same row of squares, one per five hit points. */
-const HP_SEGMENT_POINTS = 5;
 
 /**
  * The whole turn lives in one bar: a segmented Speed meter, four command
@@ -94,11 +92,9 @@ export default function CommandBar({
     ? Math.max(0, Math.min(totalSegments, Math.round((remaining / maximum) * totalSegments)))
     : 0;
 
-  // Health reads the same way movement does: one row of squares, red instead
-  // of jade, sitting to the left of Speed.
-  const hpTotalSegments = Math.min(MAX_SPEED_SEGMENTS, Math.max(1, Math.round(token.maxHp / HP_SEGMENT_POINTS)));
-  const hpFilledSegments = token.maxHp > 0
-    ? Math.max(0, Math.min(hpTotalSegments, Math.round((Math.max(0, token.hp) / token.maxHp) * hpTotalSegments)))
+  // Health reads as a smooth continuous pixel bar sitting to the left of Speed.
+  const hpPercent = token.maxHp > 0
+    ? Math.max(0, Math.min(100, (Math.max(0, token.hp) / token.maxHp) * 100))
     : 0;
 
   // The Bonus panel still holds chests and weapon retrieval, so it stays
@@ -294,13 +290,11 @@ export default function CommandBar({
             title={`${Math.max(0, token.hp)} of ${token.maxHp} hit points remaining.`}
           >
             <em>HP</em>
-            <span className="nf-state-command-speed-track" role="img" aria-label={`${Math.max(0, token.hp)} of ${token.maxHp} hit points remaining`}>
-              {Array.from({ length: hpTotalSegments }, (unused, index) => (
-                <i
-                  className={`nf-state-command-speed-cell nf-state-command-health-cell${index < hpFilledSegments ? " nf-state-command-health-cell-on" : ""}`}
-                  key={index}
-                />
-              ))}
+            <span className="nf-state-command-health-track" role="progressbar" aria-valuenow={Math.max(0, token.hp)} aria-valuemin={0} aria-valuemax={token.maxHp} aria-label={`${Math.max(0, token.hp)} of ${token.maxHp} hit points remaining`}>
+              <i
+                className="nf-state-command-health-fill"
+                style={{ width: `${hpPercent}%` }}
+              />
             </span>
             <strong className="numeral">{Math.max(0, token.hp)}/{token.maxHp}</strong>
           </div>
@@ -333,10 +327,10 @@ export default function CommandBar({
                   className={`nf-state-command-key nf-state-command-key-${command.id} ${command.available ? "nf-state-command-key-ready" : "nf-state-command-key-blocked"}${panel === command.id ? " nf-state-command-key-open" : ""}${command.armed ? " nf-state-command-key-armed" : ""}`}
                   onClick={command.onClick}
                   disabled={busy || !command.available}
+                  aria-label={command.label}
                   aria-expanded={command.expands ? panel === command.id : undefined}
                 >
-                  <command.icon size={20} strokeWidth={2} />
-                  <em>{command.label}</em>
+                  <command.icon size={22} strokeWidth={2.2} />
                 </button>
               </span>
             ))}

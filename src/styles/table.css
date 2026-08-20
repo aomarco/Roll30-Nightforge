@@ -192,14 +192,28 @@
   font-size: 12.5px;
   font-weight: 700;
   letter-spacing: .02em;
-  color: var(--ink-3);
+  color: var(--ink-2);
   transition: all var(--swift);
 }
-.phase > button:hover { color: var(--ink-2); background: rgba(255,255,255,.05); }
+.phase > button:hover { color: var(--ink-1); background: rgba(255,255,255,.08); }
 .phase > button.on {
   color: var(--void);
   background: linear-gradient(180deg, var(--jade-hi), var(--jade-lo));
   box-shadow: 0 6px 18px -8px var(--jade-glow), inset 0 1px 0 rgba(255,255,255,.45);
+}
+.phase > button.nf-state-table-start,
+.phase .nf-state-table-start {
+  color: #031b14 !important;
+  font-weight: 800;
+  background: linear-gradient(180deg, #6cf2da, #2fd3b4 60%, #179c85) !important;
+  box-shadow: 0 0 22px var(--jade-glow), inset 0 1px 0 rgba(255,255,255,.6) !important;
+}
+.phase > button.nf-state-table-start:hover:not(:disabled),
+.phase .nf-state-table-start:hover:not(:disabled) {
+  color: #000 !important;
+  background: linear-gradient(180deg, #8dfbe6, #6cf2da 60%, #2fd3b4) !important;
+  box-shadow: 0 0 32px var(--jade-glow), inset 0 1px 0 rgba(255,255,255,.8) !important;
+  filter: brightness(1.08);
 }
 
 /* ------------------------------------------------------------- docks ---- */

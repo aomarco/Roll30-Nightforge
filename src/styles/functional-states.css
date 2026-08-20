@@ -935,7 +935,7 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  width: min(940px, calc(100vw - 640px));
+  width: min(520px, calc(100vw - 320px));
   transform: translateX(-50%);
   /* The root is only a positioner. Its children carry the glass, so the empty
      space between them must not swallow clicks meant for the board. */
@@ -1051,19 +1051,29 @@
 .nf-state-command-health { border-color: rgba(242,97,122,.42); }
 .nf-state-command-health strong { font-size: 12px; color: var(--danger); }
 
-/* Doubled class so these win over the jade .nf-state-command-speed-cell rules
-   below, which the health squares reuse for their size. */
-.nf-state-command-speed-cell.nf-state-command-health-cell {
-  background: rgba(242,97,122,.10);
-  border-color: rgba(242,97,122,.42);
+/* ----- Continuous Pixel HP Bar ----- */
+.nf-state-command-health-track {
+  position: relative;
+  display: block;
+  width: 90px;
+  height: 8px;
+  border-radius: var(--r-full);
+  background: rgba(242,97,122,.14);
+  border: 1px solid rgba(242,97,122,.38);
+  overflow: hidden;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,.45);
 }
 
-.nf-state-command-health-cell.nf-state-command-health-cell-on {
-  background: linear-gradient(180deg, #ff8ea1, var(--danger));
-  border-color: #ff8ea1;
-  box-shadow: 0 0 8px rgba(242,97,122,.5);
+.nf-state-command-health-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #f2617a, #ff8ea1);
+  box-shadow: 0 0 10px rgba(242,97,122,.65);
+  transition: width var(--swift);
 }
 
+.nf-state-command-health-empty .nf-state-command-health-fill { opacity: 0; }
 .nf-state-command-health-empty strong { color: var(--ink-3); }
 
 .nf-state-command-speed em,
@@ -1130,9 +1140,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
   width: 100%;
-  padding: 17px 8px;
+  padding: 16px 12px;
   font-size: 13.5px;
   font-weight: 600;
   background: transparent;
@@ -1140,7 +1149,7 @@
 }
 
 .nf-state-command-key em { font-style: normal; white-space: nowrap; }
-.nf-state-command-key svg { flex: none; }
+.nf-state-command-key svg { flex: none; margin: auto; }
 
 .nf-state-command-key-ready { color: var(--jade); }
 .nf-state-command-key-ready svg { filter: drop-shadow(0 0 6px var(--jade-glow)); }
@@ -2509,20 +2518,25 @@
 .nf-state-table-start {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
-  padding: 9px 22px;
-  border-radius: var(--r-full);
-  font-size: 14px;
-  font-weight: 700;
-  /* Dark ink on jade was unreadable. Near-black plate, bright jade lettering. */
-  color: #06110d;
-  text-shadow: 0 1px 0 rgba(255,255,255,.28);
-  background: linear-gradient(180deg, #7ef3c2, #22c58a);
-  box-shadow: 0 0 24px var(--jade-glow);
-  transition: box-shadow var(--swift), filter var(--swift);
+  gap: 8px;
+  height: 34px;
+  padding: 0 18px;
+  border-radius: var(--r-md);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: .01em;
+  color: #031b14 !important;
+  background: linear-gradient(180deg, #6cf2da, #2fd3b4 60%, #179c85) !important;
+  box-shadow: 0 0 22px var(--jade-glow), inset 0 1px 0 rgba(255,255,255,.6) !important;
+  transition: box-shadow var(--swift), filter var(--swift), transform var(--swift);
 }
 
-.nf-state-table-start:hover:not(:disabled) { filter: brightness(1.08); box-shadow: 0 0 36px var(--jade-glow); }
+.nf-state-table-start:hover:not(:disabled) {
+  color: #000 !important;
+  background: linear-gradient(180deg, #8dfbe6, #6cf2da 60%, #2fd3b4) !important;
+  box-shadow: 0 0 32px var(--jade-glow), inset 0 1px 0 rgba(255,255,255,.8) !important;
+  filter: brightness(1.08);
+}
 .nf-state-table-start:disabled { opacity: .6; cursor: wait; }
 
 /* ------------------------------------------------------------- tool rail */
