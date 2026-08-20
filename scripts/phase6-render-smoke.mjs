@@ -92,8 +92,8 @@ try {
     initialTool: "artwork",
   }));
   assert.match(activeArtwork, /blob:nightforge-artwork/);
-  assert.match(activeArtwork, /Drag the backdrop to move it/);
-  assert.match(activeArtwork, /Exit current tool/);
+  assert.match(activeArtwork, /nf-state-table-artwork-editing/);
+  assert.doesNotMatch(activeArtwork, /Drag the backdrop to move it/);
 
   const rulerAndDraft = renderToStaticMarkup(React.createElement(TableScreen, {
     ...handlers,

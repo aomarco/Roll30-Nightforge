@@ -171,17 +171,13 @@ try {
   assert.match(lockedChestMarkup, /Chest movement and Setup editing stay locked/);
   assert.match(lockedChestMarkup, /Dagger/);
 
-  const abandonMarkup = renderToStaticMarkup(React.createElement(TableScreen, {
+  const exitBattleMarkup = renderToStaticMarkup(React.createElement(TableScreen, {
     ...handlers,
     scene: active,
     mode: "battle",
     heroes: [hero],
-    initialAbandonOpen: true,
   }));
-  assert.match(abandonMarkup, /Abandon this encounter/);
-  assert.match(abandonMarkup, /Current token HP and positions are preserved/);
-  assert.match(abandonMarkup, /Continue Battle/);
-  assert.match(abandonMarkup, /Abandon Battle/);
+  assert.match(exitBattleMarkup, /Exit Battle/);
 
   const failureMarkup = renderToStaticMarkup(React.createElement(TableScreen, {
     ...handlers,

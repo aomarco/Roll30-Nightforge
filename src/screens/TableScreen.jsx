@@ -1506,7 +1506,7 @@ export default function TableScreen({
             }}
           >
             {(artworkUrl || scene?.blankCanvas) && (
-              <div ref={artworkRef} className={`nf-state-table-artwork${activeTool === "artwork" ? " nf-state-table-artwork-editing" : ""}`} style={{ transform: `translate(${mapView.x}px, ${mapView.y}px) scale(${mapView.scaleX}, ${mapView.scaleY})`, backgroundColor: scene?.blankCanvas ? "#fff" : undefined }}>
+              <div ref={artworkRef} className={`nf-state-table-artwork${activeTool === "artwork" ? " nf-state-table-artwork-editing" : ""}`} style={{ transform: `translate(${mapView.x}px, ${mapView.y}px) ${mapView.scaleX !== undefined && mapView.scaleY !== undefined && (mapView.scaleX !== mapView.scale || mapView.scaleY !== mapView.scale) ? `scale(${mapView.scaleX}, ${mapView.scaleY})` : `scale(${mapView.scale})`}`, backgroundColor: scene?.blankCanvas ? "#fff" : undefined }}>
                 {artworkUrl && <img src={artworkUrl} alt="" draggable="false" />}
                 {activeTool === "artwork" && ["nw", "ne", "se", "sw"].map((corner) => (
                   <span
