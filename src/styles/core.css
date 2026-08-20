@@ -112,6 +112,23 @@ body {
   font-feature-settings: 'ss01' 1, 'cv05' 1;
 }
 
+/* Dragging on the board used to start a text or image drag instead of moving
+   the token. Nothing in this app is meant to be selected or dragged as a file;
+   the few places that take typing opt back in below. */
+body {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-user-drag: none;
+  -webkit-touch-callout: none;
+}
+
+img, svg, canvas { -webkit-user-drag: none; user-select: none; pointer-events: none; }
+
+input, textarea, select, [contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 h1, h2, h3, h4, p, figure { margin: 0; }
 ol, ul { margin: 0; padding: 0; list-style: none; }
 

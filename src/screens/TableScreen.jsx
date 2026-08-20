@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  ChevronLeft,
   CircleDot,
   ArchiveRestore,
   Eye,
   EyeOff,
   Grid3x3,
   Hammer,
+  Home,
   Minus,
   Move,
   Package,
@@ -1463,7 +1463,7 @@ export default function TableScreen({
   return (
     <div className={`table nf-state-table-root${busy ? " nf-state-busy" : ""}${combatLocked ? " nf-state-combat-locked" : ""}${isCompleteBattle ? " nf-state-battle-complete-root" : ""}`}>
       <div
-        className={`map nf-state-table-map${isSetup ? " nf-state-table-map-inset" : ""}${activeTool ? ` nf-state-table-tool-${activeTool}` : ""}${attackDraft ? " nf-state-table-attack-mode" : ""}`}
+        className={`map nf-state-table-map${activeTool ? ` nf-state-table-tool-${activeTool}` : ""}${attackDraft ? " nf-state-table-attack-mode" : ""}`}
         ref={mapRef}
         onPointerDown={onMapPointerDown}
         onPointerMove={onMapPointerMove}
@@ -1593,9 +1593,9 @@ export default function TableScreen({
       </div>
 
       <div className="hud hud-tl glass grained">
-        <button className="glyph" onClick={() => go({ page: "home" })} title="All maps"><ChevronLeft size={18} /></button>
+        <button className="glyph" onClick={() => go({ page: "home" })} title="All maps"><Home size={18} /></button>
         <span className="hud-div" />
-        <div className="hud-scene"><span className="kicker" title={scene?.name || "Untitled scene"}>{scene?.name || "Untitled scene"}</span><strong>{isPlay ? "Free play" : isCompleteBattle ? scene.encounter.winnerTokenId ? `${tableTokens.find((token) => token.id === scene.encounter.winnerTokenId)?.name || "Winner"} · Battle complete` : "No survivor · Battle complete" : isActiveBattle ? `Round ${scene.encounter.round} · ${active?.name || "Token"}'s turn` : "Setup mode"}</strong></div>
+        <div className="hud-scene"><span className="kicker" title={scene?.name || "Untitled scene"}>{scene?.name || "Untitled scene"}</span><strong>{isPlay ? "Free play" : isCompleteBattle ? scene.encounter.winnerTokenId ? `${tableTokens.find((token) => token.id === scene.encounter.winnerTokenId)?.name || "Winner"} · Battle complete` : "No survivor · Battle complete" : isActiveBattle ? "Battle" : "Setup mode"}</strong></div>
       </div>
 
       <div className="hud hud-tc glass grained">
@@ -1605,14 +1605,17 @@ export default function TableScreen({
             : isSetup
               // One clear thing to do next, rather than a pair of mode pills.
               ? <button className="nf-state-table-start" onClick={beginBattle} disabled={busy}><Swords size={16} /> Start Battle</button>
-              : <><button onClick={() => setAbandonOpen(true)}><Hammer size={14} /> Setup</button><button className="on" onClick={isCompleteBattle ? restartBattle : undefined} disabled={busy}><Swords size={14} /> {isCompleteBattle ? "Restart Battle" : "Battle"}</button></>}
+              : isCompleteBattle
+                ? <><button onClick={() => setAbandonOpen(true)}><Hammer size={14} /> Exit Battle</button><button className="on" onClick={restartBattle} disabled={busy}><Swords size={14} /> Restart Battle</button></>
+                // One way out of a live battle, not a pair of mode pills.
+                : <button className="nf-state-table-start" onClick={() => setAbandonOpen(true)}><Hammer size={16} /> Exit Battle</button>}
         </div>
       </div>
 
       <div className="hud hud-tr glass grained">
         {/* Setup keeps its tools on the rail; Play and Battle still reach them
             through this chip, which doubles as the grid readout. */}
-        {!isSetup && <>
+        {isPlay && <>
           <button className="tag tag-brass nf-state-table-tools-trigger" onClick={() => setDrawerOpen(true)} title="Table tools — 5 ft grid" aria-label="Table tools — 5 ft grid"><Grid3x3 size={12} /> 5 ft</button>
           <span className="hud-div" />
         </>}

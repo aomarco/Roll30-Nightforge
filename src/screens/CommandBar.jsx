@@ -46,6 +46,8 @@ export default function CommandBar({
   initialSwapDraft = null,
 }) {
   const [panel, setPanel] = useState(initialPanel);
+  // Dash is one press away from wasting a turn, so it asks twice.
+  const [dashArmed, setDashArmed] = useState(false);
   const [draft, setDraft] = useState(() => initialSwapDraft || { ...token.loadout });
   const weapons = useMemo(() => token.inventory
     .map((entry) => ({ item: ITEM_BY_ID[entry.itemId], quantity: entry.quantity }))
@@ -56,8 +58,15 @@ export default function CommandBar({
 
   useEffect(() => {
     setPanel(null);
+    setDashArmed(false);
     setDraft({ ...token.loadout });
   }, [token.id]);
+
+  useEffect(() => {
+    if (!dashArmed) return undefined;
+    const timer = setTimeout(() => setDashArmed(false), 3000);
+    return () => clearTimeout(timer);
+  }, [dashArmed]);
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -103,11 +112,20 @@ export default function CommandBar({
     {
       id: "dash",
       icon: ChevronsRight,
-      label: "Dash",
+      label: dashArmed ? "Confirm" : "Dash",
       available: dashState.ok,
-      reason: dashState.ok ? `Adds ${token.baseSpeed} feet of movement.` : dashState.message,
-      onClick: dash,
+      reason: dashState.ok
+        ? dashArmed
+          ? `Press again to spend the Action and add ${token.baseSpeed} feet.`
+          : `Adds ${token.baseSpeed} feet of movement. Press twice to confirm.`
+        : dashState.message,
+      onClick: () => {
+        if (!dashArmed) { setDashArmed(true); return; }
+        setDashArmed(false);
+        dash();
+      },
       expands: false,
+      armed: dashArmed,
     },
     {
       id: "swap",
@@ -285,7 +303,7 @@ export default function CommandBar({
               // does not reliably raise the hover events a title needs.
               <span className="nf-state-command-slot" key={command.id} title={command.reason}>
                 <button
-                  className={`nf-state-command-key nf-state-command-key-${command.id} ${command.available ? "nf-state-command-key-ready" : "nf-state-command-key-blocked"}${panel === command.id ? " nf-state-command-key-open" : ""}`}
+                  className={`nf-state-command-key nf-state-command-key-${command.id} ${command.available ? "nf-state-command-key-ready" : "nf-state-command-key-blocked"}${panel === command.id ? " nf-state-command-key-open" : ""}${command.armed ? " nf-state-command-key-armed" : ""}`}
                   onClick={command.onClick}
                   disabled={busy || !command.available}
                   aria-expanded={command.expands ? panel === command.id : undefined}
