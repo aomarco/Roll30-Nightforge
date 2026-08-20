@@ -1178,7 +1178,7 @@
 }
 
 .nf-state-command-key-bonus svg {
-  transform: translateX(-5px);
+  transform: translateX(-10px);
 }
 
 .nf-state-command-key-ready { color: var(--jade); }
