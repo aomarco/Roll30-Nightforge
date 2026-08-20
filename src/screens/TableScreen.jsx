@@ -546,7 +546,6 @@ export default function TableScreen({
     setWallDraft(null);
     setWallHover(null);
     setRulerDraft(null);
-    setAbandonOpen(false);
     setMovementPreview(null);
     setAttackDraft(null);
     setCinematic(null);
