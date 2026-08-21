@@ -12,6 +12,18 @@ loot, ammunition, completion, and restart behavior persist through dedicated
 Nightforge repositories. It does **not** import characters, games, maps, saves,
 source, UI, UX, or layout from original Roll30.
 
+## Documentation
+
+| Document | What it holds |
+|---|---|
+| [`docs/FEATURES.md`](./docs/FEATURES.md) | **Start here.** What the app is and everything it does, in plain English |
+| [`docs/TODO.md`](./docs/TODO.md) | What is still to be built |
+| [`WORKFLOW.md`](./WORKFLOW.md) | How to work on this codebase — read before writing code |
+| [`PARITY_REGISTER.md`](./PARITY_REGISTER.md) | The 47 acceptance journeys and their evidence |
+
+`docs/FEATURES.md` is the master document. When you change what the app does,
+change it there.
+
 ## Run it
 
 ```bash
@@ -50,7 +62,7 @@ Production rollback is anchored by the annotated tag
 npm run verify
 ```
 
-The complete gate runs **241 domain/repository/integration tests**, every render
+The complete gate runs **252 domain/repository/integration tests**, every render
 smoke suite, all phase purity verifiers, **23 pinned-Chromium browser journeys**,
 21 deterministic visual baselines per platform, dependency audit, and the
 production build.
