@@ -62,7 +62,7 @@ Production rollback is anchored by the annotated tag
 npm run verify
 ```
 
-The complete gate runs **252 domain/repository/integration tests**, every render
+The complete gate runs **289 domain/repository/integration tests**, every render
 smoke suite, all phase purity verifiers, **23 pinned-Chromium browser journeys**,
 21 deterministic visual baselines per platform, dependency audit, and the
 production build.
