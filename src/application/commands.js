@@ -208,6 +208,59 @@ export function createApplicationCommands({
     return result;
   };
 
+  /**
+   * Experience crosses the Scene and Hero collections, which is why it lives
+   * here rather than in the domain: the domain never reaches across
+   * repositories. Nothing is written until the award succeeds for every
+   * recipient, and the encounter is flagged afterwards so a second press cannot
+   * pay the party twice.
+   */
+  const awardExperience = (sceneId, award) => {
+    const recipients = (award?.recipients || []).filter((entry) => entry.heroId && entry.share > 0);
+    if (!recipients.length) {
+      return failure("xp-no-recipients", "No surviving Hero is eligible for experience.", {
+        recovery: "Only Heroes standing at the end of a Battle earn experience.",
+        retryable: false,
+      });
+    }
+    const scene = sceneRepository.get(sceneId);
+    if (!scene.ok) return persist(() => scene, refreshScenes);
+    if (scene.value.encounter?.xpAwarded) {
+      return failure("xp-already-awarded", "Experience for this Battle has already been awarded.", {
+        recovery: "Restart the Battle to fight it again.",
+        retryable: false,
+      });
+    }
+    dispatch({ type: "persistence-saving" });
+    const applied = [];
+    for (const recipient of recipients) {
+      const hero = heroRepository.get(recipient.heroId);
+      if (!hero.ok) {
+        dispatch({ type: "persistence-failed", error: hero });
+        return hero;
+      }
+      const saved = heroRepository.update(recipient.heroId, {
+        xp: Math.max(0, Math.floor(Number(hero.value.xp) || 0)) + recipient.share,
+      });
+      if (!saved.ok) {
+        dispatch({ type: "persistence-failed", error: saved });
+        return saved;
+      }
+      applied.push({ heroId: recipient.heroId, name: saved.value.name, xp: saved.value.xp });
+    }
+    const flagged = sceneRepository.update(sceneId, {
+      encounter: { ...scene.value.encounter, xpAwarded: true },
+    });
+    if (!flagged.ok) {
+      dispatch({ type: "persistence-failed", error: flagged });
+      return flagged;
+    }
+    refreshHeroes();
+    refreshScenes();
+    dispatch({ type: "persistence-saved", revision: flagged.revision || 0 });
+    return success(flagged.value, { revision: flagged.revision, awarded: applied });
+  };
+
   const updateHero = (id, patch = {}, expectedRevision) => {
     const current = heroRepository.get(id);
     if (!current.ok) return persist(() => current, refreshHeroes);
@@ -359,6 +412,7 @@ export function createApplicationCommands({
     },
     createHero: (input) => persist(() => heroRepository.create(input), refreshHeroes),
     updateHero,
+    awardExperience,
     removeHero: (id) => {
       const existing = heroRepository.get(id);
       const portraitKey = existing.ok ? existing.value.portraitKey : null;

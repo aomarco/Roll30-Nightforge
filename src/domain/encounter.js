@@ -323,6 +323,37 @@ function recoverCompletionAmmunition(tokens, ammoSpentByToken) {
   return { tokens: nextTokens, recovery };
 }
 
+/**
+ * What a finished Battle is worth. Deliberately a pure reader rather than part
+ * of completion: experience is never handed out on its own, so nothing here
+ * writes to a Hero. The completion card reads this, shows the split, and waits
+ * for someone to press the button.
+ *
+ * Only tokens standing on a Hero record can receive a share, and only defeated
+ * creatures that are not Heroes are counted as earnings — a fallen party member
+ * is not treasure. The total is split evenly and any remainder is dropped,
+ * which is how a table would round it.
+ */
+export function encounterExperienceAward(tokens, encounter) {
+  const normalizedTokens = normalizeTableTokens(tokens);
+  const defeated = normalizedTokens.filter((token) => token.hp <= 0 && !token.heroId);
+  const survivors = normalizedTokens.filter((token) => token.hp > 0 && token.heroId);
+  const total = defeated.reduce((sum, token) => sum + Math.max(0, Math.floor(Number(token.xp) || 0)), 0);
+  const perHero = survivors.length ? Math.floor(total / survivors.length) : 0;
+  return {
+    total,
+    perHero,
+    alreadyAwarded: Boolean(encounter?.xpAwarded),
+    defeatedCount: defeated.length,
+    recipients: survivors.map((token) => ({
+      tokenId: token.id,
+      heroId: token.heroId,
+      name: token.name,
+      share: perHero,
+    })),
+  };
+}
+
 export function completeEncounterIfNeeded(tokens, encounter) {
   const normalizedTokens = normalizeTableTokens(tokens);
   if (!encounter || encounter.status !== "active") return success({ tokens: normalizedTokens, encounter }, { completed: false, recovery: [] });

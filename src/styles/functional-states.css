@@ -193,12 +193,34 @@
   left: 50%;
   bottom: 28px;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  /* Icon, result copy, the experience readout when there is one, then the
+     actions. The experience column collapses to nothing when it is absent. */
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 16px;
-  width: min(720px, calc(100vw - 72px));
+  width: min(860px, calc(100vw - 72px));
   padding: 15px 17px;
   transform: translateX(-50%);
+}
+
+.nf-state-battle-xp {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 12px;
+  border: 1px solid rgba(224, 176, 85, 0.34);
+  border-radius: var(--r-xs);
+  background: rgba(224, 176, 85, 0.09);
+  text-align: right;
+}
+
+.nf-state-battle-xp strong { color: var(--brass); font-size: 16px; }
+.nf-state-battle-xp p { margin: 0; color: var(--muted); font-size: 10.5px; }
+
+.nf-state-battle-complete-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
 }
 
 .nf-state-battle-complete-icon {

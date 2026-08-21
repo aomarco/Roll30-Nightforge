@@ -6,6 +6,7 @@ import {
   computeArmorClass,
   deriveHero,
   proficiencyBonus,
+  SKILLS,
 } from "./heroes.js";
 import {
   changeInventory,
@@ -13,6 +14,8 @@ import {
   normalizeInventoryEntries,
   wornMagicBonuses,
 } from "./items.js";
+
+const SKILL_BY_ID = Object.freeze(Object.fromEntries(SKILLS.map((skill) => [skill.id, skill])));
 
 export const CAMERA_MIN_ZOOM = 0.35;
 export const CAMERA_MAX_ZOOM = 3;
@@ -345,7 +348,17 @@ export function normalizeTableToken(input = {}, { id, ordinal = 0 } = {}) {
     saveProficiencies: Array.isArray(input.saveProficiencies)
       ? [...new Set(input.saveProficiencies.filter((ability) => ABILITY_KEYS.includes(ability)))]
       : [],
+    // Copied from the Hero when the token joined the Battle, for the same
+    // reason as saveProficiencies: a skill check must be answerable from the
+    // token alone, without reaching back into a Hero record that may have
+    // changed since.
+    skillProficiencies: Array.isArray(input.skillProficiencies)
+      ? [...new Set(input.skillProficiencies.filter((skill) => SKILL_BY_ID[skill]))]
+      : [],
     level: Math.max(1, Math.min(20, Math.floor(finite(input.level, 1)))),
+    // Experience this creature is worth when defeated. Monsters bring it from
+    // their stat block; manual tokens are worth nothing unless told otherwise.
+    xp: Math.max(0, Math.floor(finite(input.xp, 0))),
     initiativeBonus: Math.floor(finite(input.initiativeBonus)),
     size: TOKEN_SIZES.includes(input.size) ? input.size : "medium",
     attacks: normalizeTokenAttacks(input.attacks),
@@ -427,6 +440,7 @@ export function createMonsterToken(monster, { id, ordinal = 0, position, name } 
     monsterId: monster.id,
     creatureType: monster.subtype ? `${monster.creatureType} (${monster.subtype})` : monster.creatureType,
     challengeRating: monster.challengeRating,
+    xp: monster.xp,
     hp: monster.hp,
     maxHp: monster.hp,
     ac: monster.ac,
@@ -864,6 +878,9 @@ export function normalizeEncounter(encounter, tokens = []) {
     battleItems: normalizeBattleItems(encounter.battleItems, tokens),
     ammoSpentByToken: normalizeAmmoSpentByToken(encounter.ammoSpentByToken, tokens),
     ammunitionRecovered: Boolean(encounter.ammunitionRecovered),
+    // Experience is handed out once, by hand, from the completion card. The
+    // flag is what stops a second press from paying the party twice.
+    xpAwarded: Boolean(encounter.xpAwarded),
     winnerTokenId: tokenIds.has(encounter.winnerTokenId) ? encounter.winnerTokenId : null,
     log: normalizeEncounterLog(encounter.log),
     setupTokens: normalizeSetupSnapshot(encounter.setupTokens, tokenIds),

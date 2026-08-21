@@ -184,6 +184,41 @@ export const abilityModifier = (score) => Math.floor((Number(score) - 10) / 2);
 export const proficiencyBonus = (level) => 2 + Math.floor((Math.max(1, Math.min(20, level)) - 1) / 4);
 export const formatModifier = (value) => (value >= 0 ? `+${value}` : String(value).replace("-", "−"));
 
+/**
+ * Experience needed to reach each level, indexed from zero, so
+ * XP_THRESHOLDS[n] is the requirement for level n + 1. Level 1 costs nothing.
+ * Nightforge never levels a Hero on its own — the table exists so the sheet can
+ * say when a level is available and leave the choice to the person playing.
+ */
+export const XP_THRESHOLDS = Object.freeze([
+  0, 300, 900, 2700, 6500, 14000, 23000, 34000, 48000, 64000,
+  85000, 100000, 120000, 140000, 165000, 195000, 225000, 265000, 305000, 355000,
+]);
+
+export const MAX_LEVEL = XP_THRESHOLDS.length;
+
+const cleanExperience = (xp) => Math.max(0, Math.floor(Number(xp) || 0));
+
+export function levelForXp(xp) {
+  const total = cleanExperience(xp);
+  let level = 1;
+  for (let index = 1; index < XP_THRESHOLDS.length; index += 1) {
+    if (total >= XP_THRESHOLDS[index]) level = index + 1;
+  }
+  return level;
+}
+
+export const xpForLevel = (level) =>
+  XP_THRESHOLDS[Math.max(1, Math.min(MAX_LEVEL, Math.floor(Number(level) || 1))) - 1];
+
+/** Experience still owed before the next level, or null once level 20 is reached. */
+export function xpToNextLevel(xp) {
+  const total = cleanExperience(xp);
+  const level = levelForXp(total);
+  if (level >= MAX_LEVEL) return null;
+  return XP_THRESHOLDS[level] - total;
+}
+
 export function racialAbilityBonuses(raceId, subraceId) {
   const race = raceById(raceId);
   const selectedSubrace = subraceById(race.id, subraceId);
