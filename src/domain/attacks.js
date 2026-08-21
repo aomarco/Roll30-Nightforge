@@ -73,30 +73,69 @@ export const authoredAttackOptions = (token) =>
     key: `attack:${attack.id}`,
   }));
 
+/**
+ * Every creature can punch: one bludgeoning damage plus its Strength modifier,
+ * with proficiency, at a reach of five feet. It exists as a catalog-shaped
+ * object rather than a real item so it can never be owned, dropped, thrown, or
+ * enchanted — it is a capability, not equipment.
+ */
+export const UNARMED_STRIKE = Object.freeze({
+  id: "unarmed-strike",
+  name: "Unarmed Strike",
+  kind: "weapon",
+  typeLabel: "Unarmed",
+  weaponClass: "simple",
+  weaponRange: "melee",
+  categoryRange: "Simple Melee",
+  // A plain number, not dice: parseDamageDefinition reads it as a fixed 1 and
+  // rollWeaponDamage adds the ability modifier on top, which is the rule.
+  damageDice: 1,
+  damageType: "Bludgeoning",
+  normalRange: 5,
+  longRange: null,
+  throwRange: null,
+  versatileDamageDice: null,
+  properties: [],
+  propertyIds: [],
+});
+
+export const unarmedStrikeOption = () => ({
+  hand: "mainHand",
+  attackId: null,
+  attack: null,
+  authored: false,
+  unarmed: true,
+  weaponId: null,
+  weapon: UNARMED_STRIKE,
+  damageDice: UNARMED_STRIKE.damageDice,
+  supply: { ok: true, value: { kind: "none" } },
+  key: "unarmed:unarmed-strike",
+});
+
 export function attackOptionsForToken(token) {
   if (token?.attacks?.length) return authoredAttackOptions(token);
-  return equippedWeapons(token).map(({ hand, item, damageDice }) => ({
+  const equipped = equippedWeapons(token).map(({ hand, item, damageDice }) => ({
     hand: hand === "main" ? "mainHand" : "offHand",
     attackId: null,
     attack: null,
     authored: false,
+    unarmed: false,
     weaponId: item.id,
     weapon: item,
     damageDice,
     supply: attackSupplyAvailability(token, item, { usage: item.propertyIds?.includes("ammunition") ? "ranged" : "melee" }),
     key: `${hand}:${item.id}`,
   }));
+  // An empty-handed creature is never stranded with no legal Action.
+  return equipped.length ? equipped : [unarmedStrikeOption()];
 }
 
 export function mainAttackAvailability(scene) {
   const available = attackActionAvailability(scene);
   if (!available.ok) return available;
+  // Never empty: a creature holding nothing still has an unarmed strike, so
+  // there is no longer a "no weapon equipped" refusal to make.
   const options = attackOptionsForToken(available.value.token);
-  if (!options.length) return failure(
-    "NO_EQUIPPED_WEAPON",
-    `${available.value.token.name} has no equipped weapon available for Attack.`,
-    "End the turn or equip a weapon in Battle Setup before the next encounter.",
-  );
   if (options.every((option) => !option.supply.ok)) return failure(
     "NO_ATTACK_SUPPLIES",
     options[0].supply.message,
