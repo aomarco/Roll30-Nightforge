@@ -496,6 +496,7 @@ export function createHeroTokenSnapshot(hero, { id, ordinal = 0, position } = {}
     wisdom: derived.finalAbilities.wis,
     charisma: derived.finalAbilities.cha,
     saveProficiencies: hero.saveProficiencies || [],
+    skillProficiencies: hero.skillProficiencies || [],
     level: derived.level,
     initiativeBonus: derived.initiative,
     size: derived.size,
@@ -540,6 +541,30 @@ export const tokenSaveProfile = (token) => ABILITY_KEYS.map((ability) => ({
   ability,
   modifier: tokenSaveModifier(token, ability),
   proficient: (token?.saveProficiencies || []).includes(ability),
+}));
+
+export const skillById = (skillId) => SKILL_BY_ID[skillId] || null;
+
+/**
+ * A skill check is the governing ability's modifier plus the proficiency bonus
+ * when the creature is trained in that skill. Worn magic items are deliberately
+ * excluded — the implemented effects only cover attacks, armour class, and
+ * saves, and none of them claims to help with skills.
+ */
+export function tokenSkillModifier(token, skillId) {
+  const skill = SKILL_BY_ID[skillId];
+  if (!skill) return 0;
+  const base = abilityModifier(tokenAbilityScore(token, skill.ability));
+  const proficient = (token?.skillProficiencies || []).includes(skill.id);
+  return base + (proficient ? proficiencyBonus(token?.level) : 0);
+}
+
+export const tokenSkillProfile = (token) => SKILLS.map((skill) => ({
+  id: skill.id,
+  name: skill.name,
+  ability: skill.ability,
+  modifier: tokenSkillModifier(token, skill.id),
+  proficient: (token?.skillProficiencies || []).includes(skill.id),
 }));
 
 export function derivedTokenArmorClass(token) {

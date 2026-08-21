@@ -10,6 +10,8 @@ const makeCondition = ({
   incapacitated = false,
   immobile = false,
   autoCriticalMelee = false,
+  autoFailSaves = [],
+  saveModes = {},
 }) => Object.freeze({
   id,
   name,
@@ -22,6 +24,13 @@ const makeCondition = ({
   incapacitated,
   immobile,
   autoCriticalMelee,
+  // A creature that cannot move or react does not get to roll: the save fails
+  // outright. Kept as a list of ability keys rather than a boolean because only
+  // Strength and Dexterity behave this way.
+  autoFailSaves: Object.freeze([...autoFailSaves]),
+  // Per-ability advantage or disadvantage on a save, e.g. Restrained hampering
+  // Dexterity saves without touching the other five.
+  saveModes: Object.freeze({ ...saveModes }),
 });
 
 export const CONDITIONS = Object.freeze([
@@ -32,13 +41,13 @@ export const CONDITIONS = Object.freeze([
   makeCondition({ id: "grappled", name: "Grappled", abbreviation: "GRA", color: "#c78a54", note: "Movement is unavailable.", immobile: true }),
   makeCondition({ id: "incapacitated", name: "Incapacitated", abbreviation: "INC", color: "#d75f79", note: "Action, Bonus Action, Dash, and Swap are unavailable.", incapacitated: true }),
   makeCondition({ id: "invisible", name: "Invisible", abbreviation: "INV", color: "#66b9c8", note: "Own attacks have advantage; attacks against this token have disadvantage.", selfAttack: "advantage", vsMelee: "disadvantage", vsRanged: "disadvantage" }),
-  makeCondition({ id: "paralyzed", name: "Paralyzed", abbreviation: "PAR", color: "#e26c83", note: "Incapacitated and immobile; incoming attacks have advantage and melee hits automatically critical.", vsMelee: "advantage", vsRanged: "advantage", incapacitated: true, immobile: true, autoCriticalMelee: true }),
-  makeCondition({ id: "petrified", name: "Petrified", abbreviation: "PET", color: "#aa9b82", note: "Incapacitated and immobile; incoming attacks have advantage.", vsMelee: "advantage", vsRanged: "advantage", incapacitated: true, immobile: true }),
+  makeCondition({ id: "paralyzed", name: "Paralyzed", abbreviation: "PAR", color: "#e26c83", note: "Incapacitated and immobile; incoming attacks have advantage, melee hits automatically critical, and Strength and Dexterity saves fail automatically.", vsMelee: "advantage", vsRanged: "advantage", incapacitated: true, immobile: true, autoCriticalMelee: true, autoFailSaves: ["str", "dex"] }),
+  makeCondition({ id: "petrified", name: "Petrified", abbreviation: "PET", color: "#aa9b82", note: "Incapacitated and immobile; incoming attacks have advantage and Strength and Dexterity saves fail automatically.", vsMelee: "advantage", vsRanged: "advantage", incapacitated: true, immobile: true, autoFailSaves: ["str", "dex"] }),
   makeCondition({ id: "poisoned", name: "Poisoned", abbreviation: "POI", color: "#79ad63", note: "Own attacks have disadvantage.", selfAttack: "disadvantage" }),
   makeCondition({ id: "prone", name: "Prone", abbreviation: "PRO", color: "#d79a57", note: "Own attacks have disadvantage; adjacent attacks gain advantage while ranged attacks gain disadvantage.", selfAttack: "disadvantage", vsMelee: "advantage", vsRanged: "disadvantage" }),
-  makeCondition({ id: "restrained", name: "Restrained", abbreviation: "RES", color: "#bf765d", note: "Movement is unavailable, own attacks have disadvantage, and incoming attacks have advantage.", selfAttack: "disadvantage", vsMelee: "advantage", vsRanged: "advantage", immobile: true }),
-  makeCondition({ id: "stunned", name: "Stunned", abbreviation: "STU", color: "#e0b055", note: "Incapacitated and immobile; incoming attacks have advantage.", vsMelee: "advantage", vsRanged: "advantage", incapacitated: true, immobile: true }),
-  makeCondition({ id: "unconscious", name: "Unconscious", abbreviation: "UNC", color: "#657080", note: "Incapacitated and immobile; incoming attacks have advantage and melee hits automatically critical.", vsMelee: "advantage", vsRanged: "advantage", incapacitated: true, immobile: true, autoCriticalMelee: true }),
+  makeCondition({ id: "restrained", name: "Restrained", abbreviation: "RES", color: "#bf765d", note: "Movement is unavailable, own attacks have disadvantage, incoming attacks have advantage, and Dexterity saves have disadvantage.", selfAttack: "disadvantage", vsMelee: "advantage", vsRanged: "advantage", immobile: true, saveModes: { dex: "disadvantage" } }),
+  makeCondition({ id: "stunned", name: "Stunned", abbreviation: "STU", color: "#e0b055", note: "Incapacitated and immobile; incoming attacks have advantage and Strength and Dexterity saves fail automatically.", vsMelee: "advantage", vsRanged: "advantage", incapacitated: true, immobile: true, autoFailSaves: ["str", "dex"] }),
+  makeCondition({ id: "unconscious", name: "Unconscious", abbreviation: "UNC", color: "#657080", note: "Incapacitated and immobile; incoming attacks have advantage, melee hits automatically critical, and Strength and Dexterity saves fail automatically.", vsMelee: "advantage", vsRanged: "advantage", incapacitated: true, immobile: true, autoCriticalMelee: true, autoFailSaves: ["str", "dex"] }),
   makeCondition({ id: "exhaustion", name: "Exhaustion", abbreviation: "EXH", color: "#8f735f", note: "Tracked as a manual status; level-specific exhaustion effects are not inferred." }),
 ]);
 
@@ -81,6 +90,23 @@ export function targetConditionModes(conditions, rangeType = "melee") {
     return condition[field] ? [{ mode: condition[field], code: `target-${condition.id}`, label: `${condition.name} target` }] : [];
   });
 }
+
+export function conditionSaveModes(conditions, ability) {
+  return normalizeConditions(conditions).flatMap((conditionId) => {
+    const condition = CONDITION_BY_ID[conditionId];
+    const mode = condition.saveModes[ability];
+    return mode ? [{ mode, code: `save-${condition.id}`, label: `${condition.name} save` }] : [];
+  });
+}
+
+export const conditionAutoFailsSave = (conditions, ability) =>
+  normalizeConditions(conditions).some((conditionId) =>
+    CONDITION_BY_ID[conditionId].autoFailSaves.includes(ability));
+
+export const autoFailingSaveConditions = (conditions, ability) =>
+  normalizeConditions(conditions)
+    .map((conditionId) => CONDITION_BY_ID[conditionId])
+    .filter((condition) => condition.autoFailSaves.includes(ability));
 
 export const targetAutoCritical = (conditions, rangeType = "melee") =>
   rangeType === "melee" && normalizeConditions(conditions).some((conditionId) => CONDITION_BY_ID[conditionId].autoCriticalMelee);
