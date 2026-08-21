@@ -946,7 +946,111 @@
 .nf-state-battle-save-proficient small { color: var(--jade); }
 .nf-state-battle-save-proficient strong { color: var(--jade-hi); }
 
+/* Saves and skills are buttons now, so they need the affordances of one. */
+.nf-state-battle-save,
+.nf-state-battle-skill {
+  cursor: pointer;
+  transition: border-color .16s ease, background .16s ease, transform .16s ease;
+}
+
+.nf-state-battle-save:hover:not(:disabled),
+.nf-state-battle-skill:hover:not(:disabled) {
+  border-color: var(--jade-edge);
+  background: rgba(255,255,255,.07);
+  transform: translateY(-1px);
+}
+
+.nf-state-battle-save:disabled,
+.nf-state-battle-skill:disabled { cursor: default; opacity: .55; }
+
+.nf-state-battle-skills { margin-top: 2px; }
+
+.nf-state-battle-skill-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 11px;
+}
+
+.nf-state-battle-skill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 9px;
+  border-radius: var(--r-xs);
+  background: rgba(255,255,255,.035);
+  border: 1px solid var(--line);
+  text-align: left;
+}
+
+.nf-state-battle-skill small { font-size: 10px; color: var(--ink-3); }
+.nf-state-battle-skill strong { font-size: 13px; color: var(--ink); }
+.nf-state-battle-skill-proficient { background: var(--jade-tint); border-color: var(--jade-edge); }
+.nf-state-battle-skill-proficient small { color: var(--jade); }
+.nf-state-battle-skill-proficient strong { color: var(--jade-hi); }
+
+/* --------------------------------------- hit point adjustment and rolling */
+.nf-state-battle-vitality,
+.nf-state-battle-rolls { margin-top: 2px; }
+
+.nf-state-battle-vitality-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin-top: 9px;
+}
+
+.nf-state-battle-vitality-amount { flex: 1 1 auto; min-width: 0; }
+.nf-state-battle-vitality-row .btn { flex: 0 0 auto; }
+
+.nf-state-battle-temp {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+  padding: 2px 8px;
+  border: 1px solid rgba(95, 168, 245, 0.42);
+  border-radius: 999px;
+  background: rgba(95, 168, 245, 0.12);
+  color: var(--ally, #5fa8f5);
+  font-size: 10.5px;
+}
+
+.nf-state-battle-roll-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  margin-top: 9px;
+}
+
+.nf-state-battle-dc { flex: 0 0 118px; }
+
+.nf-state-battle-roll-modes {
+  display: flex;
+  flex: 1 1 auto;
+  gap: 5px;
+}
+
+.nf-state-battle-roll-mode { flex: 1 1 0; justify-content: center; }
+
 .nf-state-battle-conditions { margin-top: 2px; }
+
+/* ------------------------------------------------------- check cinematic */
+.nf-state-check-die-void {
+  display: grid;
+  place-items: center;
+  gap: 2px;
+  color: var(--foe, #f2617a);
+}
+
+.nf-state-check-verdict-success { color: var(--jade-hi); }
+.nf-state-check-verdict-failure { color: var(--foe, #f2617a); }
+.nf-state-check-verdict-neutral { color: var(--ink); }
+
+.nf-state-cinematic-absorbed { color: var(--ally, #5fa8f5); font-style: normal; }
+
+.nf-state-hero-xp-ready { color: var(--brass); }
 
 /* --------------------------------------------------------- command bar */
 .nf-state-command-bar {
