@@ -458,7 +458,10 @@ export function performWeaponAttack(scene, specification = {}, {
     // Multiattack spends one Action across several rolls: the Action only
     // closes once the creature's whole allowance has been used.
     const attacksMade = resources.attacksMade + 1;
-    const allowanceRemaining = attacksMade < resources.attackAllowance;
+    // A Loading weapon fires a single piece of ammunition per Action however
+    // large the Multiattack allowance is, so the first shot closes the Action.
+    const loading = hasProperty(option.weapon, "loading");
+    const allowanceRemaining = attacksMade < resources.attackAllowance && !loading;
     nextResources = {
       ...resources,
       attacksMade,
