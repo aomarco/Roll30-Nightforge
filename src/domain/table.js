@@ -337,6 +337,10 @@ export function normalizeTableToken(input = {}, { id, ordinal = 0 } = {}) {
     position: normalizePosition(input.position || input),
     hp: Math.max(0, Math.min(maxHp, Math.floor(finite(input.hp, maxHp)))),
     maxHp,
+    // Temporary hit points sit outside the maximum on purpose: they are a
+    // buffer in front of real health, not part of it, so they are not clamped
+    // to maxHp and are not restored by healing.
+    tempHp: Math.max(0, Math.floor(finite(input.tempHp, 0))),
     ac: Math.max(0, Math.floor(finite(input.ac, 10))),
     baseSpeed: Math.max(0, Math.floor(finite(input.baseSpeed ?? input.speed, 30))),
     strength: Math.max(1, Math.floor(finite(input.strength, 10))),

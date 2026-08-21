@@ -125,6 +125,9 @@ export default function AttackCinematic({ cinematic, skip }) {
               {outcome.hit
                 ? <>{outcome.targetName}: <strong className="numeral">{outcome.previousHp}</strong> → <strong className="numeral">{outcome.nextHp}</strong> HP</>
                 : <>{outcome.targetName} takes no damage and stays on <strong className="numeral">{outcome.nextHp}</strong> HP</>}
+              {outcome.absorbedByTempHp > 0 && (
+                <em className="nf-state-cinematic-absorbed"> · <strong className="numeral">{outcome.absorbedByTempHp}</strong> absorbed by temporary hit points</em>
+              )}
             </p>
           )}
         </div>

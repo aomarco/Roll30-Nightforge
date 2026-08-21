@@ -14,6 +14,7 @@ import {
   completeEncounterIfNeeded,
 } from "./encounter.js";
 import { activeTurnContext, attackActionAvailability, segmentsIntersect } from "./combat.js";
+import { applyDamageToPools } from "./vitality.js";
 import {
   appendEncounterLog,
   normalizeTableTokens,
@@ -443,8 +444,15 @@ export function performWeaponAttack(scene, specification = {}, {
     offHand: !option.authored && kind === ATTACK_KIND_BONUS,
     random,
   }) : null;
-  const nextTargetHp = hit ? Math.max(0, target.hp - damage.total) : target.hp;
-  const damagedTokens = hit ? updateToken(eligible.value.tokens, target.id, { hp: nextTargetHp }) : eligible.value.tokens;
+  // Temporary hit points are a buffer in front of real health, so a hit spends
+  // them before it touches the target's own hit points.
+  const pools = hit
+    ? applyDamageToPools(target, damage.total)
+    : { absorbed: 0, nextHp: target.hp, nextTempHp: target.tempHp };
+  const nextTargetHp = pools.nextHp;
+  const damagedTokens = hit
+    ? updateToken(eligible.value.tokens, target.id, { hp: pools.nextHp, tempHp: pools.nextTempHp })
+    : eligible.value.tokens;
   let nextResources;
   if (kind === ATTACK_KIND_BONUS) {
     nextResources = {
@@ -533,6 +541,9 @@ export function performWeaponAttack(scene, specification = {}, {
     damage,
     previousHp: target.hp,
     nextHp: nextTargetHp,
+    absorbedByTempHp: pools.absorbed,
+    previousTempHp: target.tempHp,
+    nextTempHp: pools.nextTempHp,
     supply: supplied.supply,
     battleItem: supplied.battleItem || null,
     completed: completed.completed,
