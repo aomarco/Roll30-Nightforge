@@ -1,232 +1,243 @@
-# Working on Nightforge
+# Working on Nightforge — speed first
 
-Read this before you write code. It is short on purpose.
+Read this before changing the app.
 
-The workflow is six steps, in order:
+**The default goal is to ship the requested change quickly.** Do not turn a
+small fix into a release project. Use the smallest amount of process that gives
+real confidence, avoid running the same verification twice, and let GitHub CI
+perform the exhaustive gate after the work is pushed.
 
-1. **Build what was asked for.**
-2. **Comment as you go.**
-3. **Check that it actually worked.**
-4. **Send it to GitHub.**
-5. **Update `docs/FEATURES.md`.**
-6. **Update `docs/TODO.md`.**
+The default workflow is:
 
-Steps 5 and 6 are not paperwork. Read the next section before you skip them.
+1. **Understand the exact request.**
+2. **Make the smallest complete change.**
+3. **Run focused verification.**
+4. **Update only documentation made stale by the change.**
+5. **Commit and push immediately.**
+6. **Let CI run the exhaustive gate.**
 
----
-
-## Why the two documents matter more here than anywhere else
-
-Most of this codebase was written fast, by AI agents, in sessions that no
-longer exist. That has one consequence that shapes everything else:
-
-**Whoever picks this up next starts from nothing.** Not "a bit rusty" —
-nothing. A fresh agent has never seen this project, cannot remember the last
-session, and cannot ask the previous one what it was thinking. Every session is
-someone's first day. The only thing that survives between them is what got
-written into the repository.
-
-The code alone can't carry it. Reading the source tells you what the app does
-right now. It does not tell you:
-
-- what was **tried and abandoned**, so the next session tries it again
-- what was **deliberately left out**, so the next session "fixes" it back in
-- what is **half-built on purpose**, waiting on something else first
-- what is **already finished**, so the next session builds a second copy of it
-
-That is what the two documents are for. `docs/FEATURES.md` is the memory of
-what exists. `docs/TODO.md` is the memory of what doesn't, and why.
-
-**A stale document is worse than no document.** Nobody half-trusts a document
-— they read it and believe it. If `FEATURES.md` claims a feature that was
-deleted, the next agent spends an hour hunting for code that isn't there and
-then writes it again from scratch. If `TODO.md` still lists something you
-finished, it gets built twice and the two versions disagree. If a decision you
-made against something isn't recorded with its reason, it comes back in six
-months and nobody remembers why it was dropped the first time.
-
-The trade is lopsided and it is always worth taking. Updating both documents
-costs about two minutes at the end of a piece of work. Not updating them costs
-the next session hours, and costs you a codebase that slowly stops matching its
-own description.
-
-So: the work is not finished when the code runs. It is finished when the code
-runs, the gate passes, it is pushed, and the two documents are true again.
+If the change qualifies for the full-safety lane below, use that lane instead.
 
 ---
 
-## 1 — Build what was asked for
+## Choose a lane before starting
 
-Build the thing that was actually asked for. Not a smaller version of it, not a
-larger one, not the refactor you noticed on the way past.
+### Fast lane — the default
 
-- If you find a real problem with the request, say so in a sentence, then keep
-  building. Flag it; don't silently change the job.
-- If you spot something else that needs doing, write it in `docs/TODO.md` and
-  carry on. That is what step 5 is for.
-- Finish the whole thing. If part of it turns out to be blocked, finish
-  everything else and say plainly what you left out and why.
+Use the fast lane for:
 
----
+- isolated bug fixes
+- small UI or copy changes
+- narrow combat-rule corrections
+- documentation changes
+- focused features with an obvious boundary
+- test-only changes
 
-## 2 — Comment as you go, not afterwards
+Fast-lane rules:
 
-Write comments while the reasoning is still in your head. A comment added a day
-later is a guess about your own past thinking.
+- Work on the current branch. Direct commits to `main` are allowed for a small,
+  understood change unless the user asks for a branch or pull request.
+- Inspect only the files needed to understand the change. Do not scan the whole
+  repository when a focused search answers the question.
+- Run the narrowest relevant tests locally. Do not run `npm run verify` by
+  default; GitHub CI already runs it after push.
+- For a UI change, exercise the changed journey once. Do not walk the rest of
+  the app.
+- Commit and push as soon as focused verification passes.
+- Watch CI. If CI fails, fix the actual failure and push again.
 
-**Explain why, not what.** Anyone can read `hp = Math.max(0, hp)` and see that
-it clamps. Nobody can see *why* it clamps at zero instead of allowing negatives,
-or what breaks downstream if it doesn't.
+### Full-safety lane — only when risk justifies it
 
-Good:
+Use the full-safety lane when the change touches any of these:
 
-```js
-// A melee attack keeps distance bands only when it can be thrown; that is
-// what turns "swing it" into "swing it or throw it".
-const banded = rangeKind === "ranged" || throwable;
-```
+- storage format, recovery, persistence, or migration behaviour
+- authentication, security, permissions, or sensitive data
+- dependencies, build configuration, deployment, or GitHub Actions
+- generated catalogs or monster generation
+- a broad refactor spanning unrelated systems
+- destructive data operations
+- a release promotion to the production Roll30 repository
+- anything the user explicitly asks to verify exhaustively
 
-Useless:
+Full-safety rules:
 
-```js
-// Set banded to true if ranged or throwable
-const banded = rangeKind === "ranged" || throwable;
-```
+1. Create a branch.
+2. Implement and run focused tests while iterating.
+3. Perform one short manual sanity check when UI is affected.
+4. Run `npm run verify` once at the end.
+5. Update relevant documentation.
+6. Commit, push, open a pull request, and wait for CI.
 
-**Comment these things every time:**
-
-- Any number that isn't obvious. Where did `4000` come from? Why `0.35`?
-- Any rule that comes from D&D rather than from the code. Say which rule.
-- Any place you deliberately did the unusual thing. Say what the obvious
-  approach was and why it fails here.
-- Any function whose name doesn't fully carry its job.
-- Anything that will look like a bug to someone who doesn't know the history.
-
-**Don't comment these:**
-
-- What a well-named function does. Rename it instead.
-- Line-by-line narration of plain code.
-- Anything that will go stale the moment the code beside it changes.
-
-The bar to aim for: a competent programmer who has never seen this project
-should be able to open any file and follow what is happening and why.
+When uncertain, prefer the fast lane unless a failure could lose user data,
+break deployment, or affect several unrelated systems.
 
 ---
 
-## 3 — Check that it actually worked
+## 1 — Understand the exact request
 
-Two different questions, and you need both answered before anything is pushed.
+Build what was actually requested: no smaller substitute, no speculative
+expansion, and no unrelated refactor.
 
-**Did the thing you built actually do what was asked?** Open the app and use
-it. Click the button, roll the dice, drag the token, watch the number change.
+- Reproduce a reported bug with the shortest reliable path.
+- Read the local code around that path before proposing a solution.
+- If another issue appears, record it only when useful and continue with the
+  requested work.
+- Ask a question only when a missing decision would materially change the
+  result. Otherwise make the safest reasonable assumption and move.
+
+Do not spend time producing a formal plan for a tiny change. A one-sentence
+working note is enough.
+
+---
+
+## 2 — Make the smallest complete change
+
+Fix the cause, not only the visible symptom, but keep the edit tightly scoped.
+
+- Reuse existing domain functions and UI patterns.
+- Avoid opportunistic cleanup unless it is required for the fix.
+- Preserve unrelated user changes in the worktree.
+- Do not change storage schema versions for ordinary new fields; give new
+  fields backwards-compatible defaults in normalizers.
+
+### Comments
+
+Comments are for reasoning that the code cannot express clearly. Add one when:
+
+- a D&D rule or product decision explains the behaviour
+- an unusual implementation prevents a subtle bug
+- a non-obvious constraint or compatibility requirement must survive
+
+Do not pause to comment obvious code, narrate each line, or document unchanged
+areas. Clear names are faster to maintain than redundant comments.
+
+---
+
+## 3 — Run focused verification
+
+Match verification to the change:
+
+| Change | Local verification before push |
+|---|---|
+| Documentation or copy only | `git diff --check` and read the diff |
+| Pure domain rule | Relevant unit test file |
+| Small component/UI change | Relevant unit/render test plus one changed journey |
+| Browser interaction bug | One targeted browser regression |
+| Storage, deployment, dependencies, broad refactor | Full-safety lane and `npm run verify` |
+
+Useful focused commands include:
 
 ```bash
-npm run dev
+node --test --test-name-pattern="relevant behaviour" src/relevant.test.js
+npm run test:reactions
+npm run test:reactions:render
+npx playwright test --grep "relevant journey"
+git diff --check
 ```
 
-A passing test is not proof that a feature works — it is proof that the code
-you wrote does what you thought you wrote. Plenty of things pass their tests
-and are still wrong on screen: the control renders off the edge, the refusal
-message never appears, the value saves but doesn't survive a reload. Look at
-it.
+Use whichever command actually covers the change; do not run all of them from
+habit.
 
-**Keep this check short.** One quick pass over the thing you actually built,
-then move on. Do not walk the whole app, do not re-check features you did not
-touch, and do not write a throwaway script to drive the browser when clicking
-the button yourself answers the question in ten seconds. The point is a single
-sanity check, not a second test suite — you already have one of those.
+### Avoid duplicate work
 
-**Did you break anything else?** Run the gate. Once, at the end — not between
-pieces of work.
+GitHub CI runs the complete verification chain. In the fast lane, do **not** run
+the full chain locally and then wait for the identical chain remotely. Focused
+local verification catches quick mistakes; CI supplies broad regression
+coverage.
+
+If focused verification fails, fix it before pushing. If CI fails, inspect the
+specific failing job rather than rerunning unrelated local suites.
+
+---
+
+## 4 — Keep documentation truthful, not ceremonial
+
+The repository documents remain the memory between AI sessions, but only touch
+the document whose truth changed.
+
+### Update `docs/FEATURES.md` when:
+
+- the app gained or lost user-visible behaviour
+- a documented limit, number, name, or rule changed
+- an implementation decision future work must preserve changed
+
+### Update `docs/TODO.md` when:
+
+- a listed item was completed
+- a real new gap was discovered
+- a feature was deliberately rejected and the reason should survive
+
+Do **not** edit both files automatically. A code refactor, test improvement,
+workflow edit, or typo fix may require neither. Documentation should take
+minutes, not become a second implementation phase.
+
+---
+
+## 5 — Commit and push immediately
+
+Once focused verification passes:
+
+1. Review `git diff --check` and `git status`.
+2. Commit with a short message saying what outcome changed.
+3. Push without rerunning already-passing tests.
+
+For fast-lane work on `main`, push directly and let the normal GitHub workflow
+verify and deploy it. Use a branch and pull request when the user requests one,
+repository protection requires one, or the change belongs in the full-safety
+lane.
+
+Do not wait for a second local review cycle unless the diff reveals a real
+problem.
+
+---
+
+## 6 — Let CI perform the exhaustive gate
+
+After pushing:
+
+- Watch the relevant GitHub workflow.
+- If it passes, report the commit and deployment outcome.
+- If it fails, inspect the failing step, make a focused correction, and push.
+- Do not run live acceptance unless deployment behaviour changed, the user asks
+  for it, or CI cannot prove the served build works.
+
+The full command remains available when genuinely needed:
 
 ```bash
 npm run verify
 ```
 
-This is the same chain CI runs: every unit test, every render smoke suite,
-every phase verifier, the browser journeys, the dependency audit, and a
-production build. It takes a few minutes. Run it anyway.
-
-If either answer is no, go back to step 1. Do not push it and fix it later.
+It runs every unit test, render smoke suite, phase verifier, browser journey,
+dependency audit, and production build. It is intentionally **not** the default
+local command for small changes.
 
 ---
 
-## 4 — Send it to GitHub
+## Fast-lane completion checklist
 
-Commit and push. Work goes on a branch, not straight onto `main`.
+- [ ] The requested change is complete and tightly scoped
+- [ ] The most relevant focused test passed
+- [ ] UI was checked once if UI changed
+- [ ] Documentation made stale by the change was corrected
+- [ ] `git diff --check` passed
+- [ ] The work was committed and pushed
+- [ ] CI was watched to completion
 
-Say what changed and why in the commit message. The diff already says what
-moved; the message is for the reason behind it.
-
----
-
-## 5 — Update `docs/FEATURES.md`
-
-`docs/FEATURES.md` describes the whole app in plain English. It is the single
-place anyone goes to find out what Nightforge does. It is only useful if it is
-true.
-
-1. **Add** entries for anything the app can now do that it couldn't before.
-2. **Remove** anything that is no longer true. This matters more than adding.
-   A missing feature is an inconvenience; a documented feature that doesn't
-   exist sends the next person hunting for code that was deleted.
-3. **Correct** anything that shifted — counts, limits, names, behaviour.
-   The document quotes real numbers. If you changed one, change it here.
-4. **Record the reason** if you made a real decision. One clause on the end of
-   the entry is enough. "Frozen at 1 because bumping it wipes every save."
-
-Finished means finished. Not "the code works" — the code works, the tests pass,
-and the document matches reality.
-
----
-
-## 6 — Update `docs/TODO.md`
-
-`docs/TODO.md` is what's left to build — and, just as importantly, what was
-considered and turned down. It is the only record of the thinking that never
-made it into the code.
-
-- Cross things off when you build them.
-- Add things when you discover them, including the small ones you found while
-  doing something else. If you don't write it down it does not exist.
-- If you deliberately decide **not** to build something, don't just delete the
-  line — move it to the "Decided against" section with the reason. Otherwise
-  someone re-proposes it in six months and nobody remembers why it was dropped.
-
----
-
-## The check before you call it done
-
-- [ ] The thing that was asked for is built, all of it
-- [ ] New code carries comments that explain the reasoning
-- [ ] You opened the app and watched the change work
-- [ ] `npm run verify` passed
-- [ ] The work is committed and pushed
-- [ ] `docs/FEATURES.md` matches what the app actually does now
-- [ ] `docs/TODO.md` reflects what is genuinely left
+That is enough. Do not add ceremony after every box is checked.
 
 ---
 
 ## Things that will bite you
 
-A short list of traps that are not obvious from reading the code. The full
-reasoning for each is in `docs/FEATURES.md`.
-
-- **Never bump `NIGHTFORGE_SCHEMA_VERSION`.** The version check is a strict
-  mismatch with no migration path — a bump discards every existing save. Add
-  new fields by giving them defaults in the normalizer instead. That is
-  backwards-compatible for free.
-- **Domain code stays pure.** No `window`, no `localStorage`, no `Date.now()`,
-  no `Math.random()` reached for directly. Randomness and clocks arrive as
-  arguments so tests can pin them. Phase verifiers enforce this and will fail
-  the build.
-- **Verifiers grep for literal source text.** Some phase verifiers assert on
-  exact strings in the source, not on behaviour. Innocent refactors can fail
-  them. If a verifier fails on code you believe is correct, read the verifier
-  before changing the code.
-- **SRD source data stays out of the repo.** `DND 5E Data/` is gitignored.
-  Generators read it from a path you supply; only their generated output is
-  committed.
-- **Generated files are not editable.** `catalog.generated.js` and
-  `monsters.generated.js` are build artefacts. Change the generator in
-  `scripts/` and re-run it.
+- **Never bump `NIGHTFORGE_SCHEMA_VERSION` casually.** The version check has no
+  migration path and a bump can discard existing saves. Prefer defaults in the
+  normalizer.
+- **Domain code stays pure.** No `window`, `localStorage`, `Date.now()`, or
+  direct `Math.random()` access. Inject clocks and randomness.
+- **Some verifiers grep literal source text.** Read a failing verifier before
+  rewriting correct code to satisfy it.
+- **SRD source data stays out of the repository.** Generators may read it from a
+  supplied local path; only generated output is committed.
+- **Generated files are not hand-edited.** Change the generator and regenerate.
+- **The production Roll30 repository is separate.** A Nightforge push does not
+  authorize or imply production promotion.
