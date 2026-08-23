@@ -4,7 +4,7 @@ import {
   isIncapacitated,
   targetAutoCritical,
   targetConditionModes,
-  toggleCondition,
+  changeCondition,
 } from "./conditions.js";
 import { applyDamageDefense, damageDefenseText } from "./damageTypes.js";
 import { abilityModifier, proficiencyBonus } from "./heroes.js";
@@ -213,6 +213,15 @@ export function reactionAttackAvailability(scene, reactorId) {
     `${token.name} has already used a reaction this round.`,
     "A creature gets one reaction, and it refreshes at the start of its own turn.",
   );
+  const round = Math.max(1, Math.floor(Number(scene.encounter.round) || 1));
+  const order = scene.encounter.initiativeOrder || [];
+  const reactorIndex = order.indexOf(token.id);
+  const activeIndex = Math.max(0, Math.floor(Number(scene.encounter.activeIndex) || 0));
+  if (round === 1 && (scene.encounter.surprisedTokenIds || []).includes(token.id) && reactorIndex >= activeIndex) return failure(
+    "REACTION_SURPRISED",
+    `${token.name} cannot react before its surprised first turn has passed.`,
+    "The reaction becomes available after its place in round one.",
+  );
   return success({
     tokens,
     token,
@@ -221,6 +230,29 @@ export function reactionAttackAvailability(scene, reactorId) {
     // roll only reads `swapped` from this, which is never true for one.
     resources: createTurnResources(token),
     options: attackOptionsForToken(token),
+  });
+}
+
+export function readiedAttacksFor(scene, trigger, targetTokenId) {
+  if (!scene?.encounter || scene.encounter.status !== "active") return [];
+  const tokens = normalizeTableTokens(scene.tokens);
+  const target = tokens.find((entry) => entry.id === targetTokenId);
+  if (!target) return [];
+  return tokens.flatMap((reactor) => {
+    const ready = reactor.readiedAction;
+    if (!ready || ready.trigger !== trigger || ready.targetTokenId !== target.id) return [];
+    if (reactor.faction === target.faction || !reactionAttackAvailability(scene, reactor.id).ok) return [];
+    return [{
+      type: "ready",
+      reactorId: reactor.id,
+      reactorName: reactor.name,
+      targetId: target.id,
+      targetName: target.name,
+      weaponId: ready.weaponId,
+      hand: ready.hand,
+      attackId: ready.attackId,
+      trigger,
+    }];
   });
 }
 
@@ -551,8 +583,18 @@ export function performWeaponAttack(scene, specification = {}, {
   // and nothing at all from anybody's turn. The mover is mid-turn while this
   // resolves, so writing turn resources here would hand their remaining Action
   // and movement to whoever happened to swing at them.
+  const reactionRefreshedAtStartedTurn = kind === ATTACK_KIND_REACTION
+    && specification.reactionType === "ready"
+    && specification.readyTrigger === "target-ends-turn"
+    && scene.encounter.initiativeOrder?.[scene.encounter.activeIndex] === attacker.id;
   const reactionTokens = kind === ATTACK_KIND_REACTION
-    ? updateToken(damagedTokens, attacker.id, { reactionSpent: true })
+    ? updateToken(damagedTokens, attacker.id, {
+      // The UI saves an end-of-turn transition before presenting its reaction.
+      // If that transition began the reactor's own turn, the reaction has
+      // already refreshed for the new round and remains available.
+      reactionSpent: !reactionRefreshedAtStartedTurn,
+      ...(specification.reactionType === "ready" ? { readiedAction: null } : {}),
+    })
     : damagedTokens;
   // Help buys one attack roll, hit or miss, so it is spent the moment the die
   // is thrown at the enemy it named. Without this a single Help would carry
@@ -594,7 +636,7 @@ export function performWeaponAttack(scene, specification = {}, {
   const attackEncounter = {
     ...scene.encounter,
     ...(kind === ATTACK_KIND_REACTION ? {} : { resources: { [attacker.id]: nextResources } }),
-    log: appendEncounterLog(scene.encounter.log, `${attacker.name} ${kind === ATTACK_KIND_REACTION ? "takes an opportunity attack on" : "attacks"} ${target.name} with ${option.weapon.name}: ${verdict}${hit && !pools.dyingHit ? ` for ${defense.amount} damage` : ""}.${hit ? `${damageDefenseText(defense)}${damageStateText(target, pools)}` : ""}`),
+    log: appendEncounterLog(scene.encounter.log, `${attacker.name} ${kind === ATTACK_KIND_REACTION ? specification.reactionType === "ready" ? "releases a readied attack on" : "takes an opportunity attack on" : "attacks"} ${target.name} with ${option.weapon.name}: ${verdict}${hit && !pools.dyingHit ? ` for ${defense.amount} damage` : ""}.${hit ? `${damageDefenseText(defense)}${damageStateText(target, pools)}` : ""}`),
   };
   const supplied = applyAttackSupplyEffects({
     scene,
@@ -868,7 +910,7 @@ export function opportunityAttacksFor(scene, plan, viewport) {
   return reactions;
 }
 
-export function toggleBattleCondition(scene, tokenId, conditionId) {
+export function toggleBattleCondition(scene, tokenId, conditionId, { durationRounds = null } = {}) {
   if (!scene?.encounter || scene.encounter.status !== "active") return failure(
     "ACTIVE_BATTLE_REQUIRED",
     "Conditions can be changed only during an active Battle.",
@@ -877,7 +919,16 @@ export function toggleBattleCondition(scene, tokenId, conditionId) {
   const tokens = normalizeTableTokens(scene.tokens);
   const token = tokens.find((entry) => entry.id === tokenId);
   if (!token) return failure("CONDITION_TOKEN_MISSING", "That token is no longer on this Table.", "Select another token.");
-  const changed = toggleCondition(token.conditions, conditionId);
+  const changed = changeCondition(token, conditionId, {
+    currentRound: scene.encounter.round,
+    durationRounds,
+  });
   if (!changed.ok) return changed;
-  return success({ tokens: updateToken(tokens, tokenId, { conditions: changed.value }) }, { condition: changed.condition, active: changed.value.includes(changed.condition.id) });
+  return success({
+    tokens: updateToken(tokens, tokenId, {
+      conditions: changed.value,
+      conditionExpiries: changed.conditionExpiries,
+      ...(changed.active ? {} : { grappledById: token.conditions.includes("grappled") && changed.condition.id === "grappled" ? null : token.grappledById }),
+    }),
+  }, { condition: changed.condition, active: changed.active });
 }

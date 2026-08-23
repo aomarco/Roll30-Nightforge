@@ -5225,3 +5225,54 @@ export const WORN_MAGIC_ITEMS = Object.freeze([
   }
 ]);
 
+export const HEALING_POTIONS = Object.freeze([
+  {
+    "id": "potion-of-healing-common",
+    "name": "Potion of Healing",
+    "kind": "magic-item",
+    "typeLabel": "Magic item",
+    "itemCategory": "Potion",
+    "rarity": "Common",
+    "implementedEffect": "healing-potion",
+    "source": "SRD 5.1",
+    "healingDice": 2,
+    "healingBonus": 2
+  },
+  {
+    "id": "potion-of-healing-greater",
+    "name": "Potion of Greater Healing",
+    "kind": "magic-item",
+    "typeLabel": "Magic item",
+    "itemCategory": "Potion",
+    "rarity": "Uncommon",
+    "implementedEffect": "healing-potion",
+    "source": "SRD 5.1",
+    "healingDice": 4,
+    "healingBonus": 4
+  },
+  {
+    "id": "potion-of-healing-superior",
+    "name": "Potion of Superior Healing",
+    "kind": "magic-item",
+    "typeLabel": "Magic item",
+    "itemCategory": "Potion",
+    "rarity": "Rare",
+    "implementedEffect": "healing-potion",
+    "source": "SRD 5.1",
+    "healingDice": 8,
+    "healingBonus": 8
+  },
+  {
+    "id": "potion-of-healing-supreme",
+    "name": "Potion of Supreme Healing",
+    "kind": "magic-item",
+    "typeLabel": "Magic item",
+    "itemCategory": "Potion",
+    "rarity": "Very Rare",
+    "implementedEffect": "healing-potion",
+    "source": "SRD 5.1",
+    "healingDice": 10,
+    "healingBonus": 20
+  }
+]);
+

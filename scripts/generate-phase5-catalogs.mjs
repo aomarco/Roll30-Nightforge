@@ -176,9 +176,21 @@ const wornMagicItems = Object.entries(wornEffects).map(([id, effect]) => {
   return magicShape(entry, effect);
 });
 
-const expectedCounts = { weapons: 36, ammunition: 4, armor: 13, gear: 183, magicItems: 113, wornMagicItems: 6 };
+const healingPotionEffects = Object.freeze({
+  "potion-of-healing-common": { dice: 2, bonus: 2 },
+  "potion-of-healing-greater": { dice: 4, bonus: 4 },
+  "potion-of-healing-superior": { dice: 8, bonus: 8 },
+  "potion-of-healing-supreme": { dice: 10, bonus: 20 },
+});
+const healingPotions = Object.entries(healingPotionEffects).map(([id, healing]) => {
+  const entry = magicSource.find((candidate) => candidate.index === id);
+  if (!entry) throw new Error(`Missing healing potion record: ${id}`);
+  return { ...magicShape(entry, "healing-potion"), healingDice: healing.dice, healingBonus: healing.bonus };
+});
+
+const expectedCounts = { weapons: 36, ammunition: 4, armor: 13, gear: 183, magicItems: 113, wornMagicItems: 6, healingPotions: 4 };
 for (const [name, expected] of Object.entries(expectedCounts)) {
-  const actual = ({ weapons, ammunition, armor, gear, magicItems, wornMagicItems })[name].length;
+  const actual = ({ weapons, ammunition, armor, gear, magicItems, wornMagicItems, healingPotions })[name].length;
   if (actual !== expected) throw new Error(`${name}: expected ${expected}, received ${actual}`);
 }
 
@@ -193,8 +205,9 @@ const output = [
   serialize("GEAR", gear),
   serialize("MAGIC_ITEMS", magicItems),
   serialize("WORN_MAGIC_ITEMS", wornMagicItems),
+  serialize("HEALING_POTIONS", healingPotions),
   "",
 ].join("\n\n");
 
 await writeFile(outputFile, output, "utf8");
-console.log(`Generated ${weapons.length} weapons, ${ammunition.length} ammunition, ${armor.length} armor, ${gear.length} gear, ${magicItems.length} inert magic items, and ${wornMagicItems.length} worn magic items.`);
+console.log(`Generated ${weapons.length} weapons, ${ammunition.length} ammunition, ${armor.length} armor, ${gear.length} gear, ${magicItems.length} inert magic items, ${wornMagicItems.length} worn magic items, and ${healingPotions.length} healing potions.`);

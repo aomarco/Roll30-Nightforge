@@ -268,7 +268,7 @@ function CatalogDrawer({ hero, filters, setFilters, run, close, busy }) {
       <aside ref={dialogRef} className="drawer nf-state-dialog nf-state-gear-drawer" role="dialog" aria-modal="true" aria-labelledby="catalog-title" tabIndex={-1}>
         <div className="drawer-top"><div><span className="kicker kicker-brass">The equipment ledger</span><h2 id="catalog-title">Add an item</h2></div><button className="glyph" onClick={close} aria-label="Close"><X size={17} /></button></div>
         <div className="drawer-body">
-          <div className="seek"><Search size={16} /><input className="inp" aria-label="Search the complete equipment catalog" value={filters.text} onChange={update("text")} placeholder="Search all 355 items…" autoFocus /></div>
+          <div className="seek"><Search size={16} /><input className="inp" aria-label="Search the complete equipment catalog" value={filters.text} onChange={update("text")} placeholder="Search all 359 items…" autoFocus /></div>
           <div className="nf-state-catalog-filters">
             <label className="field"><span className="label">Item type</span><select className="sel" value={filters.kind} onChange={update("kind")}>{TYPE_OPTIONS.map(([value, label]) => <option value={value} key={label}>{label}</option>)}</select></label>
             <label className="field"><span className="label">Sort</span><select className="sel" value={filters.sort} onChange={update("sort")}><option value="name">Name A–Z</option><option value="cost-asc">Cost low–high</option><option value="cost-desc">Cost high–low</option></select></label>

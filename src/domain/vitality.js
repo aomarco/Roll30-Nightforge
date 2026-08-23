@@ -1,5 +1,9 @@
 import { applyDamageDefense, damageDefenseText } from "./damageTypes.js";
+import { ITEM_BY_ID } from "./catalog.js";
+import { activeTurnContext, chebyshevFeet } from "./combat.js";
+import { isIncapacitated } from "./conditions.js";
 import { completeEncounterIfNeeded } from "./encounter.js";
+import { changeInventory } from "./items.js";
 import { appendEncounterLog, DEATH_SAVES_REQUIRED, isStable, normalizeTableTokens, updateToken } from "./table.js";
 
 const success = (value, metadata = {}) => ({ ok: true, value, ...metadata });
@@ -177,6 +181,7 @@ export function healToken(scene, tokenId, amount) {
       deathSaveSuccesses: 0,
       deathSaveFailures: 0,
       conditions: token.conditions.filter((condition) => condition !== "unconscious"),
+      conditionExpiries: Object.fromEntries(Object.entries(token.conditionExpiries || {}).filter(([condition]) => condition !== "unconscious")),
     }
     : { hp: nextHp };
   return success({
@@ -189,6 +194,53 @@ export function healToken(scene, tokenId, amount) {
       ),
     },
   }, { outcome: { tokenId, tokenName: token.name, requested, restored, previousHp: token.hp, nextHp, revived } });
+}
+
+export function healingPotionAvailability(scene, targetTokenId, viewport) {
+  const context = activeTurnContext(scene);
+  if (!context.ok) return context;
+  const { token, tokens, resources } = context.value;
+  if (token.hp <= 0 || isIncapacitated(token.conditions)) return failure("POTION_USER_INCAPACITATED", `${token.name} cannot use a potion while incapacitated or down.`, "An adjacent ally can administer one instead.");
+  if (resources.actionSpent) return failure("POTION_ACTION_SPENT", "Using a potion requires an available Action.", "End the turn to refresh the Action.");
+  const potions = token.inventory.flatMap((entry) => {
+    const item = ITEM_BY_ID[entry.itemId];
+    return item?.implementedEffect === "healing-potion" && entry.quantity > 0 ? [{ item, quantity: entry.quantity }] : [];
+  });
+  if (!potions.length) return failure("POTION_NONE_OWNED", `${token.name} has no healing potion.`, "Add or loot a healing potion first.");
+  const targets = tokens.filter((entry) => !entry.dead
+    && entry.hp < entry.maxHp
+    && (entry.id === token.id || chebyshevFeet(token.position, entry.position, viewport) <= 5));
+  const target = targetTokenId ? targets.find((entry) => entry.id === targetTokenId) : targets[0];
+  if (!target) return failure(
+    targetTokenId ? "POTION_TARGET_INVALID" : "POTION_NO_TARGET",
+    targetTokenId ? "That creature cannot receive this potion." : "Nobody within reach needs a healing potion.",
+    "Choose yourself or a wounded living creature within five feet.",
+  );
+  return success({ ...context.value, target, targets, potions });
+}
+
+export function useHealingPotion(scene, itemId, targetTokenId, viewport, { random = Math.random } = {}) {
+  const available = healingPotionAvailability(scene, targetTokenId, viewport);
+  if (!available.ok) return available;
+  const { token, target, resources } = available.value;
+  const potion = available.value.potions.find((entry) => entry.item.id === itemId);
+  if (!potion) return failure("POTION_NOT_OWNED", "That healing potion is no longer in the active creature's inventory.", "Choose an available potion.");
+  const rolls = Array.from({ length: potion.item.healingDice }, () => Math.floor(Math.max(0, Math.min(0.999999999999, Number(random?.()) || 0)) * 4) + 1);
+  const rolled = rolls.reduce((total, die) => total + die, potion.item.healingBonus);
+  const healed = healToken(scene, target.id, rolled);
+  if (!healed.ok) return healed;
+  const healedUser = healed.value.tokens.find((entry) => entry.id === token.id);
+  const consumed = changeInventory(healedUser, itemId, -1, { catalogWorkflow: false });
+  if (!consumed.ok) return consumed;
+  const tokens = updateToken(healed.value.tokens, token.id, consumed.value);
+  return success({
+    tokens,
+    encounter: {
+      ...healed.value.encounter,
+      resources: { [token.id]: { ...resources, actionSpent: true, actionType: "potion" } },
+      log: appendEncounterLog(healed.value.encounter.log, `${token.name} uses ${potion.item.name}${target.id === token.id ? "" : ` on ${target.name}`}.`),
+    },
+  }, { potion: potion.item, rolls, rolled, target, outcome: healed.outcome });
 }
 
 /**

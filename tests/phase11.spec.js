@@ -487,6 +487,9 @@ test("walking away from a Knight resolves an opportunity attack from the departu
 });
 
 test("Tactics offers adjacent first aid and a dying turn cannot skip or repeat its save", async ({ page }) => {
+  // Keep the browser journey away from the natural-20 branch, which correctly
+  // revives the Hero and therefore removes the death-save command entirely.
+  await page.addInitScript(() => { Math.random = () => 0.5; });
   const rescue = reactionRegressionScene({ dyingAlly: true });
   await open(page, { scenes: [rescue] });
   await page.getByRole("main").getByRole("button", { name: "Enter the table", exact: true }).click();

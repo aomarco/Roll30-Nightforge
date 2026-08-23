@@ -6,7 +6,7 @@
   },
   "generated": {
     "file": "src/domain/catalog.generated.js",
-    "sha256": "BC027A14CE45BCCC0D9FC6EABF4A5D77BB6D2E7378214793C9A55AFDBF43B358"
+    "sha256": "BA1CAF2F2C9FDECC0E9C47BC138E0E4D68267FF092811BC35CB81BCEE39BCB93"
   },
   "counts": {
     "weapons": 36,
@@ -14,6 +14,7 @@
     "armor": 13,
     "gear": 183,
     "inertMagicItems": 113,
-    "wornMagicItems": 6
+    "wornMagicItems": 6,
+    "healingPotions": 4
   }
 }

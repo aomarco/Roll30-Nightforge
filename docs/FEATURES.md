@@ -61,7 +61,7 @@ turn, thrown weapons lying on the floor, and a log. A Battle scene has at most
 one encounter; ending it returns the scene to Setup.
 
 **Item.** Something ownable — a weapon, armour, a rope, a magic ring. There are
-355 of them, imported from the official SRD. Heroes carry them, chests hold
+359 of them, imported from the official SRD. Heroes carry them, chests hold
 them, corpses can be looted for them.
 
 ## The two phases of a Battle scene
@@ -212,7 +212,11 @@ to do instead.
   its own ability score bonuses and granted languages.
 - **2 classes: Fighter and Wizard.** The other ten are not built — see
   [`TODO.md`](./TODO.md).
-- **13 backgrounds, 9 alignments, 16 languages, 18 skills.**
+- **13 mechanical backgrounds, 9 alignments, 16 languages, 18 skills.** Each
+  background grants its two skills, tool proficiencies, and the catalog-backed
+  part of a fixed starting-equipment choice. Money and narrative keepsakes wait
+  for their own systems. Changing background removes the previous grants
+  without erasing choices or gear that came from somewhere else.
 - **Point buy** with the standard 27-point budget. Scores run 8–15 before racial
   bonuses, costing 0/1/2/3/4/5/7/9 respectively. Overspending is refused with a
   message rather than silently clamped.
@@ -236,8 +240,9 @@ to do instead.
 
 ## Items and equipment
 
-- **355 items** imported from the SRD 5.1: 36 weapons, 13 armour, 183 pieces of
-  gear, 4 kinds of ammunition, 113 magic items, and 6 worn magic items.
+- **359 items** imported from the SRD 5.1: 36 weapons, 13 armour, 183 pieces of
+  gear, 4 kinds of ammunition, 113 inert magic items, 6 worn magic items, and
+  4 healing potions.
 - **Search and filter** the whole catalogue by kind, and by the properties that
   matter for each kind.
 - **Inventory is quantity-based.** You own N of a thing; adding and removing
@@ -264,7 +269,8 @@ to do instead.
   change a token already placed. This is intentional — a fight shouldn't
   silently change under you because someone levelled up in another tab.
 - **Every token carries** a name, colour, side, position, HP and max HP, AC,
-  speed, all six ability scores, save proficiencies, level, size, conditions,
+  walking/flying/swimming/climbing speeds, all six ability scores, save
+  proficiencies, level, size, conditions and their immunities/expiry rounds,
   an inventory, a list of attacks, its damage defences, its death-save tally,
   and the turn-scoped states — whether it is Dodging, whether it has Disengaged,
   whether its reaction is still available, and any Help an ally gave it.
@@ -276,6 +282,10 @@ to do instead.
   filled in from the stat block; a Hero starts with none and can be given fire
   resistance from the Setup inspector card. The editor sits on the card for the
   same reason the side switch does: a Hero snapshot has no stats drawer.
+- **Condition immunities are editable beside damage defences.** Monsters arrive
+  with their machine-readable immunities, and Setup can give the same protection
+  to a Hero or manual creature. Immune condition chips are visibly locked in
+  Battle and the domain refuses the application too.
 - **The side is shown wherever it matters** — a two-button switch on the Setup
   inspector card, and a read-only badge on the battle inspector, since the side
   decides when the fight ends. The switch sits on the card rather than behind
@@ -417,8 +427,16 @@ split is the single most important design decision in the combat code.
 
 - **Initiative is rolled at battle start** and fixes the turn order for the
   fight.
+- **Surprise is chosen in Setup.** A surprised creature loses its turn in round
+  one and cannot react before that place in the order has passed. It returns to
+  the ordinary order in round two without any manual cleanup.
 - **Rounds count up** and are displayed alongside the turn track.
 - **Movement is measured in feet at 5 feet per square** and spent as you go.
+- **Walk, fly, swim, and climb are separate movement modes.** Imported monsters
+  bring their stat-block speeds, manual tokens can edit all four, and the command
+  bar selects which allowance applies. Dash adds the selected speed.
+- **Difficult terrain is painted per grid square** from the Setup rail. Entering
+  a marked square costs ten feet instead of five; flying ignores the extra cost.
 - **Movement can be split.** Move part of your allowance, attack, then move the
   rest. The app never bundles your movement into one trip.
 - **Pathfinding routes around walls and creatures** using A*, bounded to 4,000
@@ -438,6 +456,17 @@ split is the single most important design decision in the combat code.
   success clears the failures and makes the target stable; a failure still
   spends the Action. Healing remains the only way to bring them back to positive
   hit points.
+- **Ready** spends the Action on an equipped weapon or authored attack, a named
+  enemy, and one of three visible triggers: the target moves, attacks, or ends
+  its turn. When triggered it resolves through the ordinary attack cinematic
+  and spends the creature's reaction. If it never fires, it expires at the
+  start of the creature's next turn.
+- **Grapple and Shove are contested attacks.** The attacker rolls Athletics and
+  the defender uses the better of Athletics or Acrobatics. Size and five-foot
+  reach are enforced. Grapple prevents movement, can be escaped with an Action
+  or released freely, and dragging costs double movement unless the target is
+  two sizes smaller. Shove can apply Prone or push five feet, but never through
+  a wall, occupied square, or board edge.
 - **Opportunity attacks.** Leaving a square an enemy can reach draws one melee
   swing from them. Moving while staying inside their reach draws nothing, and a
   creature only gets one, because a reaction refreshes at the start of its own
@@ -487,9 +516,12 @@ split is the single most important design decision in the combat code.
 
 ## Hit points, healing, and temporary hit points
 
-- **Heal or damage any token by hand**, from the battle inspector. There is no
-  potion or spell to produce healing yet, so this is the way it happens — and
-  the plumbing is what those will call later.
+- **Heal or damage any token by hand**, from the battle inspector. This remains
+  the quick control for hazards, adjudication, and future spell effects.
+- **Four healing potions work from inventory.** Potion of Healing, Greater,
+  Superior, and Supreme roll their SRD d4 formula, heal the active creature or
+  an adjacent living creature, consume one item, and spend the Action. Giving
+  one to a dying Hero raises them exactly like other healing.
 - **Hand-applied damage is also how falls and hazards work**, deliberately. The
   board is flat — there is no elevation on a token, no height on a wall, no
   third axis anywhere in the scene record — so nothing in the app can know that
@@ -560,8 +592,13 @@ split is the single most important design decision in the combat code.
 - **15 conditions**, toggled by hand on any token: Blinded, Charmed, Deafened,
   Frightened, Grappled, Incapacitated, Invisible, Paralyzed, Petrified,
   Poisoned, Prone, Restrained, Stunned, and the rest of the SRD list.
-- **Conditions are applied manually, never automatically.** Nothing in the app
-  inflicts a condition on its own. You decide.
+- **Conditions are usually applied manually.** Authored attack prose never
+  guesses at a rider. Explicit Grapple and Shove actions apply the condition
+  whose contested check they just resolved.
+- **Conditions can be permanent or timed.** The inspector offers 1, 2, 3, 5,
+  and 10 rounds; the chip shows its expiry and the round transition removes it.
+- **Condition immunity is enforced.** An immune chip is locked and even a
+  direct domain call is refused, so UI state cannot bypass the rule.
 - **The mechanical ones actually work:**
   - *Blinded* — your attacks have disadvantage, attacks against you have advantage
   - *Frightened*, *Poisoned* — your attacks have disadvantage
@@ -735,7 +772,7 @@ split is the single most important design decision in the combat code.
 - **Disabled controls say why.** A greyed-out button is always accompanied by
   the reason it's unavailable.
 - **Long names and large collections are handled** — the layout survives a
-  355-item catalogue, a 180-token battle, and absurd name lengths.
+  359-item catalogue, a 180-token battle, and absurd name lengths.
 - **Six responsive breakpoints** are baselined, plus 100%, 125%, and 150% zoom.
 - **Local fonts in production.** Fraunces for display, Plus Jakarta Sans for
   interface, IBM Plex Mono for numerals, all self-hosted and bundled. The shipped
@@ -793,14 +830,15 @@ split is the single most important design decision in the combat code.
 - **`npm run verify` is the whole gate** and is exactly what CI runs: every unit
   test, every render smoke suite, every phase verifier, the browser journeys,
   a dependency audit, and a production build.
-- **340 unit tests** covering domain rules, repositories, and integration.
-- **23 pinned-Chromium browser journeys** driving the real app.
+- **353 unit tests** covering domain rules, repositories, and integration.
+- **30 pinned-Chromium browser journeys** driving the real app.
 - **21 deterministic visual baselines** per platform.
 - **Three kinds of check, by design:**
-  - **Unit tests** (`phaseN.test.js`, `rules.test.js`, `reactions.test.js`) prove
+  - **Unit tests** (`phaseN.test.js`, `rules.test.js`, `reactions.test.js`,
+    `expansion.test.js`) prove
     the rules are right
   - **Render smoke** (`phaseN-render-smoke.mjs`, `rules-render-smoke.mjs`,
-    `reactions-render-smoke.mjs`)
+    `reactions-render-smoke.mjs`, `expansion-render-smoke.mjs`)
     server-renders real screens and asserts on the markup, catching UI breakage
     without a browser
   - **Verifiers** (`verify-phaseN.mjs`, `verify-rules.mjs`, `verify-reactions.mjs`)
@@ -836,13 +874,14 @@ one, change it here too:
 
 | Thing | Count | Where it lives |
 |---|---:|---|
-| Items | 355 | `src/domain/catalog.generated.js` |
+| Items | 359 | `src/domain/catalog.generated.js` |
 | — weapons | 36 | |
 | — armour | 13 | |
 | — gear | 183 | |
 | — ammunition | 4 | |
-| — magic items | 113 | |
+| — inert magic items | 113 | |
 | — worn magic items | 6 | |
+| — healing potions | 4 | |
 | Monsters | 334 | `src/domain/monsters.generated.js` |
 | Conditions | 15 | `src/domain/conditions.js` |
 | Classes | 2 | `src/domain/heroes.js` |
@@ -853,6 +892,6 @@ one, change it here too:
 | Skills | 18 | |
 | Experience thresholds | 20 | `src/domain/heroes.js` |
 | Error codes | 70+ | across `src/domain/` |
-| Unit tests | 340 | `src/*.test.js` |
-| Browser journeys | 23 | Playwright |
+| Unit tests | 353 | `src/*.test.js` |
+| Browser journeys | 30 | Playwright |
 | Acceptance journeys | 47 | `PARITY_REGISTER.md` |

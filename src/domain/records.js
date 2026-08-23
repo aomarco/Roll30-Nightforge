@@ -1,6 +1,8 @@
 import {
   ABILITY_KEYS,
   ALIGNMENTS,
+  backgroundById,
+  backgroundByName,
   classById,
   grantedLanguages,
   LANGUAGES,
@@ -13,6 +15,7 @@ import { ITEM_BY_ID } from "./catalog.js";
 import { normalizeEquipment, normalizeInventoryEntries } from "./items.js";
 import {
   normalizeChests,
+  normalizeDifficultTerrain,
   normalizeEncounter,
   normalizeMapView,
   normalizeTableTokens,
@@ -78,6 +81,7 @@ export function createSceneRecord(
     wallsVisible: input.wallsVisible !== false,
     walls: normalizeWalls(input.walls),
     chests: normalizeChests(input.chests),
+    difficultTerrain: normalizeDifficultTerrain(input.difficultTerrain),
     tokens,
     encounter: kind === "play" ? null : normalizeEncounter(input.encounter, tokens),
     createdAt: timestamp(input.createdAt, now),
@@ -105,6 +109,8 @@ export function createHeroRecord(
   ])];
   const inventoryResult = normalizeInventoryEntries(input.inventory, ITEM_BY_ID);
   const priorUnknownItems = cleanIdList(input.recoveryDiagnostics?.unknownInventoryItemIds);
+  const selectedBackground = backgroundById(input.backgroundBenefitId) || backgroundByName(input.background);
+  const benefitsApplied = selectedBackground && input.backgroundBenefitId === selectedBackground.id;
 
   const hero = {
     id: heroId,
@@ -123,6 +129,7 @@ export function createHeroRecord(
     subraceId: selectedSubrace?.id || null,
     alignment: ALIGNMENTS.includes(input.alignment) ? input.alignment : "Neutral",
     background: typeof input.background === "string" ? input.background : "",
+    backgroundBenefitId: benefitsApplied ? selectedBackground.id : null,
     languages,
     baseAbilities: normalizeBaseAbilities(input.baseAbilities),
     saveProficiencies: Array.isArray(input.saveProficiencies)
@@ -131,6 +138,7 @@ export function createHeroRecord(
     skillProficiencies: cleanIdList(input.skillProficiencies).filter((skill) =>
       SKILLS.some((entry) => entry.id === skill),
     ),
+    toolProficiencies: cleanIdList(input.toolProficiencies),
     inventory: inventoryResult.inventory,
     loadout: cleanLoadout(input.loadout),
     armorId: nullableId(input.armorId),

@@ -132,7 +132,7 @@ for (const behavior of [
 if (!attacks.includes("...(kind === ATTACK_KIND_REACTION ? {} : { resources: { [attacker.id]: nextResources } })")) {
   failures.push("An opportunity attack overwrites the moving creature's turn resources.");
 }
-if (!attacks.includes("updateToken(damagedTokens, attacker.id, { reactionSpent: true })")) {
+if (!attacks.includes("reactionSpent: !reactionRefreshedAtStartedTurn")) {
   failures.push("An opportunity attack does not spend the reactor's reaction.");
 }
 // Help buys one roll. Without this a Multiattack would carry it across every swing.
@@ -156,7 +156,7 @@ for (const behavior of [
 if (!combat.includes("resources: { [nextToken.id]: createTurnResources(nextToken) }")) {
   failures.push("End Turn no longer discards old resources and creates a fresh next turn.");
 }
-if (!combat.includes("updateToken(tokens, nextToken.id, CLEARED_TURN_STATE)")) {
+if (!combat.includes("updateToken(timedTokens, nextToken.id, CLEARED_TURN_STATE)")) {
   failures.push("End Turn does not clear Dodge, Disengage and the spent reaction for the incoming creature.");
 }
 // A dying creature takes its turn; only the dead and the stable are skipped.
