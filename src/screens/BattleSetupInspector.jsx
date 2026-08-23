@@ -3,7 +3,8 @@ import { createPortal } from "react-dom";
 import { CircleDot, Minus, MoreVertical, Package, Plus, Search, X } from "lucide-react";
 
 import { formatCost, getItem, itemSubtitle, ITEM_CATALOG } from "../domain/catalog.js";
-import { MAX_ATTACKS_PER_ACTION, TOKEN_SIZES } from "../domain/table.js";
+import { DAMAGE_TYPES, damageTypeName } from "../domain/damageTypes.js";
+import { FACTION_LABELS, MAX_ATTACKS_PER_ACTION, TOKEN_FACTIONS, TOKEN_SIZES } from "../domain/table.js";
 import { formatChallengeRating } from "../domain/monsters.js";
 import { useDialogA11y } from "../ui/useDialogA11y.js";
 import GearChapter from "./GearChapter.jsx";
@@ -206,6 +207,72 @@ function AttackEditor({ token, save, busy, close }) {
   );
 }
 
+/** Which token field each defence is stored in, and how to say it. */
+const DEFENCE_FIELDS = Object.freeze([
+  { id: "immune", field: "damageImmunities", label: "Immune", note: "takes none of it" },
+  { id: "resistant", field: "damageResistances", label: "Resists", note: "takes half, rounded down" },
+  { id: "vulnerable", field: "damageVulnerabilities", label: "Vulnerable", note: "takes double" },
+]);
+
+/**
+ * Damage defences for any token, monster or Hero.
+ *
+ * This sits on the card rather than behind a drawer for the same reason the Side
+ * switch does: a Hero snapshot has no stats drawer, and a Hero who cannot be
+ * given fire resistance is a Hero who cannot be a Dragonborn. Monsters arrive
+ * with theirs already filled in from the stat block.
+ *
+ * A type can only hold one defence at a time. Setting a second removes the
+ * first, because "resistant and immune to fire" is not a state the rules have.
+ */
+function DefenceEditor({ token, save, busy }) {
+  const [type, setType] = useState(DAMAGE_TYPES[0].id);
+  const [defence, setDefence] = useState(DEFENCE_FIELDS[1].id);
+
+  const apply = (nextType, nextDefence) => {
+    const patch = {};
+    for (const entry of DEFENCE_FIELDS) {
+      const current = token[entry.field].filter((id) => id !== nextType);
+      patch[entry.field] = entry.id === nextDefence ? [...current, nextType] : current;
+    }
+    save(patch);
+  };
+
+  return (
+    <div className="nf-state-scene-defences" role="group" aria-label="Damage defences">
+      <small>Damage defences</small>
+      <div className="nf-state-scene-defence-chips">
+        {DEFENCE_FIELDS.flatMap(({ id, field, label }) => token[field].map((typeId) => (
+          <button
+            className={`tag nf-state-battle-defense-${id} nf-state-scene-defence-chip`}
+            key={`${id}-${typeId}`}
+            type="button"
+            disabled={busy}
+            title={`Remove ${label.toLowerCase()} ${damageTypeName(typeId)}`}
+            onClick={() => apply(typeId, null)}
+          >
+            {label} {damageTypeName(typeId)} <X size={11} />
+          </button>
+        )))}
+        {!DEFENCE_FIELDS.some(({ field }) => token[field].length) && (
+          <span className="note">None. Every damage type lands in full.</span>
+        )}
+      </div>
+      <div className="nf-state-scene-defence-add">
+        <select className="sel" value={type} onChange={(event) => setType(event.target.value)} disabled={busy} aria-label="Damage type">
+          {DAMAGE_TYPES.map((entry) => <option value={entry.id} key={entry.id}>{entry.name}</option>)}
+        </select>
+        <select className="sel" value={defence} onChange={(event) => setDefence(event.target.value)} disabled={busy} aria-label="Defence">
+          {DEFENCE_FIELDS.map((entry) => <option value={entry.id} key={entry.id}>{entry.label} — {entry.note}</option>)}
+        </select>
+        <button className="btn btn-sm" type="button" onClick={() => apply(type, defence)} disabled={busy}>
+          <Plus size={13} /> Set
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /**
  * The parts of a stat block the engine cannot run yet - saving-throw actions,
  * legendary actions, traits, resistances. Shown so the table can read and
@@ -229,7 +296,10 @@ function StatBlockNotes({ notes }) {
   ].filter(([, entries]) => entries.length);
   return (
     <div className="nf-state-statblock">
-      <p className="note">Reference only. Nothing here is applied by the rules engine.</p>
+      {/* This used to say nothing here is applied, which stopped being true when
+          resistance arrived. The defence lines now mark their own two halves, so
+          the blanket claim would contradict them. */}
+      <p className="note">Reference text, except where a line marks part of itself as applied. The rules engine runs the marked damage types and nothing else on this list.</p>
       {lines.map(([label, value]) => (
         <p className="nf-state-statblock-line" key={label}><strong>{label}:</strong> {value}</p>
       ))}
@@ -371,6 +441,11 @@ function OverflowMenu({ label, items }) {
  * gear, chest contents, deletion — sits behind the overflow menu and opens as
  * a drawer, which is what keeps the card as compact as the reference design
  * while losing none of the old inspector's abilities.
+ *
+ * The one exception is the side switch. A Hero snapshot has no stats drawer at
+ * all, so putting the switch behind one would leave Heroes unable to change
+ * sides — and the side is what decides when the Battle ends, so it cannot be
+ * the only field on a token that some tokens can never reach.
  */
 export default function BattleSetupInspector({
   token,
@@ -478,6 +553,25 @@ export default function BattleSetupInspector({
             <span key={label}><small>{label}</small><strong className="numeral">{value}</strong></span>
           ))}
         </div>
+        <div className="nf-state-scene-faction" role="group" aria-label="Side">
+          <small>Side</small>
+          <span className="nf-state-scene-faction-switch">
+            {TOKEN_FACTIONS.map((faction) => (
+              <button
+                key={faction}
+                type="button"
+                className={`nf-state-faction-${faction}` + (token.faction === faction ? " on" : "")}
+                aria-pressed={token.faction === faction}
+                disabled={busy || token.faction === faction}
+                title={`Fight on the ${FACTION_LABELS[faction].toLowerCase()} side. A Battle ends when only one side is left standing.`}
+                onClick={() => saveToken({ faction })}
+              >
+                {FACTION_LABELS[faction]}
+              </button>
+            ))}
+          </span>
+        </div>
+        <DefenceEditor token={token} save={saveToken} busy={busy} />
         {!token.heroId && (
           <div className="nf-state-scene-attacks">
             {token.attacks.map((attack) => (

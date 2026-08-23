@@ -36,6 +36,7 @@ export function createBrowserRuntime(browser, dispatch) {
       databaseName: PORTRAIT_DATABASE,
       storeName: PORTRAIT_STORE,
     }),
+    { item: "a Hero portrait", collection: "Hero portraits", codePrefix: "portrait" },
   );
   const commands = createApplicationCommands({
     artworkDecoder: createBrowserArtworkDecoder(browser),

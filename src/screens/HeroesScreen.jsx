@@ -24,6 +24,7 @@ import {
   formatModifier,
   grantedLanguages,
   LANGUAGES,
+  levelForXp,
   RACES,
   raceById,
   SAVING_THROWS,
@@ -31,6 +32,7 @@ import {
   SKILLS,
   skillModifier,
   subraceById,
+  xpToNextLevel,
 } from "../domain/heroes.js";
 import { useDialogA11y } from "../ui/useDialogA11y.js";
 import GearChapter from "./GearChapter.jsx";
@@ -291,6 +293,10 @@ export default function HeroesScreen({
   };
   const Icon = activeHero ? CLASS_ICONS[activeHero.classId] || Sword : Sword;
   const selectedClass = activeHero ? derived.class : CLASSES[0];
+  // Experience is recorded, never spent. The sheet says when a level is
+  // available and leaves the decision to the person playing the Hero.
+  const earnedLevel = activeHero ? levelForXp(activeHero.xp) : 1;
+  const xpRemaining = activeHero ? xpToNextLevel(activeHero.xp) : null;
   const selectedSkills = activeHero?.skillProficiencies.length || 0;
   const overRecommended =
     selectedClass.id === "fighter" && selectedSkills > selectedClass.recommendedSkillCount;
@@ -456,6 +462,17 @@ export default function HeroesScreen({
                   <label className="field">
                     <span className="label">Level</span>
                     <input className="inp" type="number" min="1" max="20" value={activeHero.level} onChange={(event) => apply({ level: Number(event.target.value) })} />
+                  </label>
+                  <label className="field nf-state-hero-xp">
+                    <span className="label">Experience</span>
+                    <input className="inp" type="number" min="0" value={activeHero.xp} onChange={(event) => apply({ xp: Math.max(0, Math.floor(Number(event.target.value) || 0)) })} />
+                    <small className={`note${earnedLevel > activeHero.level ? " nf-state-hero-xp-ready" : ""}`}>
+                      {earnedLevel > activeHero.level
+                        ? `Enough for level ${earnedLevel}. Levelling up is your call — raise the Level field when you are ready.`
+                        : xpRemaining === null
+                          ? "Level 20 is the ceiling; further experience changes nothing."
+                          : `${xpRemaining.toLocaleString("en-AU")} more for level ${earnedLevel + 1}.`}
+                    </small>
                   </label>
                   <label className="field">
                     <span className="label">Race</span>

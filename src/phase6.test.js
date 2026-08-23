@@ -146,11 +146,13 @@ test("full and half walls normalize to persisted percentage polylines", () => {
   assert.throws(() => createWall({ id: "short", points: [{ xPercent: 1, yPercent: 1 }] }));
 });
 
-test("ruler counts four-connected crossed squares, excludes origin, and multiplies by five", () => {
+test("ruler counts eight-connected crossed squares, excludes origin, and multiplies by five", () => {
   const options = { width: 440, height: 440, gridSize: 44 };
   assert.equal(rulerDistanceFeet({ xPercent: 5, yPercent: 5 }, { xPercent: 5, yPercent: 5 }, options), 0);
   assert.equal(rulerDistanceFeet({ xPercent: 5, yPercent: 5 }, { xPercent: 35, yPercent: 5 }, options), 15);
-  assert.equal(rulerDistanceFeet({ xPercent: 5, yPercent: 5 }, { xPercent: 35, yPercent: 25 }, options), 25);
+  // Three columns across and two rows down is three squares, not five: a
+  // diagonal step costs one, which is what movement and attack range count.
+  assert.equal(rulerDistanceFeet({ xPercent: 5, yPercent: 5 }, { xPercent: 35, yPercent: 25 }, options), 15);
   assert.deepEqual(midpointPercent({ xPercent: 10, yPercent: 20 }, { xPercent: 50, yPercent: 80 }), { xPercent: 30, yPercent: 50 });
 });
 

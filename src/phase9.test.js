@@ -161,9 +161,13 @@ test("attack selection exposes equipped hands only", () => {
   assert.equal(options.some(({ weaponId }) => weaponId === "longbow"), false);
 });
 
-test("main Attack reports missing equipment and spent resources honestly", () => {
-  const unarmed = token("active", 1, 1);
-  assert.equal(mainAttackAvailability(battleScene({ tokens: [unarmed, token("target", 2, 1)] })).code, "NO_EQUIPPED_WEAPON");
+test("main Attack offers an unarmed strike to the empty-handed and reports spent resources honestly", () => {
+  // An empty-handed creature is never stranded: it falls back to a punch
+  // rather than being refused the Attack Action outright.
+  const unarmed = mainAttackAvailability(battleScene({ tokens: [token("active", 1, 1), token("target", 2, 1)] }));
+  assert.equal(unarmed.ok, true);
+  assert.equal(unarmed.value.options.length, 1);
+  assert.equal(unarmed.value.options[0].weapon.id, "unarmed-strike");
   const armed = token("active", 1, 1, { inventory: [item("club")], loadout: { mainHand: "club", offHand: null } });
   const spent = { ...createTurnResources(armed), actionSpent: true, actionType: "dash", dashed: true };
   assert.equal(mainAttackAvailability(battleScene({ tokens: [armed, token("target", 2, 1)], resources: spent })).code, "ATTACK_AFTER_DASH");

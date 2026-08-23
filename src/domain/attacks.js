@@ -6,6 +6,7 @@ import {
   targetConditionModes,
   toggleCondition,
 } from "./conditions.js";
+import { applyDamageDefense, damageDefenseText } from "./damageTypes.js";
 import { abilityModifier, proficiencyBonus } from "./heroes.js";
 import { effectiveDamageDice, equippedWeapons, weaponMagicBonuses } from "./items.js";
 import {
@@ -14,12 +15,15 @@ import {
   completeEncounterIfNeeded,
 } from "./encounter.js";
 import { activeTurnContext, attackActionAvailability, segmentsIntersect } from "./combat.js";
+import { damageStateText, resolveIncomingDamage } from "./vitality.js";
 import {
   appendEncounterLog,
+  createTurnResources,
   normalizeTableTokens,
   normalizeWalls,
   setupCellForPosition,
   setupGridMetrics,
+  setupPositionForCell,
   updateToken,
 } from "./table.js";
 
@@ -29,6 +33,7 @@ const hasProperty = (weapon, property) => weapon?.propertyIds?.includes(String(p
 
 export const ATTACK_KIND_ACTION = "action";
 export const ATTACK_KIND_BONUS = "bonus";
+export const ATTACK_KIND_REACTION = "reaction";
 export const ATTACK_MODE_NORMAL = "normal";
 export const ATTACK_MODE_ADVANTAGE = "advantage";
 export const ATTACK_MODE_DISADVANTAGE = "disadvantage";
@@ -73,30 +78,69 @@ export const authoredAttackOptions = (token) =>
     key: `attack:${attack.id}`,
   }));
 
+/**
+ * Every creature can punch: one bludgeoning damage plus its Strength modifier,
+ * with proficiency, at a reach of five feet. It exists as a catalog-shaped
+ * object rather than a real item so it can never be owned, dropped, thrown, or
+ * enchanted — it is a capability, not equipment.
+ */
+export const UNARMED_STRIKE = Object.freeze({
+  id: "unarmed-strike",
+  name: "Unarmed Strike",
+  kind: "weapon",
+  typeLabel: "Unarmed",
+  weaponClass: "simple",
+  weaponRange: "melee",
+  categoryRange: "Simple Melee",
+  // A plain number, not dice: parseDamageDefinition reads it as a fixed 1 and
+  // rollWeaponDamage adds the ability modifier on top, which is the rule.
+  damageDice: 1,
+  damageType: "Bludgeoning",
+  normalRange: 5,
+  longRange: null,
+  throwRange: null,
+  versatileDamageDice: null,
+  properties: [],
+  propertyIds: [],
+});
+
+export const unarmedStrikeOption = () => ({
+  hand: "mainHand",
+  attackId: null,
+  attack: null,
+  authored: false,
+  unarmed: true,
+  weaponId: null,
+  weapon: UNARMED_STRIKE,
+  damageDice: UNARMED_STRIKE.damageDice,
+  supply: { ok: true, value: { kind: "none" } },
+  key: "unarmed:unarmed-strike",
+});
+
 export function attackOptionsForToken(token) {
   if (token?.attacks?.length) return authoredAttackOptions(token);
-  return equippedWeapons(token).map(({ hand, item, damageDice }) => ({
+  const equipped = equippedWeapons(token).map(({ hand, item, damageDice }) => ({
     hand: hand === "main" ? "mainHand" : "offHand",
     attackId: null,
     attack: null,
     authored: false,
+    unarmed: false,
     weaponId: item.id,
     weapon: item,
     damageDice,
     supply: attackSupplyAvailability(token, item, { usage: item.propertyIds?.includes("ammunition") ? "ranged" : "melee" }),
     key: `${hand}:${item.id}`,
   }));
+  // An empty-handed creature is never stranded with no legal Action.
+  return equipped.length ? equipped : [unarmedStrikeOption()];
 }
 
 export function mainAttackAvailability(scene) {
   const available = attackActionAvailability(scene);
   if (!available.ok) return available;
+  // Never empty: a creature holding nothing still has an unarmed strike, so
+  // there is no longer a "no weapon equipped" refusal to make.
   const options = attackOptionsForToken(available.value.token);
-  if (!options.length) return failure(
-    "NO_EQUIPPED_WEAPON",
-    `${available.value.token.name} has no equipped weapon available for Attack.`,
-    "End the turn or equip a weapon in Battle Setup before the next encounter.",
-  );
   if (options.every((option) => !option.supply.ok)) return failure(
     "NO_ATTACK_SUPPLIES",
     options[0].supply.message,
@@ -137,8 +181,55 @@ export function bonusAttackAvailability(scene) {
   return success({ ...context.value, options: [option] });
 }
 
-const selectionAvailability = (scene, kind) =>
-  kind === ATTACK_KIND_BONUS ? bonusAttackAvailability(scene) : mainAttackAvailability(scene);
+/**
+ * A reaction is the first thing in the app that a creature does on somebody
+ * else's turn, so it cannot go through `activeTurnContext` like every other
+ * attack — the creature making it is by definition not the active one.
+ *
+ * It also spends nothing from the turn economy. A reaction is its own resource,
+ * and it lives on the token rather than in turn resources because turn resources
+ * exist only for whoever is active and are thrown away when the turn passes.
+ */
+export function reactionAttackAvailability(scene, reactorId) {
+  if (!scene?.encounter || scene.encounter.status !== "active") return failure(
+    "ACTIVE_BATTLE_REQUIRED",
+    "Reactions happen only during an active Battle.",
+    "Start Battle first.",
+  );
+  const tokens = normalizeTableTokens(scene.tokens);
+  const token = tokens.find((entry) => entry.id === reactorId);
+  if (!token) return failure(
+    "REACTION_TOKEN_MISSING",
+    "That token is no longer on this Table.",
+    "The reaction is skipped.",
+  );
+  if (token.hp <= 0 || isIncapacitated(token.conditions)) return failure(
+    "REACTION_INCAPACITATED",
+    `${token.name} cannot react while incapacitated or down.`,
+    "The reaction is skipped.",
+  );
+  if (token.reactionSpent) return failure(
+    "REACTION_ALREADY_SPENT",
+    `${token.name} has already used a reaction this round.`,
+    "A creature gets one reaction, and it refreshes at the start of its own turn.",
+  );
+  return success({
+    tokens,
+    token,
+    tokenId: token.id,
+    // A stand-in turn: a reacting creature has no live turn of its own, and the
+    // roll only reads `swapped` from this, which is never true for one.
+    resources: createTurnResources(token),
+    options: attackOptionsForToken(token),
+  });
+}
+
+const selectionAvailability = (scene, kind, specification = {}) =>
+  kind === ATTACK_KIND_REACTION
+    ? reactionAttackAvailability(scene, specification.reactorId)
+    : kind === ATTACK_KIND_BONUS
+      ? bonusAttackAvailability(scene)
+      : mainAttackAvailability(scene);
 
 const selectedAttackOption = (available, weaponId, hand, attackId) => available.value.options.find((option) =>
   option.authored
@@ -222,9 +313,10 @@ export function attackTargetEligibility(scene, {
   hand,
   attackId,
   targetId,
+  reactorId,
   viewport,
 } = {}) {
-  const available = selectionAvailability(scene, kind);
+  const available = selectionAvailability(scene, kind, { reactorId });
   if (!available.ok) return available;
   const option = selectedAttackOption(available, weaponId, hand, attackId);
   if (!option) return failure(
@@ -240,10 +332,12 @@ export function attackTargetEligibility(scene, {
     "Select a living token inside the highlighted range.",
     true,
   );
-  if (target.hp <= 0) return failure(
+  // A creature bleeding out can still be attacked, and finishing one off is a
+  // real tactical choice a monster gets to make. Only the dead are refused.
+  if (target.dead) return failure(
     "ATTACK_TARGET_DEFEATED",
-    `${target.name} is already defeated.`,
-    "Choose a living target.",
+    `${target.name} is already dead.`,
+    "Choose a standing or dying target.",
     true,
   );
   const distanceFeet = attackDistanceFeet(available.value.token.position, target.position, viewport);
@@ -291,6 +385,21 @@ export function attackRollSources({ attacker, target, weapon, range, lineOfSight
   if (weapon.id === "lance" && range.distanceFeet === 5) sources.push({ mode: "disadvantage", code: "lance-close", label: "Lance at 5 feet" });
   if (kind === ATTACK_KIND_ACTION && resources.swapped) sources.push({ mode: "disadvantage", code: "attack-after-swap", label: "Attack after weapon Swap" });
   if (lineOfSight.state === "half-cover") sources.push({ mode: "disadvantage", code: "half-wall", label: "Half-wall shot" });
+  // A Dodging creature is harder to hit with everything. The exception is a
+  // creature that cannot actually dodge: the Action does nothing for someone
+  // incapacitated or pinned in place, and the flag can outlive the condition
+  // that arrived after it.
+  if (target.dodging && !isIncapacitated(target.conditions) && target.baseSpeed > 0) {
+    sources.push({ mode: ATTACK_MODE_DISADVANTAGE, code: "target-dodging", label: "Dodging target" });
+  }
+  // Help is spent on one enemy. Naming the target is what stops a single Help
+  // turning into advantage on everything the ally swings at this round.
+  //
+  // The truthiness guard is load-bearing: an unhelped attacker carries null
+  // here, and comparing two absent values would hand advantage to everyone.
+  if (attacker.helpedAgainstTokenId && attacker.helpedAgainstTokenId === target.id) {
+    sources.push({ mode: ATTACK_MODE_ADVANTAGE, code: "helped", label: "Helped by an ally" });
+  }
   sources.push(...attackerConditionModes(attacker.conditions));
   sources.push(...targetConditionModes(target.conditions, range.usage === "melee" ? "melee" : "ranged"));
   return sources;
@@ -365,7 +474,11 @@ export function performWeaponAttack(scene, specification = {}, {
   random = Math.random,
   battleItemIdFactory = () => `battle-item-${globalThis.crypto?.randomUUID?.() || Date.now()}`,
 } = {}) {
-  const kind = specification.kind === ATTACK_KIND_BONUS ? ATTACK_KIND_BONUS : ATTACK_KIND_ACTION;
+  const kind = specification.kind === ATTACK_KIND_BONUS
+    ? ATTACK_KIND_BONUS
+    : specification.kind === ATTACK_KIND_REACTION
+      ? ATTACK_KIND_REACTION
+      : ATTACK_KIND_ACTION;
   const eligible = attackTargetEligibility(scene, { ...specification, kind });
   if (!eligible.ok) return eligible;
   const { token: attacker, target, option, resources, range, lineOfSight } = eligible.value;
@@ -404,8 +517,39 @@ export function performWeaponAttack(scene, specification = {}, {
     offHand: !option.authored && kind === ATTACK_KIND_BONUS,
     random,
   }) : null;
-  const nextTargetHp = hit ? Math.max(0, target.hp - damage.total) : target.hp;
-  const damagedTokens = hit ? updateToken(eligible.value.tokens, target.id, { hp: nextTargetHp }) : eligible.value.tokens;
+  // Resistance, immunity and vulnerability land on the finished total, which is
+  // where the SRD puts them: after every other modifier, not inside the dice.
+  const damageType = option.authored ? option.attack.damageType : option.weapon.damageType || null;
+  const defense = hit
+    ? applyDamageDefense(target, damage.total, damageType)
+    : { amount: 0, incoming: 0, multiplier: 1, defense: null, damageType: null };
+  // Temporary hit points are a buffer in front of real health, and a hit on a
+  // creature that is already down is a failed death saving throw rather than
+  // damage. Both live in `resolveIncomingDamage`, so an attack and a
+  // hand-applied hit put a creature into exactly the same state.
+  const pools = hit
+    ? resolveIncomingDamage(target, defense.amount, { critical })
+    : {
+      patch: {}, absorbed: 0, previousHp: target.hp, nextHp: target.hp, nextTempHp: target.tempHp,
+      downed: false, dyingHit: false, failuresAdded: 0, died: false, instantDeath: false,
+    };
+  const nextTargetHp = pools.nextHp;
+  const damagedTokens = hit
+    ? updateToken(eligible.value.tokens, target.id, pools.patch)
+    : eligible.value.tokens;
+  // A reaction spends the reactor's reaction, which is a flag on the creature,
+  // and nothing at all from anybody's turn. The mover is mid-turn while this
+  // resolves, so writing turn resources here would hand their remaining Action
+  // and movement to whoever happened to swing at them.
+  const reactionTokens = kind === ATTACK_KIND_REACTION
+    ? updateToken(damagedTokens, attacker.id, { reactionSpent: true })
+    : damagedTokens;
+  // Help buys one attack roll, hit or miss, so it is spent the moment the die
+  // is thrown at the enemy it named. Without this a single Help would carry
+  // advantage across every attack of a Multiattack.
+  const helpedTokens = attacker.helpedAgainstTokenId === target.id
+    ? updateToken(reactionTokens, attacker.id, { helpedAgainstTokenId: null, helpedById: null })
+    : reactionTokens;
   let nextResources;
   if (kind === ATTACK_KIND_BONUS) {
     nextResources = {
@@ -419,7 +563,10 @@ export function performWeaponAttack(scene, specification = {}, {
     // Multiattack spends one Action across several rolls: the Action only
     // closes once the creature's whole allowance has been used.
     const attacksMade = resources.attacksMade + 1;
-    const allowanceRemaining = attacksMade < resources.attackAllowance;
+    // A Loading weapon fires a single piece of ammunition per Action however
+    // large the Multiattack allowance is, so the first shot closes the Action.
+    const loading = hasProperty(option.weapon, "loading");
+    const allowanceRemaining = attacksMade < resources.attackAllowance && !loading;
     nextResources = {
       ...resources,
       attacksMade,
@@ -436,12 +583,12 @@ export function performWeaponAttack(scene, specification = {}, {
   const verdict = critical ? "critical" : hit ? "hit" : "miss";
   const attackEncounter = {
     ...scene.encounter,
-    resources: { [attacker.id]: nextResources },
-    log: appendEncounterLog(scene.encounter.log, `${attacker.name} attacks ${target.name} with ${option.weapon.name}: ${verdict}${hit ? ` for ${damage.total} damage` : ""}.`),
+    ...(kind === ATTACK_KIND_REACTION ? {} : { resources: { [attacker.id]: nextResources } }),
+    log: appendEncounterLog(scene.encounter.log, `${attacker.name} ${kind === ATTACK_KIND_REACTION ? "takes an opportunity attack on" : "attacks"} ${target.name} with ${option.weapon.name}: ${verdict}${hit && !pools.dyingHit ? ` for ${defense.amount} damage` : ""}.${hit ? `${damageDefenseText(defense)}${damageStateText(target, pools)}` : ""}`),
   };
   const supplied = applyAttackSupplyEffects({
     scene,
-    tokens: damagedTokens,
+    tokens: helpedTokens,
     encounter: attackEncounter,
     attackerId: attacker.id,
     targetId: target.id,
@@ -467,7 +614,12 @@ export function performWeaponAttack(scene, specification = {}, {
     weaponHand: option.hand,
     authored: Boolean(option.authored),
     attackId: option.attackId || null,
-    damageType: option.authored ? option.attack.damageType : option.weapon.damageType || null,
+    damageType,
+    // What the target's defences did to the rolled number. `damage` stays the
+    // roll so the cinematic can still show the dice that were thrown; this is
+    // what actually came off their hit points.
+    damageDefense: defense,
+    damageApplied: hit ? defense.amount : 0,
     riders: option.authored ? option.attack.riders : [],
     attacksMade: supplied.value.encounter.resources?.[attacker.id]?.attacksMade ?? null,
     attackAllowance: resources.attackAllowance,
@@ -491,6 +643,13 @@ export function performWeaponAttack(scene, specification = {}, {
     damage,
     previousHp: target.hp,
     nextHp: nextTargetHp,
+    absorbedByTempHp: pools.absorbed,
+    downed: pools.downed,
+    dyingHit: pools.dyingHit,
+    deathSaveFailuresAdded: pools.failuresAdded,
+    died: pools.died,
+    previousTempHp: target.tempHp,
+    nextTempHp: pools.nextTempHp,
     supply: supplied.supply,
     battleItem: supplied.battleItem || null,
     completed: completed.completed,
@@ -613,6 +772,89 @@ export function buildAttackRangeBands(scene, {
     cellHeightPercent: 100 / metrics.rows,
     bands,
   });
+}
+
+/**
+ * How far a creature can reach with a melee swing, in feet, taking the longest
+ * of whatever it can attack with. Zero means it has nothing that reaches at all,
+ * which is why an archer with only a bow draws no opportunity attacks.
+ */
+export function meleeReachFeet(token) {
+  let reach = 0;
+  for (const option of attackOptionsForToken(token)) {
+    if (!option.supply.ok) continue;
+    if (option.authored) {
+      if (option.attack.rangeKind === "melee") reach = Math.max(reach, option.attack.reachFeet);
+    } else if (option.weapon.weaponRange === "melee") {
+      reach = Math.max(reach, hasProperty(option.weapon, "reach") ? 10 : 5);
+    }
+  }
+  return reach;
+}
+
+/**
+ * Who gets a swing at a creature for walking away from them.
+ *
+ * The trigger is leaving a square that an enemy could reach, so the route is
+ * walked square by square and the first step that carries the mover out of a
+ * given reach is the one that provokes. Only the first: a creature has one
+ * reaction, and taking it here is what stops a long run past the same guard
+ * being a dozen free attacks.
+ *
+ * The mover has to be leaving, not merely moving. Walking around a monster while
+ * staying inside its reach the whole way provokes nothing, which is exactly what
+ * the "not adjacent at the next step" test says.
+ */
+export function opportunityAttacksFor(scene, plan, viewport) {
+  const cells = plan?.cells || [];
+  const landing = Math.max(0, Math.min(cells.length - 1, Number(plan?.landingIndex) || 0));
+  if (landing < 1) return [];
+  const tokens = normalizeTableTokens(scene?.tokens);
+  const mover = tokens.find((token) => token.id === plan.tokenId);
+  if (!mover) return [];
+  // Disengage is the whole point of the Action: the route is walked exactly the
+  // same way, and nobody gets to swing at it.
+  if (mover.disengaging) return [];
+
+  const positions = cells.map((cell) => setupPositionForCell(cell, viewport));
+  const reactions = [];
+  for (const reactor of tokens) {
+    if (reactor.id === mover.id) continue;
+    if (reactor.faction === mover.faction) continue;
+    if (reactor.hp <= 0 || reactor.dead) continue;
+    if (reactor.reactionSpent) continue;
+    if (isIncapacitated(reactor.conditions)) continue;
+    const reach = meleeReachFeet(reactor);
+    if (reach <= 0) continue;
+    for (let step = 0; step < landing; step += 1) {
+      const before = attackDistanceFeet(reactor.position, positions[step], viewport);
+      const after = attackDistanceFeet(reactor.position, positions[step + 1], viewport);
+      if (before > reach || after <= reach) continue;
+      // A guard cannot swing through a wall any more than they can shoot
+      // through one, so the same sight test the attack itself uses applies.
+      const sight = attackLineOfSight(scene, reactor, { ...mover, position: positions[step] }, "melee");
+      if (sight.state === "blocked") break;
+      const option = attackOptionsForToken(reactor).find((entry) => entry.supply.ok && (entry.authored
+        ? entry.attack.rangeKind === "melee" && entry.attack.reachFeet >= before
+        : entry.weapon.weaponRange === "melee" && (hasProperty(entry.weapon, "reach") ? 10 : 5) >= before));
+      if (!option) break;
+      reactions.push({
+        reactorId: reactor.id,
+        reactorName: reactor.name,
+        targetId: mover.id,
+        targetName: mover.name,
+        weaponId: option.weaponId,
+        weaponName: option.weapon.name,
+        hand: option.hand,
+        attackId: option.attackId,
+        departureIndex: step,
+        departurePosition: positions[step],
+        distanceFeet: before,
+      });
+      break;
+    }
+  }
+  return reactions;
 }
 
 export function toggleBattleCondition(scene, tokenId, conditionId) {

@@ -10,6 +10,8 @@ import {
 } from "./items.js";
 import {
   appendEncounterLog,
+  CLEARED_DEATH_STATE,
+  CLEARED_TURN_STATE,
   createTurnResources,
   normalizeBattleItems,
   normalizeChests,
@@ -30,6 +32,16 @@ const failure = (code, message, recovery, retryable = false, metadata = {}) => (
   retryable,
   ...metadata,
 });
+/**
+ * How a winning side is announced when more than one creature survives it.
+ * Whole sentences rather than a name plus a shared verb: "party" is singular
+ * and "foes" is plural, so no single verb fits both.
+ */
+const FACTION_VICTORY_TEXT = Object.freeze({
+  ally: "The party wins the Battle.",
+  foe: "The foes win the Battle.",
+});
+
 const hasProperty = (weapon, property) => weapon?.propertyIds?.includes(property);
 const cellKey = (cell) => `${cell.column}:${cell.row}`;
 const sameOrAdjacent = (left, right) =>
@@ -323,18 +335,84 @@ function recoverCompletionAmmunition(tokens, ammoSpentByToken) {
   return { tokens: nextTokens, recovery };
 }
 
+/**
+ * What a finished Battle is worth. Deliberately a pure reader rather than part
+ * of completion: experience is never handed out on its own, so nothing here
+ * writes to a Hero. The completion card reads this, shows the split, and waits
+ * for someone to press the button.
+ *
+ * Only tokens standing on a Hero record can receive a share, and only defeated
+ * creatures that are not Heroes are counted as earnings — a fallen party member
+ * is not treasure. The total is split evenly and any remainder is dropped,
+ * which is how a table would round it.
+ */
+export function encounterExperienceAward(tokens, encounter) {
+  const normalizedTokens = normalizeTableTokens(tokens);
+  // Only the opposition is treasure. A fallen party member is not worth
+  // experience, and neither is an allied summon the party brought along —
+  // before factions existed the second case paid out, because every non-Hero
+  // token counted no matter whose side it was on.
+  const defeated = normalizedTokens.filter((token) =>
+    token.hp <= 0 && !token.heroId && token.faction === "foe");
+  const survivors = normalizedTokens.filter((token) => token.hp > 0 && token.heroId);
+  const total = defeated.reduce((sum, token) => sum + Math.max(0, Math.floor(Number(token.xp) || 0)), 0);
+  const perHero = survivors.length ? Math.floor(total / survivors.length) : 0;
+  return {
+    total,
+    perHero,
+    alreadyAwarded: Boolean(encounter?.xpAwarded),
+    defeatedCount: defeated.length,
+    recipients: survivors.map((token) => ({
+      tokenId: token.id,
+      heroId: token.heroId,
+      name: token.name,
+      share: perHero,
+    })),
+  };
+}
+
+/**
+ * A Battle is over when one side is left standing — not one creature. The
+ * creature-count test this replaced could never fire for a party of two or
+ * more, so a group that wiped out every monster simply kept playing and never
+ * reached the completion card or its experience award.
+ *
+ * A fight where every token is on the same side has no sides to decide
+ * between, so it falls back to last-creature-standing. That keeps a
+ * monster-versus-monster brawl playable instead of completing it the instant
+ * initiative is rolled.
+ *
+ * A dying creature is still in the fight. It is at zero hit points and cannot
+ * act, but it is not gone: an ally who reaches it in time puts it back on its
+ * feet, and ending the Battle over its body would take that chance away. So the
+ * side test asks who is left rather than who is standing, while the winner is
+ * still named from whoever is actually upright — a hero bleeding out has not won
+ * anything.
+ */
 export function completeEncounterIfNeeded(tokens, encounter) {
   const normalizedTokens = normalizeTableTokens(tokens);
   if (!encounter || encounter.status !== "active") return success({ tokens: normalizedTokens, encounter }, { completed: false, recovery: [] });
   const living = normalizedTokens.filter((token) => token.hp > 0);
-  if (living.length > 1) return success({ tokens: normalizedTokens, encounter }, { completed: false, recovery: [] });
+  const inTheFight = normalizedTokens.filter((token) => token.hp > 0 || !token.dead);
+  const sidesPresent = new Set(normalizedTokens.map((token) => token.faction));
+  const sidesLeft = new Set(inTheFight.map((token) => token.faction));
+  const decided = sidesPresent.size > 1 ? sidesLeft.size <= 1 : inTheFight.length <= 1;
+  if (!decided) return success({ tokens: normalizedTokens, encounter }, { completed: false, recovery: [] });
   const recovered = encounter.ammunitionRecovered
     ? { tokens: normalizedTokens, recovery: [] }
     : recoverCompletionAmmunition(normalizedTokens, encounter.ammoSpentByToken);
-  const winnerTokenId = living.length === 1 ? living[0].id : null;
+  // A lone survivor is still named, because "Grix wins" tells the table more
+  // than "the foes win" when there is only one of them left to say it about.
+  // The test counts everyone left rather than everyone standing: a hero who won
+  // with a comrade bleeding out beside them did not win alone, and naming them
+  // as the sole victor would write the comrade out of the sentence.
+  const winnerTokenId = living.length === 1 && inTheFight.length === 1 ? living[0].id : null;
+  const winnerFaction = living.length ? living[0].faction : null;
   const resultText = winnerTokenId
     ? `${living[0].name} wins the Battle.`
-    : "The Battle ends with no survivor.";
+    : winnerFaction
+      ? FACTION_VICTORY_TEXT[winnerFaction]
+      : "The Battle ends with no survivor.";
   const recoveryText = recovered.recovery.length
     ? ` Recovered ${recovered.recovery.reduce((total, entry) => total + entry.quantity, 0)} spent ammunition.`
     : "";
@@ -344,10 +422,11 @@ export function completeEncounterIfNeeded(tokens, encounter) {
       ...encounter,
       status: "complete",
       winnerTokenId,
+      winnerFaction,
       ammunitionRecovered: true,
       log: appendEncounterLog(encounter.log, `${resultText}${recoveryText}`),
     },
-  }, { completed: true, winnerTokenId, recovery: recovered.recovery });
+  }, { completed: true, winnerTokenId, winnerFaction, recovery: recovered.recovery });
 }
 
 function activeBonusContext(scene) {
@@ -702,7 +781,14 @@ export function restartCompletedBattle(scene, { random = Math.random } = {}) {
   const tokens = normalizeTableTokens(scene.tokens).map((token) => ({
     ...token,
     hp: token.maxHp,
+    // Temporary hit points are spent scaffolding from the fight that just
+    // ended; a restart is a fresh fight, so the buffer does not come with it.
+    tempHp: 0,
     conditions: [],
+    // A restart is a fresh fight: the fallen are on their feet with a clean
+    // death-save tally, and nobody is still Dodging from the last one.
+    ...CLEARED_DEATH_STATE,
+    ...CLEARED_TURN_STATE,
     // Weapons thrown during the last run are back in hand.
     attacks: token.attacks.map((attack) => ({ ...attack, thrown: false })),
   }));

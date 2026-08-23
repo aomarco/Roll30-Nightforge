@@ -1,11 +1,13 @@
 import { ITEM_BY_ID } from "./catalog.js";
 import { normalizeConditions } from "./conditions.js";
+import { damageTypeName, normalizeDamageTypeList, normalizeDamageTypes } from "./damageTypes.js";
 import {
   ABILITY_KEYS,
   abilityModifier,
   computeArmorClass,
   deriveHero,
   proficiencyBonus,
+  SKILLS,
 } from "./heroes.js";
 import {
   changeInventory,
@@ -14,10 +16,76 @@ import {
   wornMagicBonuses,
 } from "./items.js";
 
+const SKILL_BY_ID = Object.freeze(Object.fromEntries(SKILLS.map((skill) => [skill.id, skill])));
+
 export const CAMERA_MIN_ZOOM = 0.35;
 export const CAMERA_MAX_ZOOM = 3;
 export const MAP_MIN_SCALE = 0.2;
 export const MAP_MAX_SCALE = 5;
+/**
+ * Three successes stabilise, three failures kill. Named because the tally is
+ * clamped in the token normalizer and counted in three other places, and a bare
+ * 3 in four files is a rule nobody can find later.
+ */
+export const DEATH_SAVES_REQUIRED = 3;
+
+/**
+ * Dying is not a stored flag. It is the gap between being at zero hit points and
+ * being dead, and deriving it from the two fields that already exist means there
+ * is no third field to keep in step with them.
+ *
+ * These live here rather than in the death module because combat and the
+ * screens both need them, and the death module reaches through attacks into
+ * combat — putting them there would make the two files import each other.
+ */
+export const isDying = (token) => Boolean(token) && token.hp <= 0 && !token.dead;
+
+/**
+ * Stable is likewise derived. A stabilised creature stays at zero and stays
+ * unconscious — it has simply stopped rolling, because three successes means the
+ * bleeding has been survived, not that the creature is back on its feet.
+ */
+export const isStable = (token) => isDying(token) && token.deathSaveSuccesses >= DEATH_SAVES_REQUIRED;
+
+export const canRollDeathSave = (token) => isDying(token) && !isStable(token);
+
+/**
+ * Everything a creature carries out of the dying state. Kept in one place so
+ * that reviving by healing, by a natural twenty, and by restarting the Battle
+ * cannot drift apart.
+ */
+export const revivedTokenPatch = (token, hp = 1) => ({
+  hp: Math.max(1, Math.min(token.maxHp, Math.floor(Number(hp) || 1))),
+  deathSaveSuccesses: 0,
+  deathSaveFailures: 0,
+  dead: false,
+  conditions: token.conditions.filter((condition) => condition !== "unconscious"),
+});
+
+/** The state a creature is reset to when a Battle restarts or is abandoned. */
+export const CLEARED_DEATH_STATE = Object.freeze({
+  deathSaveSuccesses: 0,
+  deathSaveFailures: 0,
+  dead: false,
+});
+
+/**
+ * The turn-scoped states that expire at the start of a creature's next turn:
+ * whether it is Dodging, whether it has Disengaged, whether its reaction is
+ * still available, and any Help an ally gave it.
+ *
+ * Cleared in three places — when a turn passes to this creature, when a Battle
+ * begins, and when one restarts. One object rather than four lines in each so
+ * the set cannot go out of step between them.
+ */
+export const CLEARED_TURN_STATE = Object.freeze({
+  reactionSpent: false,
+  dodging: false,
+  disengaging: false,
+  helpedAgainstTokenId: null,
+  helpedById: null,
+});
+
 export const DEFAULT_CAMERA = Object.freeze({ x: 0, y: 0, zoom: 1 });
 export const DEFAULT_MAP_VIEW = Object.freeze({ scale: 1, x: 0, y: 0 });
 
@@ -202,6 +270,15 @@ const uniqueNormalizedRecords = (records, normalize) => {
 
 export const TOKEN_SIZES = Object.freeze(["tiny", "small", "medium", "large", "huge", "gargantuan"]);
 
+/**
+ * Which side of a fight a creature is on. Two sides only: the rules need to
+ * answer "is one side left standing", and nothing in 5e needs a third answer.
+ * Bystanders are modelled by leaving them off the board, not by a neutral team.
+ */
+export const TOKEN_FACTIONS = Object.freeze(["ally", "foe"]);
+
+export const FACTION_LABELS = Object.freeze({ ally: "Ally", foe: "Foe" });
+
 export const MAX_ATTACKS_PER_ACTION = 10;
 
 const attackSlug = (value, fallback) => {
@@ -219,6 +296,21 @@ const proseSection = (value) =>
     : [];
 
 const proseLine = (value) => (typeof value === "string" ? value.trim().slice(0, 300) : "");
+
+/**
+ * The reference line for a defence list, naming which half of it the engine is
+ * actually running.
+ *
+ * Without the marker the table cannot tell a resistance that is being applied
+ * from one that is only being displayed, and those look identical on the sheet
+ * while behaving completely differently at the dice.
+ */
+function unappliedNote({ applied, unapplied }) {
+  const parts = [];
+  if (applied.length) parts.push(`${applied.map(damageTypeName).join(", ")} (applied)`);
+  if (unapplied.length) parts.push(`${unapplied.join("; ")} (not applied — read at the table)`);
+  return parts.join(" · ");
+}
 
 /**
  * Everything on a stat block the engine cannot yet run: saving-throw actions,
@@ -326,14 +418,27 @@ export function normalizeTableToken(input = {}, { id, ordinal = 0 } = {}) {
   if (!tokenId) throw new TypeError("A Table token requires a stable id.");
   const maxHp = Math.max(1, Math.floor(finite(input.maxHp, 10)));
   const inventoryResult = normalizeInventoryEntries(input.inventory);
+  const heroId = typeof input.heroId === "string" && input.heroId.trim() ? input.heroId.trim() : null;
+  const hp = Math.max(0, Math.min(maxHp, Math.floor(finite(input.hp, maxHp))));
   const token = {
     id: tokenId,
-    heroId: typeof input.heroId === "string" && input.heroId.trim() ? input.heroId.trim() : null,
+    heroId,
     name: typeof input.name === "string" && input.name.trim() ? input.name.trim() : `Token ${ordinal + 1}`,
     color: colorPattern.test(input.color || "") ? input.color : TOKEN_COLORS[ordinal % TOKEN_COLORS.length],
+    // Which side this creature fights on. Saves written before factions
+    // existed carry no value, so the default has to reconstruct the intent:
+    // a token with a Hero behind it is a party member, anything else is not.
+    // That is exactly the ally/foe split every existing save already implies,
+    // so old battles load with the sides the table always understood them to
+    // have, and no schema bump is needed.
+    faction: TOKEN_FACTIONS.includes(input.faction) ? input.faction : (heroId ? "ally" : "foe"),
     position: normalizePosition(input.position || input),
-    hp: Math.max(0, Math.min(maxHp, Math.floor(finite(input.hp, maxHp)))),
+    hp,
     maxHp,
+    // Temporary hit points sit outside the maximum on purpose: they are a
+    // buffer in front of real health, not part of it, so they are not clamped
+    // to maxHp and are not restored by healing.
+    tempHp: Math.max(0, Math.floor(finite(input.tempHp, 0))),
     ac: Math.max(0, Math.floor(finite(input.ac, 10))),
     baseSpeed: Math.max(0, Math.floor(finite(input.baseSpeed ?? input.speed, 30))),
     strength: Math.max(1, Math.floor(finite(input.strength, 10))),
@@ -345,7 +450,17 @@ export function normalizeTableToken(input = {}, { id, ordinal = 0 } = {}) {
     saveProficiencies: Array.isArray(input.saveProficiencies)
       ? [...new Set(input.saveProficiencies.filter((ability) => ABILITY_KEYS.includes(ability)))]
       : [],
+    // Copied from the Hero when the token joined the Battle, for the same
+    // reason as saveProficiencies: a skill check must be answerable from the
+    // token alone, without reaching back into a Hero record that may have
+    // changed since.
+    skillProficiencies: Array.isArray(input.skillProficiencies)
+      ? [...new Set(input.skillProficiencies.filter((skill) => SKILL_BY_ID[skill]))]
+      : [],
     level: Math.max(1, Math.min(20, Math.floor(finite(input.level, 1)))),
+    // Experience this creature is worth when defeated. Monsters bring it from
+    // their stat block; manual tokens are worth nothing unless told otherwise.
+    xp: Math.max(0, Math.floor(finite(input.xp, 0))),
     initiativeBonus: Math.floor(finite(input.initiativeBonus)),
     size: TOKEN_SIZES.includes(input.size) ? input.size : "medium",
     attacks: normalizeTokenAttacks(input.attacks),
@@ -363,6 +478,49 @@ export function normalizeTableToken(input = {}, { id, ordinal = 0 } = {}) {
     enchantments: input.enchantments && typeof input.enchantments === "object" ? input.enchantments : {},
     wornItemIds: Array.isArray(input.wornItemIds) ? [...new Set(input.wornItemIds.filter((value) => typeof value === "string"))] : [],
     conditions: normalizeConditions(input.conditions),
+    // Which damage types this creature shrugs off, ignores, or suffers double
+    // from. Monsters bring these from their stat block; everything else starts
+    // empty, which is exactly how every save written before today behaved.
+    damageResistances: normalizeDamageTypes(input.damageResistances),
+    damageImmunities: normalizeDamageTypes(input.damageImmunities),
+    damageVulnerabilities: normalizeDamageTypes(input.damageVulnerabilities),
+    // Death saving throws. "Dying" is not stored — it is hp of zero and not
+    // dead — because a third field would only be one more thing to keep
+    // consistent with the other two.
+    deathSaveSuccesses: Math.max(0, Math.min(DEATH_SAVES_REQUIRED, Math.floor(finite(input.deathSaveSuccesses)))),
+    deathSaveFailures: Math.max(0, Math.min(DEATH_SAVES_REQUIRED, Math.floor(finite(input.deathSaveFailures)))),
+    // Three rules, enforced here rather than trusted from the caller, because
+    // each of the alternatives is a state the game does not have:
+    //
+    //   - A creature with hit points left is not dead.
+    //   - Death saving throws are a player-character rule. A monster that
+    //     reaches zero is simply dead, so there is no dying monster to build.
+    //   - A save written before death saves existed carries no value, and in
+    //     that world dropping to zero was final. Reading the absence as death
+    //     keeps a reloaded Battle holding the same creatures it did, rather
+    //     than quietly reviving every corpse into a casualty still in the fight.
+    dead: hp > 0
+      ? false
+      : heroId
+        ? (typeof input.dead === "boolean" ? input.dead : true)
+        : true,
+    // Turn-scoped states that outlive the acting creature's own turn, which is
+    // why they are on the token and not on turn resources: resources exist only
+    // for whoever is currently active and are discarded when the turn passes.
+    // All four are cleared at the start of this creature's next turn.
+    reactionSpent: Boolean(input.reactionSpent),
+    dodging: Boolean(input.dodging),
+    disengaging: Boolean(input.disengaging),
+    // Set on the creature being helped, naming the one target the advantage
+    // applies to. Help is aimed at a specific enemy, not handed out at large.
+    helpedAgainstTokenId: typeof input.helpedAgainstTokenId === "string" && input.helpedAgainstTokenId.trim()
+      ? input.helpedAgainstTokenId.trim()
+      : null,
+    // Who offered it. Needed because Help expires at the start of the helper's
+    // next turn, and without this there is no way to tell whose offer it was.
+    helpedById: typeof input.helpedById === "string" && input.helpedById.trim()
+      ? input.helpedById.trim()
+      : null,
   };
   return { ...token, ...normalizeEquipment(token, token.inventory) };
 }
@@ -420,6 +578,9 @@ export function createMonsterToken(monster, { id, ordinal = 0, position, name } 
   const senseNotes = Object.entries(monster.senses || {})
     .map(([sense, value]) => `${sense.replace(/_/g, " ")} ${value}`)
     .join(", ");
+  const resistances = normalizeDamageTypeList(monster.damageResistances);
+  const immunities = normalizeDamageTypeList(monster.damageImmunities);
+  const vulnerabilities = normalizeDamageTypeList(monster.damageVulnerabilities);
   return normalizeTableToken({
     id,
     name: name || monster.name,
@@ -427,6 +588,7 @@ export function createMonsterToken(monster, { id, ordinal = 0, position, name } 
     monsterId: monster.id,
     creatureType: monster.subtype ? `${monster.creatureType} (${monster.subtype})` : monster.creatureType,
     challengeRating: monster.challengeRating,
+    xp: monster.xp,
     hp: monster.hp,
     maxHp: monster.hp,
     ac: monster.ac,
@@ -442,11 +604,18 @@ export function createMonsterToken(monster, { id, ordinal = 0, position, name } 
     initiativeBonus: abilityModifier(monster.dexterity),
     attacks: monster.attacks,
     attacksPerAction: monster.attacksPerAction,
+    // The plain single types the engine can run, split away from the qualified
+    // prose it cannot. Both halves are kept: the ids drive the damage rules
+    // below, and whatever could not be reduced to an id stays in the notes so
+    // the table can still read the full stat block.
+    damageResistances: resistances.applied,
+    damageImmunities: immunities.applied,
+    damageVulnerabilities: vulnerabilities.applied,
     statBlockNotes: {
       multiattack: monster.multiattackNote,
-      resistances: (monster.damageResistances || []).join(", "),
-      immunities: (monster.damageImmunities || []).join(", "),
-      vulnerabilities: (monster.damageVulnerabilities || []).join(", "),
+      resistances: unappliedNote(resistances),
+      immunities: unappliedNote(immunities),
+      vulnerabilities: unappliedNote(vulnerabilities),
       conditionImmunities: (monster.conditionImmunities || []).join(", "),
       senses: [senseNotes, speedNotes && `speed ${speedNotes}`].filter(Boolean).join(" · "),
       languages: monster.languages,
@@ -478,6 +647,7 @@ export function createHeroTokenSnapshot(hero, { id, ordinal = 0, position } = {}
     wisdom: derived.finalAbilities.wis,
     charisma: derived.finalAbilities.cha,
     saveProficiencies: hero.saveProficiencies || [],
+    skillProficiencies: hero.skillProficiencies || [],
     level: derived.level,
     initiativeBonus: derived.initiative,
     size: derived.size,
@@ -522,6 +692,30 @@ export const tokenSaveProfile = (token) => ABILITY_KEYS.map((ability) => ({
   ability,
   modifier: tokenSaveModifier(token, ability),
   proficient: (token?.saveProficiencies || []).includes(ability),
+}));
+
+export const skillById = (skillId) => SKILL_BY_ID[skillId] || null;
+
+/**
+ * A skill check is the governing ability's modifier plus the proficiency bonus
+ * when the creature is trained in that skill. Worn magic items are deliberately
+ * excluded — the implemented effects only cover attacks, armour class, and
+ * saves, and none of them claims to help with skills.
+ */
+export function tokenSkillModifier(token, skillId) {
+  const skill = SKILL_BY_ID[skillId];
+  if (!skill) return 0;
+  const base = abilityModifier(tokenAbilityScore(token, skill.ability));
+  const proficient = (token?.skillProficiencies || []).includes(skill.id);
+  return base + (proficient ? proficiencyBonus(token?.level) : 0);
+}
+
+export const tokenSkillProfile = (token) => SKILLS.map((skill) => ({
+  id: skill.id,
+  name: skill.name,
+  ability: skill.ability,
+  modifier: tokenSkillModifier(token, skill.id),
+  proficient: (token?.skillProficiencies || []).includes(skill.id),
 }));
 
 export function derivedTokenArmorClass(token) {
@@ -864,7 +1058,13 @@ export function normalizeEncounter(encounter, tokens = []) {
     battleItems: normalizeBattleItems(encounter.battleItems, tokens),
     ammoSpentByToken: normalizeAmmoSpentByToken(encounter.ammoSpentByToken, tokens),
     ammunitionRecovered: Boolean(encounter.ammunitionRecovered),
+    // Experience is handed out once, by hand, from the completion card. The
+    // flag is what stops a second press from paying the party twice.
+    xpAwarded: Boolean(encounter.xpAwarded),
     winnerTokenId: tokenIds.has(encounter.winnerTokenId) ? encounter.winnerTokenId : null,
+    // The winning side. Set even when several creatures are left standing,
+    // which is the case winnerTokenId alone cannot describe.
+    winnerFaction: TOKEN_FACTIONS.includes(encounter.winnerFaction) ? encounter.winnerFaction : null,
     log: normalizeEncounterLog(encounter.log),
     setupTokens: normalizeSetupSnapshot(encounter.setupTokens, tokenIds),
   };
@@ -895,7 +1095,16 @@ export function restoreSetupTokens(tokens, snapshot) {
     return {
       ...token,
       hp: token.maxHp,
+      // Temporary hit points belong to the fight that granted them. Leaving
+      // them behind would carry a buffer out of an abandoned battle and into
+      // the next one, which reads as a token that mysteriously has more health
+      // than its sheet says.
+      tempHp: 0,
       conditions: [],
+      // The dying and the dead both stand up again. An abandoned Battle did not
+      // happen, so nothing that happened in it should follow a creature out.
+      ...CLEARED_DEATH_STATE,
+      ...CLEARED_TURN_STATE,
       position: saved ? normalizePosition(saved.position) : token.position,
     };
   });
@@ -952,6 +1161,10 @@ export function prepareBattleStart(scene, { viewport, random = Math.random } = {
       ...token,
       position,
       conditions: [],
+      // A new Battle starts everyone whole, upright, and with a reaction in
+      // hand. Nothing carries in from Setup or from a previous encounter.
+      ...CLEARED_DEATH_STATE,
+      ...CLEARED_TURN_STATE,
       // Every creature starts the encounter holding its own weapons.
       attacks: token.attacks.map((attack) => ({ ...attack, thrown: false })),
     });
@@ -1095,7 +1308,12 @@ export function rulerDistanceFeet(start, end, { width, height, gridSize } = {}) 
   const startRow = Math.floor((finite(start?.yPercent) / 100) * cellsY);
   const endColumn = Math.floor((finite(end?.xPercent) / 100) * cellsX);
   const endRow = Math.floor((finite(end?.yPercent) / 100) * cellsY);
-  const crossedSquares = Math.abs(endColumn - startColumn) + Math.abs(endRow - startRow);
+  // A diagonal step costs one square, not two — the SRD's optional "every
+  // diagonal is 5 ft" variant, which is what movement, attack range and
+  // adjacency all already use. Summing the two axes instead would make the
+  // ruler read 30 ft where an attack that measured 15 ft is legal, and the
+  // only thing worse than an unruled map is a ruler that contradicts the rules.
+  const crossedSquares = Math.max(Math.abs(endColumn - startColumn), Math.abs(endRow - startRow));
   return crossedSquares * 5;
 }
 

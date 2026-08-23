@@ -111,7 +111,11 @@ if (/savePatch|onUpdate|Repository|localStorage/.test(pointerMove)) failures.pus
 for (const integration of ["nf-state-table-root", "useDialogA11y", "title={scene?.name", "AttackRangeLayer"]) {
   if (!table.includes(integration)) failures.push(`Table hardening integration is missing ${integration}.`);
 }
-const attackDurability = table.slice(table.indexOf("const resolveAttackTarget"), table.indexOf("const openBattleChest"));
+// Saving before animating now lives in `presentAttack`, which both an ordinary
+// attack and an opportunity attack go through. The rule being checked has not
+// changed — only the function it is written in, which is why the slice moved
+// rather than the assertion.
+const attackDurability = table.slice(table.indexOf("const presentAttack"), table.indexOf("const openBattleChest"));
 const attackSaveIndex = attackDurability.indexOf("savePatch(resolved.value)");
 const attackCinematicIndex = attackDurability.indexOf("setCinematic({");
 if (attackSaveIndex < 0 || attackCinematicIndex < 0 || attackSaveIndex > attackCinematicIndex) {
@@ -168,7 +172,19 @@ for (const contract of ["storage-quota-exceeded", "previous valid state remains 
   if (!stateRepository.includes(contract)) failures.push(`State recovery contract is missing ${contract}.`);
 }
 const artworkRepository = await read("src/storage/artworkRepository.js");
-if (!artworkRepository.includes("artwork-quota-exceeded") || !artworkRepository.includes("previous artwork remains active")) failures.push("Artwork quota recovery contract is incomplete.");
+// The codes are built from a prefix now that Hero portraits share this
+// repository and need their own error family. The artwork prefix must stay the
+// default, so Scene artwork keeps the exact codes the rest of the app branches
+// on, and the quota refusal must still promise the previous image survives.
+for (const contract of [
+  "`${codePrefix}-quota-exceeded`",
+  "codePrefix = \"artwork\"",
+  "previous image remains active",
+]) {
+  if (!artworkRepository.includes(contract)) failures.push(`Artwork quota recovery contract is missing ${contract}.`);
+}
+const runtime = await read("src/application/browserRuntime.js");
+if (!runtime.includes("codePrefix: \"portrait\"")) failures.push("Hero portraits must report portrait errors, not Scene artwork errors.");
 
 if (PATH_SEARCH_LIMIT !== 4000) failures.push("A* pathfinding must remain capped at exactly 4,000 cells.");
 const attacks = await read("src/domain/attacks.js");

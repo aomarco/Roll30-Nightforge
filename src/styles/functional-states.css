@@ -193,12 +193,34 @@
   left: 50%;
   bottom: 28px;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  /* Icon, result copy, the experience readout when there is one, then the
+     actions. The experience column collapses to nothing when it is absent. */
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 16px;
-  width: min(720px, calc(100vw - 72px));
+  width: min(860px, calc(100vw - 72px));
   padding: 15px 17px;
   transform: translateX(-50%);
+}
+
+.nf-state-battle-xp {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 12px;
+  border: 1px solid rgba(224, 176, 85, 0.34);
+  border-radius: var(--r-xs);
+  background: rgba(224, 176, 85, 0.09);
+  text-align: right;
+}
+
+.nf-state-battle-xp strong { color: var(--brass); font-size: 16px; }
+.nf-state-battle-xp p { margin: 0; color: var(--muted); font-size: 10.5px; }
+
+.nf-state-battle-complete-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
 }
 
 .nf-state-battle-complete-icon {
@@ -924,7 +946,111 @@
 .nf-state-battle-save-proficient small { color: var(--jade); }
 .nf-state-battle-save-proficient strong { color: var(--jade-hi); }
 
+/* Saves and skills are buttons now, so they need the affordances of one. */
+.nf-state-battle-save,
+.nf-state-battle-skill {
+  cursor: pointer;
+  transition: border-color .16s ease, background .16s ease, transform .16s ease;
+}
+
+.nf-state-battle-save:hover:not(:disabled),
+.nf-state-battle-skill:hover:not(:disabled) {
+  border-color: var(--jade-edge);
+  background: rgba(255,255,255,.07);
+  transform: translateY(-1px);
+}
+
+.nf-state-battle-save:disabled,
+.nf-state-battle-skill:disabled { cursor: default; opacity: .55; }
+
+.nf-state-battle-skills { margin-top: 2px; }
+
+.nf-state-battle-skill-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 11px;
+}
+
+.nf-state-battle-skill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 9px;
+  border-radius: var(--r-xs);
+  background: rgba(255,255,255,.035);
+  border: 1px solid var(--line);
+  text-align: left;
+}
+
+.nf-state-battle-skill small { font-size: 10px; color: var(--ink-3); }
+.nf-state-battle-skill strong { font-size: 13px; color: var(--ink); }
+.nf-state-battle-skill-proficient { background: var(--jade-tint); border-color: var(--jade-edge); }
+.nf-state-battle-skill-proficient small { color: var(--jade); }
+.nf-state-battle-skill-proficient strong { color: var(--jade-hi); }
+
+/* --------------------------------------- hit point adjustment and rolling */
+.nf-state-battle-vitality,
+.nf-state-battle-rolls { margin-top: 2px; }
+
+.nf-state-battle-vitality-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin-top: 9px;
+}
+
+.nf-state-battle-vitality-amount { flex: 1 1 auto; min-width: 0; }
+.nf-state-battle-vitality-row .btn { flex: 0 0 auto; }
+
+.nf-state-battle-temp {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+  padding: 2px 8px;
+  border: 1px solid rgba(95, 168, 245, 0.42);
+  border-radius: 999px;
+  background: rgba(95, 168, 245, 0.12);
+  color: var(--ally, #5fa8f5);
+  font-size: 10.5px;
+}
+
+.nf-state-battle-roll-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  margin-top: 9px;
+}
+
+.nf-state-battle-dc { flex: 0 0 118px; }
+
+.nf-state-battle-roll-modes {
+  display: flex;
+  flex: 1 1 auto;
+  gap: 5px;
+}
+
+.nf-state-battle-roll-mode { flex: 1 1 0; justify-content: center; }
+
 .nf-state-battle-conditions { margin-top: 2px; }
+
+/* ------------------------------------------------------- check cinematic */
+.nf-state-check-die-void {
+  display: grid;
+  place-items: center;
+  gap: 2px;
+  color: var(--foe, #f2617a);
+}
+
+.nf-state-check-verdict-success { color: var(--jade-hi); }
+.nf-state-check-verdict-failure { color: var(--foe, #f2617a); }
+.nf-state-check-verdict-neutral { color: var(--ink); }
+
+.nf-state-cinematic-absorbed { color: var(--ally, #5fa8f5); font-style: normal; }
+
+.nf-state-hero-xp-ready { color: var(--brass); }
 
 /* --------------------------------------------------------- command bar */
 .nf-state-command-bar {
@@ -2760,6 +2886,60 @@
 
 .nf-state-scene-stats strong { font-size: 15px; color: var(--ink); }
 
+/* Which side a token fights on. Faction colour is the design language's one
+   sanctioned use of ally/foe hues, and the selected button also carries a
+   pressed state and its own label, so the choice never rests on colour alone. */
+.nf-state-scene-faction {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.nf-state-scene-faction > small {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+
+.nf-state-scene-faction-switch { display: flex; gap: 3px; }
+
+.nf-state-scene-faction-switch > button {
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+
+/* The selected side is not a dead control — it is disabled because pressing it
+   again would be a no-op, so it keeps full contrast rather than dimming. */
+.nf-state-scene-faction-switch > button:disabled { cursor: default; }
+
+.nf-state-scene-faction-switch > button:hover:not(:disabled) {
+  color: var(--ink-1);
+  background: rgba(255, 255, 255, .08);
+}
+
+.nf-state-scene-faction-switch > .nf-state-faction-ally.on {
+  color: var(--ally);
+  background: var(--ally-tint);
+  border-color: rgba(95, 168, 245, .38);
+}
+
+.nf-state-scene-faction-switch > .nf-state-faction-foe.on {
+  color: var(--foe);
+  background: var(--foe-tint);
+  border-color: rgba(242, 97, 122, .38);
+}
+
 .nf-state-scene-kind {
   padding-top: 9px;
   border-top: 1px solid var(--line);
@@ -3078,3 +3258,115 @@
   letter-spacing: .08em;
   text-transform: uppercase;
 }
+
+/* ---------------------------------------------------------------------------
+   Damage defences, death saving throws, and the turn-scoped tactics.
+   Every selector here is scoped to its own nf-state- name rather than reaching
+   for a shared primitive, because none of these shapes appears anywhere else.
+--------------------------------------------------------------------------- */
+
+.nf-state-battle-down-dying { color: var(--brass); background: var(--brass-tint); }
+.nf-state-battle-down-stable { color: var(--jade); background: var(--jade-tint); }
+
+.nf-state-battle-death {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.nf-state-battle-death-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ink-4);
+}
+
+.nf-state-battle-death-pip {
+  width: 9px;
+  height: 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-full);
+  background: transparent;
+}
+
+.nf-state-battle-death-pip.on {
+  border-color: var(--jade);
+  background: var(--jade);
+  box-shadow: 0 0 7px var(--jade-glow);
+}
+
+.nf-state-battle-death-fail.on {
+  border-color: var(--foe);
+  background: var(--foe);
+  box-shadow: 0 0 7px rgba(226, 108, 131, .4);
+}
+
+.nf-state-battle-defenses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 10px;
+}
+
+.nf-state-battle-defense-immune { color: var(--ink-1); background: rgba(143, 115, 95, .22); border-color: rgba(143, 115, 95, .45); }
+.nf-state-battle-defense-resistant { color: var(--jade); background: var(--jade-tint); border-color: var(--jade-edge); }
+.nf-state-battle-defense-vulnerable { color: var(--foe); background: var(--foe-tint); border-color: rgba(226, 108, 131, .3); }
+
+.nf-state-battle-vitality-type { min-width: 118px; }
+
+.nf-state-cinematic-defense,
+.nf-state-cinematic-dying {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 7px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.nf-state-cinematic-defense-immune { color: var(--ink-2); }
+.nf-state-cinematic-defense-resistant { color: var(--jade); }
+.nf-state-cinematic-defense-vulnerable { color: var(--foe); }
+.nf-state-cinematic-dying { color: var(--brass); }
+
+.nf-state-command-tactics > button > span > small { line-height: 1.35; }
+
+.nf-state-scene-defences { margin-top: 10px; }
+
+.nf-state-scene-defences > small {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+
+.nf-state-scene-defence-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 7px;
+}
+
+.nf-state-scene-defence-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 10.5px;
+}
+
+.nf-state-scene-defence-chip:disabled { cursor: default; opacity: .55; }
+
+.nf-state-scene-defence-add {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) auto;
+  gap: 5px;
+}
+
+.nf-state-table-help-status > .tag { white-space: normal; }

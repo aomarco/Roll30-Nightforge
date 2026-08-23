@@ -123,6 +123,7 @@ export default function App({ browser = window, runtimeFactory = createBrowserRu
         go={go}
         setMode={(mode) => go({ page: "board", mode })}
         onUpdate={updateScene}
+        onAwardExperience={(id, award) => trackRevision(() => runtime.commands.awardExperience(id, award))}
         artworkRepository={runtime.artworkRepository}
         persistence={state.persistence}
       />

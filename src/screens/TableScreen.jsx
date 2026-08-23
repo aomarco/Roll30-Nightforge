@@ -30,17 +30,24 @@ import {
 import { getItem } from "../domain/catalog.js";
 import { generatedId } from "../application/generatedId.js";
 import {
+  ATTACK_KIND_REACTION,
   attackTargetEligibility,
   bonusAttackAvailability,
   buildAttackRangeBands,
   mainAttackAvailability,
+  opportunityAttacksFor,
   performWeaponAttack,
   toggleBattleCondition,
 } from "../domain/attacks.js";
 import {
   activateDash,
+  activateDisengage,
+  activateDodge,
+  activateHelp,
   dashAvailability,
+  dodgeAvailability,
   endTurn,
+  helpAvailability,
   movementMaximum,
   movementRemaining,
   moveActiveToken,
@@ -48,7 +55,10 @@ import {
   planActiveMovement,
   swapAvailability,
 } from "../domain/combat.js";
+import { performAbilityCheck, performSavingThrow } from "../domain/checks.js";
+import { rollDeathSave } from "../domain/death.js";
 import { CONDITIONS, conditionById } from "../domain/conditions.js";
+import { damageToken, healToken, setTemporaryHp } from "../domain/vitality.js";
 import {
   chestCommandOptions,
   lootCommandOptions,
@@ -108,6 +118,7 @@ import { useDialogA11y } from "../ui/useDialogA11y.js";
 import BattleSetupInspector from "./BattleSetupInspector.jsx";
 import BattleTokenInspector from "./BattleTokenInspector.jsx";
 import AttackCinematic from "./AttackCinematic.jsx";
+import CheckCinematic from "./CheckCinematic.jsx";
 import BattleCompletion from "./BattleCompletion.jsx";
 import ChestLootDrawer from "./ChestLootDrawer.jsx";
 import CommandBar from "./CommandBar.jsx";
@@ -147,6 +158,18 @@ const BRIEF_REFUSALS = Object.freeze({
   DASH_ACTION_SPENT: "Action already used",
   DASH_AFTER_SWAP: "Cannot Dash after a swap",
   DASH_INCAPACITATED: "This token cannot Dash",
+  TACTIC_ACTION_SPENT: "Action already used",
+  TACTIC_AFTER_DASH: "Not available after Dash",
+  TACTIC_AFTER_SWAP: "Not available after a swap",
+  TACTIC_INCAPACITATED: "This token cannot do that",
+  HELP_NO_ALLY_ADJACENT: "No ally within five feet",
+  HELP_ALLY_UNREACHABLE: "That ally is out of reach",
+  HELP_TARGET_INVALID: "Choose a standing enemy",
+  DEATH_SAVE_STABLE: "Stable — no more saves",
+  DEATH_SAVE_ALREADY_DEAD: "This token is dead",
+  DEATH_SAVE_NOT_DYING: "This token is still standing",
+  REACTION_ALREADY_SPENT: "Reaction already used",
+  REACTION_INCAPACITATED: "This token cannot react",
   SWAP_ALREADY_USED: "Weapons already swapped",
   SWAP_AFTER_ACTION: "Action already used",
   SWAP_AFTER_DASH: "Cannot swap after Dash",
@@ -430,6 +453,7 @@ export default function TableScreen({
   go = okay,
   setMode = okay,
   onUpdate = okay,
+  onAwardExperience = okay,
   heroes = [],
   artworkRepository = null,
   persistence = { status: "idle", error: null },
@@ -451,6 +475,7 @@ export default function TableScreen({
   initialSwapDraft = null,
   initialAttackDraft = null,
   initialCinematic = null,
+  initialCheckCinematic = null,
   initialRetrievalCinematic = null,
   initialLootChestId = null,
   initialLootTokenId = null,
@@ -483,7 +508,14 @@ export default function TableScreen({
   const [rulerDraft, setRulerDraft] = useState(initialRulerDraft);
   const [movementPreview, setMovementPreview] = useState(initialMovementPreview);
   const [attackDraft, setAttackDraft] = useState(initialAttackDraft);
+  // Help is chosen in two halves — the ally from the command bar, the enemy off
+  // the board — so it needs its own targeting mode alongside the attack one.
+  const [helpDraft, setHelpDraft] = useState(null);
+  // Opportunity attacks queue up behind a move and resolve one at a time, each
+  // through the ordinary attack cinematic.
+  const [reactionQueue, setReactionQueue] = useState([]);
   const [cinematic, setCinematic] = useState(initialCinematic);
+  const [checkCinematic, setCheckCinematic] = useState(initialCheckCinematic);
   const [retrievalCinematic, setRetrievalCinematic] = useState(initialRetrievalCinematic);
   const [lootChestId, setLootChestId] = useState(initialLootChestId);
   const [lootTokenId, setLootTokenId] = useState(initialLootTokenId);
@@ -496,7 +528,7 @@ export default function TableScreen({
   const artworkRef = useRef(null);
   const { url: artworkUrl, error: artworkError } = useArtworkUrl(scene, artworkRepository, suppliedArtworkUrl);
   const busy = persistence.status === "saving";
-  const combatLocked = Boolean(cinematic || retrievalCinematic);
+  const combatLocked = Boolean(cinematic || checkCinematic || retrievalCinematic);
   const tableTokens = useMemo(() => normalizeTableTokens(scene?.tokens), [scene?.tokens]);
   const playTokens = tableTokens;
   const chests = useMemo(() => normalizeChests(scene?.chests), [scene?.chests]);
@@ -524,6 +556,12 @@ export default function TableScreen({
     clearCinematicTimers();
     setCinematic(null);
     setImpact(null);
+  };
+
+  // A check is saved before its animation too, so skipping only stops the show.
+  const skipCheckCinematic = () => {
+    clearCinematicTimers();
+    setCheckCinematic(null);
   };
 
   const clearCinematicTimers = () => {
@@ -638,6 +676,11 @@ export default function TableScreen({
         setLocalError(null);
         return;
       }
+      if (helpDraft) {
+        setHelpDraft(null);
+        setLocalError(null);
+        return;
+      }
       if (lootChestId || lootTokenId) {
         setLootChestId(null);
         setLootTokenId(null);
@@ -652,7 +695,7 @@ export default function TableScreen({
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [activeTool, attackDraft, combatLocked, drawerOpen, lootChestId, wallDraft, walls]);
+  }, [activeTool, attackDraft, combatLocked, drawerOpen, helpDraft, lootChestId, wallDraft, walls]);
 
   /**
    * Heal scenes saved before every path snapped. One pass when a scene opens
@@ -812,17 +855,33 @@ export default function TableScreen({
       return;
     }
 
-    const moved = moveActiveToken(scene, token.id, destination, viewport);
+    commitMovement(token.id, destination, viewport);
+  };
+
+  /**
+   * Every committed move in Battle goes through here, so that leaving an
+   * enemy's reach costs the same whether the token was dragged or walked with
+   * the arrow keys.
+   *
+   * The opportunity attacks are worked out from the route the domain accepted,
+   * against the board as it stood before the step — the reactors have not moved,
+   * and the mover's path is the plan's own list of squares.
+   */
+  const commitMovement = (tokenId, destination, viewport) => {
+    const moved = moveActiveToken(scene, tokenId, destination, viewport);
     if (!moved.ok) {
       setLocalError(moved);
-      return;
+      return moved;
     }
+    const reactions = isActiveBattle ? opportunityAttacksFor(scene, moved.plan, viewport) : [];
     const saved = savePatch(moved.value);
     if (saved.ok) {
-      setArrivalId(token.id);
+      setArrivalId(tokenId);
       if (arrivalTimerRef.current) clearTimeout(arrivalTimerRef.current);
       arrivalTimerRef.current = setTimeout(() => setArrivalId(null), 520);
+      if (reactions.length) setReactionQueue(reactions);
     }
+    return saved;
   };
 
   const onChestKeyDown = (event, chest) => {
@@ -966,16 +1025,7 @@ export default function TableScreen({
         xPercent: point.xPercent + interaction.offset.xPercent,
         yPercent: point.yPercent + interaction.offset.yPercent,
       };
-      const moved = moveActiveToken(scene, interaction.tokenId, destination, setupViewport());
-      if (!moved.ok) setLocalError(moved);
-      else {
-        const saved = savePatch(moved.value);
-        if (saved.ok) {
-          setArrivalId(interaction.tokenId);
-          if (arrivalTimerRef.current) clearTimeout(arrivalTimerRef.current);
-          arrivalTimerRef.current = setTimeout(() => setArrivalId(null), 520);
-        }
-      }
+      commitMovement(interaction.tokenId, destination, setupViewport());
       setMovementPreview(null);
     }
     setInteraction(null);
@@ -1281,6 +1331,57 @@ export default function TableScreen({
     return savePatch(dashed.value);
   };
 
+  const useDodge = () => {
+    const dodged = activateDodge(scene);
+    if (!dodged.ok) {
+      setLocalError(dodged);
+      return dodged;
+    }
+    return savePatch(dodged.value);
+  };
+
+  const useDisengage = () => {
+    const disengaged = activateDisengage(scene);
+    if (!disengaged.ok) {
+      setLocalError(disengaged);
+      return disengaged;
+    }
+    return savePatch(disengaged.value);
+  };
+
+  /**
+   * Help needs two names, and only one of them is known when the button is
+   * pressed. Choosing the ally arms a targeting mode exactly like an attack
+   * does, and the enemy is picked off the board.
+   */
+  const startHelp = (allyTokenId) => {
+    const available = helpAvailability(scene, allyTokenId, setupViewport());
+    if (!available.ok) {
+      setLocalError(available);
+      return available;
+    }
+    setLocalError(null);
+    setAttackDraft(null);
+    setHelpDraft({ allyTokenId, allyName: available.value.ally.name });
+    return available;
+  };
+
+  const confirmHelp = (targetTokenId) => {
+    if (!helpDraft) return { ok: false, message: "No Help is waiting for a target." };
+    const helped = activateHelp(scene, helpDraft.allyTokenId, targetTokenId, setupViewport());
+    if (!helped.ok) {
+      setLocalError(helped);
+      return helped;
+    }
+    setHelpDraft(null);
+    return savePatch(helped.value);
+  };
+
+  const rollTokenDeathSave = (tokenId) => {
+    if (!isActiveBattle || combatLocked) return { ok: false, message: "Death saving throws need an active unlocked Battle." };
+    return presentCheck(rollDeathSave(scene, tokenId, { random }));
+  };
+
   const useWeaponSwap = (loadout) => {
     const swapped = performWeaponSwap(scene, loadout);
     if (!swapped.ok) {
@@ -1304,13 +1405,15 @@ export default function TableScreen({
     return range;
   };
 
-  const resolveAttackTarget = (targetId) => {
-    if (!attackDraft || combatLocked) return { ok: false, message: "No attack is ready." };
-    const resolved = performWeaponAttack(scene, { ...attackDraft, targetId }, { random, battleItemIdFactory });
-    if (!resolved.ok) {
-      setLocalError(resolved);
-      return resolved;
-    }
+  /**
+   * Persist first, then animate — the same order attacks have always used, and
+   * the reason a cinematic never shows a result that failed to save.
+   *
+   * Shared with opportunity attacks. A reaction is an ordinary attack once it
+   * has been decided upon, and giving it its own animation would tell the table
+   * that something different happened when nothing did.
+   */
+  const presentAttack = (resolved, targetId) => {
     const saved = savePatch(resolved.value);
     if (!saved.ok) return saved;
     clearCinematicTimers();
@@ -1346,6 +1449,48 @@ export default function TableScreen({
       cinematicTimersRef.current = [];
     }, timings.close);
     return resolved;
+  };
+
+  /**
+   * Opportunity attacks resolve one at a time, each waiting for the last
+   * cinematic to finish, so two guards swinging at the same runner read as two
+   * separate events rather than one number changing twice.
+   *
+   * The queue is drained from an effect rather than in a loop because each
+   * attack has to be saved and re-rendered before the next one is worked out —
+   * the second reactor might be swinging at a creature the first one downed.
+   */
+  useEffect(() => {
+    if (!reactionQueue.length || cinematic || checkCinematic) return;
+    const [next, ...rest] = reactionQueue;
+    const resolved = performWeaponAttack(
+      scene,
+      {
+        kind: ATTACK_KIND_REACTION,
+        reactorId: next.reactorId,
+        targetId: next.targetId,
+        weaponId: next.weaponId,
+        hand: next.hand,
+        attackId: next.attackId,
+        viewport: setupViewport(),
+      },
+      { random, battleItemIdFactory },
+    );
+    setReactionQueue(rest);
+    // A refusal here is not a mistake to report. The reactor may have been
+    // downed by the attack before it, or lost the weapon it was going to use;
+    // either way the swing simply does not happen.
+    if (resolved.ok) presentAttack(resolved, next.targetId);
+  }, [reactionQueue, cinematic, checkCinematic, scene]);
+
+  const resolveAttackTarget = (targetId) => {
+    if (!attackDraft || combatLocked) return { ok: false, message: "No attack is ready." };
+    const resolved = performWeaponAttack(scene, { ...attackDraft, targetId }, { random, battleItemIdFactory });
+    if (!resolved.ok) {
+      setLocalError(resolved);
+      return resolved;
+    }
+    return presentAttack(resolved, targetId);
   };
 
   const openBattleChest = (chestId) => {
@@ -1484,6 +1629,68 @@ export default function TableScreen({
     return savePatch(changed.value);
   };
 
+  const applyVitality = (operation) => {
+    if (!isActiveBattle || combatLocked) return { ok: false, message: "Hit points can be changed only during an active unlocked Battle." };
+    const changed = operation();
+    if (!changed.ok) {
+      setLocalError(changed);
+      return changed;
+    }
+    setLocalError(null);
+    return savePatch(changed.value);
+  };
+
+  const healSelected = (tokenId, amount) => applyVitality(() => healToken(scene, tokenId, amount));
+  const damageSelected = (tokenId, amount, damageType = null) => applyVitality(() => damageToken(scene, tokenId, amount, damageType));
+  const setSelectedTempHp = (tokenId, amount) => applyVitality(() => setTemporaryHp(scene, tokenId, amount));
+
+  /**
+   * Saves and checks share one presentation path. Neither spends a turn
+   * resource and neither is restricted to the active token, because a save is
+   * nearly always demanded on somebody else's turn.
+   */
+  const presentCheck = (rolled) => {
+    if (!rolled.ok) {
+      setLocalError(rolled);
+      return rolled;
+    }
+    const saved = savePatch(rolled.value);
+    if (!saved.ok) return saved;
+    clearCinematicTimers();
+    setLocalError(null);
+    setCheckCinematic({ outcome: rolled.outcome, stage: "spin", error: null });
+    const reducedMotion = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    const timings = reducedMotion
+      ? { natural: 80, modifiers: 160, verdict: 240, close: 620 }
+      : { natural: 1100, modifiers: 2100, verdict: 3200, close: 5200 };
+    const schedule = (callback, delay) => {
+      const timer = setTimeout(callback, delay);
+      cinematicTimersRef.current.push(timer);
+    };
+    for (const stage of ["natural", "modifiers", "verdict"]) {
+      schedule(() => setCheckCinematic((current) => current ? { ...current, stage } : current), timings[stage]);
+    }
+    schedule(() => { setCheckCinematic(null); cinematicTimersRef.current = []; }, timings.close);
+    return rolled;
+  };
+
+  const rollTokenSave = (tokenId, ability, options = {}) => {
+    if (!isActiveBattle || combatLocked) return { ok: false, message: "Saving throws need an active unlocked Battle." };
+    return presentCheck(performSavingThrow(scene, { tokenId, ability, ...options }, { random }));
+  };
+
+  const rollTokenCheck = (tokenId, target = {}, options = {}) => {
+    if (!isActiveBattle || combatLocked) return { ok: false, message: "Ability checks need an active unlocked Battle." };
+    return presentCheck(performAbilityCheck(scene, { tokenId, ...target, ...options }, { random }));
+  };
+
+  const awardBattleExperience = (award) => {
+    if (!isCompleteBattle || !scene?.id) return { ok: false, message: "Only a completed Battle awards experience." };
+    const result = onAwardExperience(scene.id, award);
+    setLocalError(result?.ok === false ? result : null);
+    return result || { ok: true };
+  };
+
   const finishTurn = () => {
     if (combatLocked) return { ok: false, code: "ATTACK_RESOLVING", message: "Finish resolving the current attack before ending the turn." };
     const ended = endTurn(scene);
@@ -1525,7 +1732,11 @@ export default function TableScreen({
   const swapState = isActiveBattle ? swapAvailability(scene) : { ok: false, message: "Battle is not active." };
   const attackState = isActiveBattle ? mainAttackAvailability(scene) : { ok: false, message: "Battle is not active." };
   const bonusState = isActiveBattle ? bonusAttackAvailability(scene) : { ok: false, message: "Battle is not active." };
+  const tacticState = isActiveBattle ? dodgeAvailability(scene) : { ok: false, message: "Battle is not active." };
   const battleViewport = setupViewport();
+  // Asked without an ally so it comes back with the list of who is close
+  // enough, which is what the Tactics panel needs to offer.
+  const helpState = isActiveBattle ? helpAvailability(scene, null, battleViewport) : { ok: false, message: "Battle is not active." };
   const battleChestOptions = isActiveBattle ? chestCommandOptions(scene, battleViewport) : [];
   const battleRetrievalOptions = isActiveBattle ? retrievalCommandOptions(scene, battleViewport) : [];
   const battleLootOptions = isActiveBattle ? lootCommandOptions(scene, battleViewport) : [];
@@ -1653,8 +1864,8 @@ export default function TableScreen({
                 style={{ left: `${token.position.xPercent}%`, top: `${token.position.yPercent}%`, "--piece": token.color }}
                 onPointerDown={(event) => onTokenPointerDown(event, token)}
                 onKeyDown={(event) => onTokenKeyDown(event, token)}
-                onClick={(event) => { event.stopPropagation(); if (attackDraft) resolveAttackTarget(token.id); else { setSelectedId(token.id); setSelectedChestId(null); } }}
-                aria-label={attackDraft ? targetState?.ok ? `Attack ${token.name}` : `${token.name} unavailable as target` : `${token.name}${isPlay || isSetup || (isActiveBattle && token.id === active?.id) ? ", use arrow keys to move" : ""}`}
+                onClick={(event) => { event.stopPropagation(); if (attackDraft) resolveAttackTarget(token.id); else if (helpDraft) confirmHelp(token.id); else { setSelectedId(token.id); setSelectedChestId(null); } }}
+                aria-label={attackDraft ? targetState?.ok ? `Attack ${token.name}` : `${token.name} unavailable as target` : helpDraft ? `Help ${helpDraft.allyName} against ${token.name}` : `${token.name}${isPlay || isSetup || (isActiveBattle && token.id === active?.id) ? ", use arrow keys to move" : ""}`}
               >
                 <span className="piece-disc">{initials(token.name)}</span>
                 {isBattle && token.hp <= 0 && (
@@ -1711,6 +1922,7 @@ export default function TableScreen({
       </div>}
       {movementPreview && <div className="nf-state-table-tool-status glass grained" role="status"><span className={`tag ${movementPreview.ok ? routePreview?.overBudget ? "tag-foe" : "tag-jade" : "tag-foe"}`}>{movementPreview.ok ? routePreview.overBudget ? `${routePreview.costFeet} ft reachable · ${routePreview.requestedFeet - routePreview.costFeet} ft over` : `${routePreview.costFeet} ft route · release to move` : movementPreview.message}</span></div>}
       {attackDraft && <div className="nf-state-table-tool-status nf-state-table-attack-status glass grained" role="status"><span className="tag tag-jade">Choose a target · {attackDraft.rangeModel.option.weapon.name}</span>{attackDraft.rangeModel.bands.map((band) => <span className={`tag nf-state-table-range-key nf-state-table-range-key-${band.tone}`} key={band.id}>{band.label}</span>)}<button className="glyph" onClick={() => setAttackDraft(null)} title="Cancel targeting" aria-label="Cancel targeting"><X size={15} /></button></div>}
+      {helpDraft && <div className="nf-state-table-tool-status nf-state-table-help-status glass grained" role="status"><span className="tag tag-brass">Helping {helpDraft.allyName} · choose the enemy they are going for</span><button className="glyph" onClick={() => setHelpDraft(null)} title="Cancel Help" aria-label="Cancel Help"><X size={15} /></button></div>}
       {visibleError && !drawerOpen && (
         briefRefusal(visibleError)
           ? (
@@ -1848,6 +2060,11 @@ export default function TableScreen({
                 busy={busy}
                 locked={combatLocked || !isActiveBattle}
                 changeCondition={changeSelectedCondition}
+                heal={healSelected}
+                damage={damageSelected}
+                setTempHp={setSelectedTempHp}
+                rollSave={rollTokenSave}
+                rollCheck={rollTokenCheck}
               />
             )}
             {isPlay && <button className="btn btn-hazard btn-sm btn-wide" onClick={removeSelectedPlayToken} disabled={busy}><Trash2 size={15} /> Remove token</button>}
@@ -1869,6 +2086,12 @@ export default function TableScreen({
           busy={busy || combatLocked}
           attack={startAttack}
           dash={useDash}
+          tacticState={tacticState}
+          helpState={helpState}
+          dodge={useDodge}
+          disengage={useDisengage}
+          help={startHelp}
+          rollDeath={rollTokenDeathSave}
           swap={useWeaponSwap}
           end={finishTurn}
           openChest={openBattleChest}
@@ -1879,12 +2102,13 @@ export default function TableScreen({
         />
       )}
 
-      {isCompleteBattle && <BattleCompletion encounter={scene.encounter} tokens={tableTokens} busy={busy || combatLocked} restart={restartBattle} />}
+      {isCompleteBattle && <BattleCompletion encounter={scene.encounter} tokens={tableTokens} busy={busy || combatLocked} restart={restartBattle} awardXp={awardBattleExperience} />}
 
       {drawerOpen && <TableToolsDrawer isPlay={isPlay} camera={camera} mapView={mapView} activeTool={activeTool} wallDraft={wallDraft} wallsVisible={wallsVisible} canAdjustArtwork={canAdjustArtwork} busy={busy} error={visibleError} close={() => setDrawerOpen(false)} zoomBy={zoomBy} resetCamera={() => setCamera({ ...DEFAULT_CAMERA })} chooseTool={chooseTool} scaleArtwork={scaleArtwork} resetArtwork={resetArtwork} finishWall={finishWall} cancelWall={cancelWall} toggleWalls={() => savePatch({ wallsVisible: !wallsVisible })} exitTool={exitTool} />}
       {lootChest && isActiveBattle && <ChestLootDrawer chest={lootChest} busy={busy || combatLocked} error={visibleError} take={takeChestItem} close={() => setLootChestId(null)} />}
       {lootBody && isActiveBattle && <ChestLootDrawer chest={lootBody} body busy={busy || combatLocked} error={visibleError} take={takeBodyItem} close={() => setLootTokenId(null)} />}
       {cinematic && <AttackCinematic cinematic={cinematic} skip={skipCinematic} />}
+      {checkCinematic && <CheckCinematic cinematic={checkCinematic} skip={skipCheckCinematic} />}
       {retrievalCinematic && <RetrievalCinematic cinematic={retrievalCinematic} />}
     </div>
   );

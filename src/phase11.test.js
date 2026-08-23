@@ -92,7 +92,7 @@ test("IndexedDB artwork quota exhaustion is reported separately and retains the 
   };
   const failed = await createArtworkRepository(adapter).put("art-large", new Blob(["large"]));
   assert.equal(failed.code, "artwork-quota-exceeded");
-  assert.match(failed.recovery, /previous artwork remains active/i);
+  assert.match(failed.recovery, /previous image remains active/i);
 });
 
 test("application recovery state retains whether backup or clean-vault recovery was used", () => {

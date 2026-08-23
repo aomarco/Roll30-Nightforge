@@ -3,9 +3,13 @@ import {
   ArchiveRestore,
   Check,
   ChevronsRight,
+  Footprints,
+  HandHelping,
   Hourglass,
   PackageOpen,
   RefreshCw,
+  ShieldHalf,
+  Skull,
   Sparkle,
   Sparkles,
   Sword,
@@ -14,6 +18,7 @@ import {
 
 import { ITEM_BY_ID, itemSubtitle } from "../domain/catalog.js";
 import { movementMaximum, movementRemaining, validateSwapLoadout } from "../domain/combat.js";
+import { DEATH_SAVES_REQUIRED } from "../domain/table.js";
 
 /** One segment per five feet, which is the unit the whole game counts in. */
 const SPEED_SEGMENT_FEET = 5;
@@ -66,9 +71,15 @@ export default function CommandBar({
   retrievalOptions = [],
   lootOptions = [],
   busy = false,
+  tacticState = { ok: false, message: "Battle is not active." },
+  helpState = { ok: false, message: "Battle is not active." },
   attack,
   dash,
   swap,
+  dodge,
+  disengage,
+  help,
+  rollDeath,
   end,
   openChest,
   searchBody,
@@ -135,7 +146,24 @@ export default function CommandBar({
   // A creature with Multiattack keeps its Action open across several rolls.
   const attacksRemaining = Math.max(0, resources.attackAllowance - resources.attacksMade);
 
-  const commands = [
+  // A dying creature has no Action, no Bonus Action and no movement. Showing it
+  // the usual four keys, all dead, would be four separate lies; the one thing it
+  // can do is roll, so that is the only thing on offer.
+  const dying = token.hp <= 0 && !token.dead;
+  const stable = dying && token.deathSaveSuccesses >= DEATH_SAVES_REQUIRED;
+  const commands = dying
+    ? [{
+      id: "death",
+      icon: Skull,
+      label: "Roll death save",
+      available: !stable,
+      reason: stable
+        ? `${token.name} is stable and has stopped rolling. Healing is the only thing that brings them back.`
+        : `${token.deathSaveSuccesses} of ${DEATH_SAVES_REQUIRED} successes, ${token.deathSaveFailures} of ${DEATH_SAVES_REQUIRED} failures. Ten or better succeeds.`,
+      onClick: () => rollDeath(token.id),
+      expands: false,
+    }]
+    : [
     {
       id: "attack",
       icon: Sword,
@@ -177,6 +205,18 @@ export default function CommandBar({
       expands: true,
     },
     {
+      // Three Actions behind one key rather than three more keys. The bar has
+      // four already and the responsive layout starts clipping past five, so
+      // the ones that need a moment's thought share a drawer.
+      id: "tactics",
+      icon: ShieldHalf,
+      label: "Tactics",
+      available: tacticState.ok,
+      reason: tacticState.ok ? "Dodge, Disengage, or Help an adjacent ally." : tacticState.message,
+      onClick: () => togglePanel("tactics"),
+      expands: true,
+    },
+    {
       id: "bonus",
       icon: Sparkles,
       label: "Bonus action",
@@ -199,7 +239,8 @@ export default function CommandBar({
             <span className="kicker kicker-brass">
               {panel === "attack"
                 ? attackState.ok ? "Choose attack weapon" : "Attack unavailable"
-                : panel === "swap" ? "Swap draft" : "Bonus commands"}
+                : panel === "swap" ? "Swap draft"
+                  : panel === "tactics" ? "Spend the Action on a tactic" : "Bonus commands"}
             </span>
             <button className="glyph" onClick={() => setPanel(null)} aria-label="Close options"><X size={16} /></button>
           </div>
@@ -252,6 +293,46 @@ export default function CommandBar({
           )}
           {panel === "swap" && !swapState.ok && (
             <p className="note">{swapState.message} {swapState.recovery}</p>
+          )}
+
+          {panel === "tactics" && tacticState.ok && (
+            <div className="nf-state-command-options nf-state-command-tactics">
+              <button className="nf-state-command-option" type="button" onClick={dodge} disabled={busy} title="Spend the Action to Dodge.">
+                <ShieldHalf size={16} />
+                <span>
+                  <strong>Dodge</strong>
+                  <small>Every attack against you has disadvantage until your next turn.</small>
+                </span>
+              </button>
+              <button className="nf-state-command-option" type="button" onClick={disengage} disabled={busy} title="Spend the Action to Disengage.">
+                <Footprints size={16} />
+                <span>
+                  <strong>Disengage</strong>
+                  <small>Move away without drawing an opportunity attack for the rest of this turn.</small>
+                </span>
+              </button>
+              {helpState.ok
+                ? helpState.value.allies.map((ally) => (
+                  <button
+                    className="nf-state-command-option"
+                    key={ally.id}
+                    type="button"
+                    onClick={() => help(ally.id)}
+                    disabled={busy}
+                    title={`Spend the Action to Help ${ally.name}, then choose the enemy they are going for.`}
+                  >
+                    <HandHelping size={16} />
+                    <span>
+                      <strong>Help {ally.name}</strong>
+                      <small>Their next attack on the enemy you pick has advantage.</small>
+                    </span>
+                  </button>
+                ))
+                : <p className="note">{helpState.message} {helpState.recovery}</p>}
+            </div>
+          )}
+          {panel === "tactics" && !tacticState.ok && (
+            <p className="note">{tacticState.message} {tacticState.recovery}</p>
           )}
 
           {panel === "bonus" && (

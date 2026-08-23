@@ -115,6 +115,10 @@ export function createHeroRecord(
     portraitKey: nullableId(input.portraitKey),
     classId: selectedClass.id,
     level: Math.max(1, Math.min(20, Math.floor(finiteNumber(input.level, 1)))),
+    // Earned experience is recorded but never spent automatically. Defaulting
+    // to zero lets every Hero saved before this field existed load unchanged,
+    // which is why the schema version does not move.
+    xp: Math.max(0, Math.floor(finiteNumber(input.xp, 0))),
     raceId: selectedRace.id,
     subraceId: selectedSubrace?.id || null,
     alignment: ALIGNMENTS.includes(input.alignment) ? input.alignment : "Neutral",

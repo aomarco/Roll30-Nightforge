@@ -284,7 +284,9 @@ test("ArtworkRepository turns adapter failures into actionable results", async (
   const result = await createArtworkRepository(adapter).put("art-1", new Blob(["x"]));
   assert.equal(result.ok, false);
   assert.equal(result.code, "artwork-write-failed");
-  assert.match(result.recovery, /previous artwork remains/i);
+  // "image" rather than "artwork": the wording is shared with Hero portraits
+  // now, so it has to hold for both without naming the wrong one.
+  assert.match(result.recovery, /previous image remains/i);
 });
 
 test("application hydration always opens Library while restoring valid Scene context", () => {
