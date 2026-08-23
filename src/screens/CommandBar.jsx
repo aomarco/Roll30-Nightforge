@@ -5,6 +5,7 @@ import {
   ChevronsRight,
   Footprints,
   HandHelping,
+  HeartPulse,
   Hourglass,
   PackageOpen,
   RefreshCw,
@@ -73,12 +74,14 @@ export default function CommandBar({
   busy = false,
   tacticState = { ok: false, message: "Battle is not active." },
   helpState = { ok: false, message: "Battle is not active." },
+  stabilizeState = { ok: false, message: "Battle is not active." },
   attack,
   dash,
   swap,
   dodge,
   disengage,
   help,
+  stabilize,
   rollDeath,
   end,
   openChest,
@@ -156,9 +159,11 @@ export default function CommandBar({
       id: "death",
       icon: Skull,
       label: "Roll death save",
-      available: !stable,
+      available: !stable && !resources.deathSaveRolled,
       reason: stable
         ? `${token.name} is stable and has stopped rolling. Healing is the only thing that brings them back.`
+        : resources.deathSaveRolled
+          ? `${token.name} has rolled this turn. End the turn to continue initiative.`
         : `${token.deathSaveSuccesses} of ${DEATH_SAVES_REQUIRED} successes, ${token.deathSaveFailures} of ${DEATH_SAVES_REQUIRED} failures. Ten or better succeeds.`,
       onClick: () => rollDeath(token.id),
       expands: false,
@@ -212,7 +217,7 @@ export default function CommandBar({
       icon: ShieldHalf,
       label: "Tactics",
       available: tacticState.ok,
-      reason: tacticState.ok ? "Dodge, Disengage, or Help an adjacent ally." : tacticState.message,
+      reason: tacticState.ok ? "Dodge, Disengage, Help an ally, or stabilise a dying Hero." : tacticState.message,
       onClick: () => togglePanel("tactics"),
       expands: true,
     },
@@ -329,6 +334,24 @@ export default function CommandBar({
                   </button>
                 ))
                 : <p className="note">{helpState.message} {helpState.recovery}</p>}
+              {stabilizeState.ok
+                ? stabilizeState.value.targets.map((target) => (
+                  <button
+                    className="nf-state-command-option"
+                    key={target.id}
+                    type="button"
+                    onClick={() => stabilize(target.id)}
+                    disabled={busy}
+                    title={`Spend the Action on a DC 10 Medicine check to stabilise ${target.name}.`}
+                  >
+                    <HeartPulse size={16} />
+                    <span>
+                      <strong>Stabilise {target.name}</strong>
+                      <small>DC 10 Medicine. On success, they stop making death saves.</small>
+                    </span>
+                  </button>
+                ))
+                : <p className="note">{stabilizeState.message} {stabilizeState.recovery}</p>}
             </div>
           )}
           {panel === "tactics" && !tacticState.ok && (
@@ -472,8 +495,10 @@ export default function CommandBar({
         <button
           className="nf-state-command-end glass"
           onClick={end}
-          disabled={busy}
-          title={`End ${token.name}'s turn and pass initiative on.`}
+          disabled={busy || (dying && !stable && !resources.deathSaveRolled)}
+          title={dying && !stable && !resources.deathSaveRolled
+            ? `${token.name} must roll a death saving throw before ending the turn.`
+            : `End ${token.name}'s turn and pass initiative on.`}
         >
           <Hourglass size={26} strokeWidth={1.9} />
           <em>End Turn</em>

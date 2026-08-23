@@ -229,8 +229,8 @@ to do instead.
   and any magic bonuses from worn items.
 - **Changing class resets save proficiencies** to that class's two, because
   keeping the old ones would silently produce an illegal character.
-- **The sheet is split into chapters** — Identity, Abilities, Gear — rather
-  than one endless scroll.
+- **The sheet keeps Identity, Abilities and Gear on one continuous record**, so
+  every part of the Hero remains reachable without a hidden chapter switch.
 - **Hero portraits** upload per-hero.
 - **Retire hero** deletes one from the roster.
 
@@ -431,11 +431,18 @@ split is the single most important design decision in the combat code.
   attack for the rest of the turn.
 - **Help** spends your Action on an ally within five feet and one named enemy.
   Their next attack against that enemy has advantage. Naming the enemy is what
-  stops one Help turning into advantage on everything they swing at.
+  stops one Help turning into advantage on everything they swing at. The ally
+  is chosen in Tactics and the enemy is selected directly from the board.
+- **Stabilise** appears in Tactics for every dying Hero within five feet. It
+  spends the active creature's Action on a DC 10 Wisdom (Medicine) check. A
+  success clears the failures and makes the target stable; a failure still
+  spends the Action. Healing remains the only way to bring them back to positive
+  hit points.
 - **Opportunity attacks.** Leaving a square an enemy can reach draws one melee
   swing from them. Moving while staying inside their reach draws nothing, and a
   creature only gets one, because a reaction refreshes at the start of its own
-  turn rather than per victim.
+  turn rather than per victim. The swing checks range from the square the mover
+  left, even though the completed movement is already visible on the board.
 - **A reaction lives on the creature, not on the turn.** It has to: the creature
   spending one is by definition not the active one. It is spent when the swing
   is taken and comes back at the start of that creature's own turn.
@@ -523,7 +530,8 @@ split is the single most important design decision in the combat code.
   failures. A natural 20 is not a success on the tally at all — it stands the
   creature up at 1 hit point.
 - **A hit on a dying creature is a failed death save**, and a critical is two.
-  It takes no hit points, because there are none left to take.
+  It takes no hit points, because there are none left to take. Hitting a stable
+  creature restarts its death-save clock before adding that failure.
 - **Damage large enough to blow through the whole hit point maximum on top of
   reaching zero kills outright.** The overflow is worked out before the pools
   clamp at zero, because by the time they return the negative number is gone.
@@ -535,7 +543,9 @@ split is the single most important design decision in the combat code.
 - **A dying creature still takes its turn**, and that turn is the roll. The
   command bar collapses to a single "Roll death save" button, because a dying
   creature has no Action, no Bonus Action and no movement, and showing four dead
-  keys would be four separate lies. A stable creature is skipped in the order
+  keys would be four separate lies. End Turn stays disabled until exactly one
+  death save has been rolled; the save button then disables so it cannot be
+  rolled twice in the same turn. A stable creature is skipped in the order
   entirely — it has stopped rolling.
 - **Dying is not a sixteenth condition.** It is derived from being at zero and
   not dead, and the existing Unconscious condition already carries exactly the

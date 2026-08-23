@@ -56,7 +56,11 @@ import {
   swapAvailability,
 } from "../domain/combat.js";
 import { performAbilityCheck, performSavingThrow } from "../domain/checks.js";
-import { rollDeathSave } from "../domain/death.js";
+import {
+  rollDeathSave,
+  stabilizeAvailability,
+  stabilizeCreature,
+} from "../domain/death.js";
 import { CONDITIONS, conditionById } from "../domain/conditions.js";
 import { damageToken, healToken, setTemporaryHp } from "../domain/vitality.js";
 import {
@@ -596,6 +600,7 @@ export default function TableScreen({
     setRulerDraft(null);
     setMovementPreview(null);
     setAttackDraft(null);
+    setHelpDraft(null);
     setCinematic(null);
     setRetrievalCinematic(null);
     setLootChestId(null);
@@ -615,6 +620,7 @@ export default function TableScreen({
   useEffect(() => {
     setMovementPreview(null);
     setAttackDraft(null);
+    setHelpDraft(null);
     setLootChestId(null);
     setLootTokenId(null);
     setInteraction((current) => current?.kind === "movement" ? null : current);
@@ -739,7 +745,7 @@ export default function TableScreen({
   };
 
   const onMapPointerDown = (event) => {
-    if (event.button !== 0 || combatLocked || attackDraft) return;
+    if (event.button !== 0 || combatLocked || attackDraft || helpDraft) return;
     const point = localPoint(event);
     if (activeTool === "wall-full" || activeTool === "wall-half") {
       const type = activeTool === "wall-half" ? "half" : "full";
@@ -770,7 +776,7 @@ export default function TableScreen({
 
   const onTokenPointerDown = (event, token) => {
     if (activeTool || event.button !== 0 || combatLocked) return;
-    if (attackDraft) {
+    if (attackDraft || helpDraft) {
       event.stopPropagation();
       return;
     }
@@ -817,7 +823,7 @@ export default function TableScreen({
 
   const onTokenKeyDown = (event, token) => {
     const delta = ARROW_DELTAS[event.key];
-    const canMove = !activeTool && !attackDraft && !combatLocked &&
+    const canMove = !activeTool && !attackDraft && !helpDraft && !combatLocked &&
       (isPlay || isSetup || (isActiveBattle && token.id === active?.id));
     if (!delta || !canMove) return;
     event.preventDefault();
@@ -1382,6 +1388,11 @@ export default function TableScreen({
     return presentCheck(rollDeathSave(scene, tokenId, { random }));
   };
 
+  const stabilizeToken = (tokenId) => {
+    if (!isActiveBattle || combatLocked) return { ok: false, message: "Stabilising needs an active unlocked Battle." };
+    return presentCheck(stabilizeCreature(scene, tokenId, setupViewport(), { random }));
+  };
+
   const useWeaponSwap = (loadout) => {
     const swapped = performWeaponSwap(scene, loadout);
     if (!swapped.ok) {
@@ -1463,6 +1474,14 @@ export default function TableScreen({
   useEffect(() => {
     if (!reactionQueue.length || cinematic || checkCinematic) return;
     const [next, ...rest] = reactionQueue;
+    // The parent can persist one render after this component queues the swing.
+    // Wait until the mover is on the accepted landing cell so resolving from a
+    // stale scene can never snap it back to where the route began.
+    const viewport = setupViewport();
+    const currentTarget = tableTokens.find((token) => token.id === next.targetId);
+    const currentCell = currentTarget ? setupCellForPosition(currentTarget.position, viewport) : null;
+    const landingCell = setupCellForPosition(next.landingPosition, viewport);
+    if (!currentCell || currentCell.column !== landingCell.column || currentCell.row !== landingCell.row) return;
     const resolved = performWeaponAttack(
       scene,
       {
@@ -1472,7 +1491,8 @@ export default function TableScreen({
         weaponId: next.weaponId,
         hand: next.hand,
         attackId: next.attackId,
-        viewport: setupViewport(),
+        targetPosition: next.departurePosition,
+        viewport,
       },
       { random, battleItemIdFactory },
     );
@@ -1481,7 +1501,7 @@ export default function TableScreen({
     // downed by the attack before it, or lost the weapon it was going to use;
     // either way the swing simply does not happen.
     if (resolved.ok) presentAttack(resolved, next.targetId);
-  }, [reactionQueue, cinematic, checkCinematic, scene]);
+  }, [reactionQueue, cinematic, checkCinematic, scene, tableTokens]);
 
   const resolveAttackTarget = (targetId) => {
     if (!attackDraft || combatLocked) return { ok: false, message: "No attack is ready." };
@@ -1737,6 +1757,7 @@ export default function TableScreen({
   // Asked without an ally so it comes back with the list of who is close
   // enough, which is what the Tactics panel needs to offer.
   const helpState = isActiveBattle ? helpAvailability(scene, null, battleViewport) : { ok: false, message: "Battle is not active." };
+  const stabilizeState = isActiveBattle ? stabilizeAvailability(scene, null, battleViewport) : { ok: false, message: "Battle is not active." };
   const battleChestOptions = isActiveBattle ? chestCommandOptions(scene, battleViewport) : [];
   const battleRetrievalOptions = isActiveBattle ? retrievalCommandOptions(scene, battleViewport) : [];
   const battleLootOptions = isActiveBattle ? lootCommandOptions(scene, battleViewport) : [];
@@ -2088,9 +2109,11 @@ export default function TableScreen({
           dash={useDash}
           tacticState={tacticState}
           helpState={helpState}
+          stabilizeState={stabilizeState}
           dodge={useDodge}
           disengage={useDisengage}
           help={startHelp}
+          stabilize={stabilizeToken}
           rollDeath={rollTokenDeathSave}
           swap={useWeaponSwap}
           end={finishTurn}

@@ -65,10 +65,16 @@ try {
     id: "grix", name: "Grix", position: at(6, 6), faction: "foe", hp: 9, maxHp: 9, xp: 50, dead: false,
     damageResistances: ["fire"], damageImmunities: ["poison"], damageVulnerabilities: ["cold"],
   });
+  const casualty = table.createManualToken({
+    // The rendered board is 20 columns wide, so five percentage points is one
+    // adjacent square even though the smaller roll fixtures use ten.
+    id: "casualty", name: "Ember", position: { xPercent: 40, yPercent: 35 }, heroId: "hero-3", faction: "ally",
+    hp: 0, maxHp: 16, dead: false, conditions: ["unconscious"],
+  });
 
   const tactics = renderToStaticMarkup(React.createElement(TableScreen, {
     ...handlers,
-    scene: makeBattle([wren, sable, grix]),
+    scene: makeBattle([wren, sable, casualty, grix]),
     mode: "battle",
     initialSelectedId: "wren",
     initialCommandPanel: "tactics",
@@ -79,6 +85,9 @@ try {
   assert.match(tactics, /Disengage/);
   // Sable is adjacent, so Help offers them by name rather than as an abstraction.
   assert.match(tactics, /Help Sable/);
+  // An adjacent dying Hero gets a direct first-aid command in the same drawer.
+  assert.match(tactics, /Stabilise Ember/);
+  assert.match(tactics, /DC 10 Medicine/);
 
   /* ------------------------------- defences read on the battle inspector */
 
@@ -120,6 +129,7 @@ try {
   // The command deck collapses to the one thing a dying creature can do.
   assert.match(downed, /Roll death save/);
   assert.doesNotMatch(downed, /nf-state-command-key-dash/);
+  assert.match(downed, /nf-state-command-end[^>]*disabled/);
 
   const stable = table.createManualToken({
     id: "wren", name: "Wren", position: at(3, 3), heroId: "hero-1", faction: "ally",

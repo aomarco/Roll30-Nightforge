@@ -907,6 +907,10 @@ export const createTurnResources = (token) => ({
   actionType: null,
   bonusActionSpent: false,
   bonusActionType: null,
+  // A dying creature rolls exactly once on its turn. This lives with the
+  // current turn rather than on the token so it resets automatically when
+  // initiative comes back around.
+  deathSaveRolled: false,
   dashed: false,
   swapped: false,
   swapChoice: null,
@@ -935,6 +939,7 @@ export function normalizeTurnResources(resources, token) {
     actionType: typeof resources?.actionType === "string" && resources.actionType.trim() ? resources.actionType.trim() : null,
     bonusActionSpent: Boolean(resources?.bonusActionSpent),
     bonusActionType: typeof resources?.bonusActionType === "string" && resources.bonusActionType.trim() ? resources.bonusActionType.trim() : null,
+    deathSaveRolled: Boolean(resources?.deathSaveRolled),
     dashed: Boolean(resources?.dashed),
     swapped: Boolean(resources?.swapped),
     swapChoice,

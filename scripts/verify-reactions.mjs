@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import { DAMAGE_TYPES, applyDamageDefense, normalizeDamageTypeList } from "../src/domain/damageTypes.js";
-import { DEATH_SAVE_DC } from "../src/domain/death.js";
+import { DEATH_SAVE_DC, STABILIZE_DC } from "../src/domain/death.js";
 import { CONDITIONS } from "../src/domain/conditions.js";
 import { DEATH_SAVES_REQUIRED } from "../src/domain/table.js";
 import { HELP_REACH_FEET } from "../src/domain/combat.js";
@@ -58,15 +58,19 @@ for (const behavior of [
 /* ------------------------------------------------------- death saving throws */
 
 if (DEATH_SAVE_DC !== 10) failures.push("A death saving throw must be against DC 10.");
+if (STABILIZE_DC !== 10) failures.push("Stabilising first aid must be a DC 10 Medicine check.");
 if (DEATH_SAVES_REQUIRED !== 3) failures.push("Three successes must stabilise and three failures must kill.");
 
 const death = await read("src/domain/death.js");
 for (const behavior of [
   "export function rollDeathSave",
+  "export function stabilizeAvailability",
+  "export function stabilizeCreature",
   "criticalSuccess",
   "criticalFailure",
   "revivedTokenPatch",
   "DEATH_SAVE_STABLE",
+  "DEATH_SAVE_ALREADY_ROLLED",
   "completeEncounterIfNeeded",
 ]) if (!death.includes(behavior)) failures.push(`Death domain is missing ${behavior}.`);
 // Randomness stays injected so the dice can be pinned in a test.
@@ -118,6 +122,7 @@ for (const behavior of [
   "export function reactionAttackAvailability",
   "export function opportunityAttacksFor",
   "export function meleeReachFeet",
+  "targetPosition",
   "REACTION_ALREADY_SPENT",
   "code: \"target-dodging\"",
   "code: \"helped\"",
@@ -144,6 +149,7 @@ for (const behavior of [
   "export function helpAvailability",
   "export function activateHelp",
   "TACTIC_ACTION_SPENT",
+  "DEATH_SAVE_REQUIRED",
 ]) if (!combat.includes(behavior)) failures.push(`Combat domain is missing ${behavior}.`);
 // End Turn still discards resources exactly as Phase 8 pinned it, and now also
 // clears the states that had to outlive the turn on the token.
@@ -164,6 +170,7 @@ for (const contract of [
   "export const isStable",
   "export const CLEARED_TURN_STATE",
   "export const CLEARED_DEATH_STATE",
+  "deathSaveRolled: false",
   "damageResistances: normalizeDamageTypes(input.damageResistances)",
   "reactionSpent: Boolean(input.reactionSpent)",
   "dodging: Boolean(input.dodging)",
@@ -197,6 +204,7 @@ for (const control of [
   "onClick={dodge}",
   "onClick={disengage}",
   "help(ally.id)",
+  "stabilize(target.id)",
 ]) if (!commandBar.includes(control)) failures.push(`Command bar is missing ${control}.`);
 
 const setupInspector = await read("src/screens/BattleSetupInspector.jsx");
@@ -212,9 +220,18 @@ for (const integration of [
   "activateDodge",
   "activateDisengage",
   "activateHelp",
+  "stabilizeCreature",
   "commitMovement",
   "reactionQueue",
+  "attackDraft || helpDraft",
 ]) if (!table.includes(integration)) failures.push(`Table screen is missing ${integration}.`);
+
+const browserRegression = await read("tests/phase11.spec.js");
+for (const journey of [
+  "Help targeting survives board pointer capture",
+  "walking away from a Knight resolves an opportunity attack",
+  "a dying turn cannot skip or repeat its save",
+]) if (!browserRegression.includes(journey)) failures.push(`Browser regression coverage is missing: ${journey}.`);
 // Persistence precedes presentation for a reaction exactly as it does for an
 // ordinary attack, because both go through the same presenter.
 const presenter = table.slice(table.indexOf("const presentAttack"), table.indexOf("const resolveAttackTarget"));
@@ -260,5 +277,6 @@ console.log("Reactions verification passed.");
 console.log(`  - Damage: ${DAMAGE_TYPES.length} types; immunity zeroes, resistance halves rounding down, vulnerability doubles.`);
 console.log("  - Qualified SRD defence prose is displayed, never adjudicated.");
 console.log(`  - Death saving throws: DC ${DEATH_SAVE_DC}, ${DEATH_SAVES_REQUIRED} either way, natural 1 twice, natural 20 revives.`);
+console.log(`  - Dying turns require one save; adjacent allies can stabilise with a DC ${STABILIZE_DC} Medicine check.`);
 console.log("  - A dying creature keeps its side in the fight and still takes its turn.");
 console.log("  - Reactions live on the token, spend nothing from the mover's turn, and refresh at the start of their own.");
