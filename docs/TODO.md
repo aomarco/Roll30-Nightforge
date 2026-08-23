@@ -29,7 +29,7 @@ anything you decide against to the bottom **with the reason**.
 | 12 | Magic weapons and armor | Yes | +1 to +3 enchantments work |
 | 13 | Magic items | 119 | 6 work, 113 inert. No potions, attunement, or charges |
 | 14 | Monsters | All 334 | Yes. Traits, reactions, legendary actions are text only |
-| 15 | Conditions | All 15 | Yes, but never expire. Exhaustion has no levels |
+| 15 | Conditions | All 15 | Yes, but never expire. Exhaustion is tracked, not laddered — decided against |
 | 16 | Attack rolls | Yes | Advantage, crits, multiattack, two-weapon, thrown, ammo |
 | 17 | Damage | Yes | Types are labels. No resistance or immunity |
 | 18 | Healing and temp HP | Yes | Manual controls. No death saves yet |
@@ -43,7 +43,7 @@ anything you decide against to the bottom **with the reason**.
 | 26 | Loot and chests | Yes | Yes |
 | 27 | Money | Prices exist | Can't buy anything |
 | 28 | XP | Yes | Awarded at battle end by hand. Only defeated foes count |
-| 29 | Falling and hazards | No | — |
+| 29 | Falling and hazards | No | Decided against — applied by hand with the damage control |
 | 30 | Surprise | No | — |
 | 31 | Languages, alignment, CR | Yes | Reference only — correct as is |
 | 32 | Sides | Yes | Ally or foe per token; a Battle ends when one side stands |
@@ -108,11 +108,9 @@ once wrong is worth more than a tidy list.
       plus bare ability checks
 - [x] **Saving throws** — rollable from the inspector for any token, with the
       four helpless conditions failing Strength and Dexterity automatically
-- [ ] **Falling damage** — 1d6 per 10 ft
 - [ ] **Resistance and immunity** — the data is structured at import and then
       thrown away as prose. Halve, zero, or double.
 - [ ] **Dodge, Disengage, Help** — simple flags on turn resources
-- [ ] **Exhaustion levels** — six rows of effects on a condition that exists
 - [ ] **Condition durations** — rounds are already counted; tie conditions to them
 - [ ] **Surprise round** — skip turn one for some tokens
 - [ ] **Fly, swim, climb speeds** — imported already; pick which one applies
@@ -175,7 +173,7 @@ matter.
       nothing now. New work is named by feature instead — `test:rules`,
       `verify:rules` — so the migration has somewhere to go.
 - [ ] **`README.md` overlaps `FEATURES.md`.** The test count is correct again
-      (289 in both), but the README still duplicates the design language and the
+      (301 in both), but the README still duplicates the design language and the
       screen-by-screen table that now live in `FEATURES.md`. Cut it back to how
       to run it and how to deploy it, and let `FEATURES.md` be the one
       description of the app.
@@ -215,6 +213,24 @@ matter.
 
 Move things here rather than deleting them, with the reason.
 
+**Everything in this section is a closed question.** These are not gaps and they
+are not backlog. Do not list them as missing features, do not raise them in a
+review, and do not build them without a decision that reopens the entry first.
+
+- **Falling damage.** The board is flat. There is no elevation on a token, no
+  height on a wall, and no third axis anywhere in the scene record, so nothing
+  in the app can know that something fell or how far. Adding 1d6 per 10 ft would
+  mean inventing a whole vertical dimension to serve one die roll. The person
+  running the game says "you fall thirty feet" and types the damage into the
+  hit point control, which already exists and already logs it. That is the
+  correct amount of machinery for this.
+- **Exhaustion levels.** Exhaustion is already there as one of the 15
+  conditions, tracked by hand with an honest note saying the six-level ladder is
+  not inferred. That is the right place for it to stop. The ladder touches
+  ability checks, attacks, movement speed, saving throws, hit point maximum and
+  death, so automating it means threading one condition through nearly every
+  rule in the engine — and conditions are applied by hand here anyway, on
+  purpose. Tracking the level is a note; applying it is a judgement call.
 - **Languages and alignment as mechanics.** Both are imported and displayed.
   Whether two creatures understand each other is a conversation at the table,
   not a check the app can make. Alignment is a roleplaying note, not a number.

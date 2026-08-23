@@ -433,6 +433,12 @@ split is the single most important design decision in the combat code.
 - **Heal or damage any token by hand**, from the battle inspector. There is no
   potion or spell to produce healing yet, so this is the way it happens — and
   the plumbing is what those will call later.
+- **Hand-applied damage is also how falls and hazards work**, deliberately. The
+  board is flat — there is no elevation on a token, no height on a wall, no
+  third axis anywhere in the scene record — so nothing in the app can know that
+  something fell or how far. You say "you fall thirty feet" and type the damage,
+  which logs like any other. Recorded as a closed question in
+  [`TODO.md`](./TODO.md), not as a gap.
 - **Healing is capped at the maximum** and cannot revive. A creature at zero is
   out of this battle; bringing it back needs death saving throws, which do not
   exist yet.
@@ -471,6 +477,13 @@ split is the single most important design decision in the combat code.
   note saying they are recorded for future use and do not change weapon attacks
   by themselves. They're there so you can track them, not because the app
   enforces them.
+- **Exhaustion is tracked, not laddered, and that is deliberate.** It carries
+  the level you write on it and applies nothing. The six-level ladder reaches
+  ability checks, attacks, speed, saving throws, hit point maximum and death, so
+  automating it would thread one condition through nearly every rule in the
+  engine — and conditions here are applied by hand on purpose. Tracking the
+  level is a note; applying it is a judgement call. Recorded as a closed
+  question in [`TODO.md`](./TODO.md), not as a gap.
 - **Each condition has a colour and a three-letter abbreviation** shown on the
   token, so the board is readable without opening anything.
 
