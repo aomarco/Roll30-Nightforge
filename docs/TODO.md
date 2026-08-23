@@ -31,12 +31,12 @@ anything you decide against to the bottom **with the reason**.
 | 14 | Monsters | All 334 | Yes. Traits, reactions, legendary actions are text only |
 | 15 | Conditions | All 15 | Yes, but never expire. Exhaustion is tracked, not laddered — decided against |
 | 16 | Attack rolls | Yes | Advantage, crits, multiattack, two-weapon, thrown, ammo |
-| 17 | Damage | Yes | Types are labels. No resistance or immunity |
-| 18 | Healing and temp HP | Yes | Manual controls. No death saves yet |
+| 17 | Damage | Yes | Typed. Resistance, immunity and vulnerability all apply |
+| 18 | Healing, temp HP, death saves | Yes | Heroes roll death saves; healing raises the dying |
 | 19 | Initiative and turns | Yes | Yes |
 | 20 | Movement | Yes | Walking only. No fly/swim/climb, difficult terrain, forced movement |
-| 21 | Reactions | No | No opportunity attacks, no Ready |
-| 22 | Other actions | Partly | Unarmed strikes work. No Dodge, Disengage, Hide, Help, Grapple, Shove |
+| 21 | Reactions | Yes | Opportunity attacks. No Ready. The swing does not interrupt the move |
+| 22 | Other actions | Partly | Unarmed strikes, Dodge, Disengage, Help. No Hide, Grapple, Shove |
 | 23 | Vision | Partly | Walls block sight. No cover, light levels, or darkvision |
 | 24 | Concentration | No | — |
 | 25 | Rests | No | No short/long rest, no hit dice |
@@ -108,20 +108,36 @@ once wrong is worth more than a tidy list.
       plus bare ability checks
 - [x] **Saving throws** — rollable from the inspector for any token, with the
       four helpless conditions failing Strength and Dexterity automatically
-- [ ] **Resistance and immunity** — the data is structured at import and then
-      thrown away as prose. Halve, zero, or double.
-- [ ] **Dodge, Disengage, Help** — simple flags on turn resources
+- [x] **Resistance and immunity** — immunity zeroes, resistance halves rounding
+      down, vulnerability doubles, all applied to the finished total. Every
+      token can carry defences, so a Hero can have them too. Qualified SRD lines
+      such as "nonmagical weapons that aren't silvered" stay as reference text
+      and are marked as not applied, because no weapon in the catalog records
+      whether it is silvered.
+- [x] **Dodge, Disengage, Help** — flags on the token, not on turn resources:
+      all three outlive the turn that bought them, and turn resources exist only
+      for whoever is currently active.
+- [ ] **Ready** — the other reaction Action. The reaction resource now exists,
+      so this is a trigger and a stored intent rather than new plumbing.
+- [ ] **Interrupting movement with an opportunity attack** — the swing currently
+      resolves after the mover finishes their route. Making it interrupt means
+      making `moveActiveToken` resumable, which is a bigger change than the
+      reaction itself was. Only matters when the swing would down the mover
+      mid-route.
+- [ ] **Condition immunity** — the monster data already carries it in
+      machine-readable form, which makes this the cheapest thing on the list.
 - [ ] **Condition durations** — rounds are already counted; tie conditions to them
 - [ ] **Surprise round** — skip turn one for some tokens
 - [ ] **Fly, swim, climb speeds** — imported already; pick which one applies
 
 ### Weeks
 
-- [ ] **Death saves** — needs a dying state, and battle-end needs redefining.
-      Fully unblocked now: healing exists so a stabilised creature has something
-      to come back to, and `completeEncounterIfNeeded` already asks whether one
-      side is standing, so the dying state slots into a check that is asking the
-      right question.
+- [x] **Death saves** — Heroes only; a monster at zero still simply dies, which
+      is the SRD rule and what keeps a Battle finishing when the last goblin
+      falls. Three successes stabilise, three failures kill, a natural one costs
+      two and a natural twenty stands the creature up at 1 hit point. A dying
+      creature keeps its side in the fight, so allies have time to reach it, and
+      healing raises it.
 - [ ] **Difficult terrain** — paint cells, double movement cost
 - [ ] **Money and shopping** — prices exist; needs a purse and a shop
 - [ ] **Potions** — now unblocked; healing exists and they can call it
@@ -134,8 +150,11 @@ once wrong is worth more than a tidy list.
 
 ### Months
 
-- [ ] **Reactions and opportunity attacks** — new resource, and it interrupts
-      other creatures' turns. Movement currently has no consequence at all.
+- [x] **Reactions and opportunity attacks** — leaving an enemy's reach draws one
+      swing, and Disengage prevents it. The reaction is a flag on the token
+      because the creature spending it is never the active one. Movement now has
+      a consequence. **Not done:** the swing does not interrupt the move, and
+      Ready still does not exist — see the two entries below.
 - [ ] **Hide** — needs Stealth, plus per-token visibility
 - [ ] **Attunement and charges** — a new system touching every item
 - [ ] **Feats** — each one is bespoke
@@ -151,18 +170,17 @@ once wrong is worth more than a tidy list.
 
 ## Suggested order
 
-The bugs are cleared, including battle completion — so the completion card,
-the experience award and restart are all reachable in a normal party for the
-first time.
+Resistance, death saves, reactions, Dodge, Disengage and Help all landed in one
+update. Damage now has consequences that depend on who is taking it, a downed
+Hero has a story rather than an ending, and standing next to someone finally
+means something.
 
-Next: **death saves**, so a downed creature has a story rather than an ending.
-Saving throws, skill checks and healing are all done, which unblocks it, and it
-was waiting on the completion fix because both touch the same check — that
-dependency is now paid off, and `completeEncounterIfNeeded` already asks the
-side-aware question death saves need. Then **resistance and immunity**, the
-cheapest remaining feature: the data is already imported and thrown away as
-prose. Then **reactions and opportunity attacks**, which is what makes position
-matter.
+Next: **condition immunity**, which is the cheapest thing left — the monster
+data already carries it as machine-readable ids, so it is a lookup rather than a
+feature. Then **Ready**, because the reaction resource it needs now exists and
+it is the last common Action still missing. Then **condition durations**: rounds
+are already counted, conditions are the one system in the app that never expires
+on its own, and everything else worth building wants durations first.
 
 ---
 
@@ -173,7 +191,7 @@ matter.
       nothing now. New work is named by feature instead — `test:rules`,
       `verify:rules` — so the migration has somewhere to go.
 - [ ] **`README.md` overlaps `FEATURES.md`.** The test count is correct again
-      (301 in both), but the README still duplicates the design language and the
+      (340 in both), but the README still duplicates the design language and the
       screen-by-screen table that now live in `FEATURES.md`. Cut it back to how
       to run it and how to deploy it, and let `FEATURES.md` be the one
       description of the app.

@@ -8,9 +8,32 @@ const MODIFIER_STAGGER = 240;
 const signed = (value) => (value >= 0 ? `+${value}` : String(value).replace("-", "−"));
 
 const headingFor = (outcome) => {
+  if (outcome.kind === "death") return "Death saving throw";
   if (outcome.kind === "save") return `${outcome.abilityName} saving throw`;
   if (outcome.kind === "skill") return `${outcome.skillName} check`;
   return `${outcome.abilityName} check`;
+};
+
+const kickerFor = (outcome) => {
+  if (outcome.kind === "death") return "Death saving throw";
+  return outcome.kind === "save" ? "Saving throw" : "Ability check";
+};
+
+/**
+ * A death saving throw is the one roll where the verdict is not "did it beat the
+ * number". Both ends of the die do something the total cannot describe, and
+ * three of them decide whether a creature lives, so the tally is the news.
+ */
+const deathVerdict = (outcome) => {
+  if (outcome.revived) return { label: "Back on their feet", copy: `A natural twenty. ${outcome.tokenName} comes round with 1 hit point.`, tone: "success" };
+  if (outcome.died) return { label: "Dead", copy: `A third failed save. ${outcome.tokenName} does not get up.`, tone: "failure" };
+  if (outcome.stabilised) return { label: "Stable", copy: `A third success. ${outcome.tokenName} stops rolling and holds on at zero hit points.`, tone: "success" };
+  if (outcome.succeeded) return { label: "Success", copy: `${outcome.successes} of 3 successes. ${outcome.failures} of 3 failures.`, tone: "success" };
+  return {
+    label: outcome.criticalFailure ? "Failure, twice over" : "Failure",
+    copy: `${outcome.criticalFailure ? "A natural one counts as two failures. " : ""}${outcome.failures} of 3 failures. ${outcome.successes} of 3 successes.`,
+    tone: "failure",
+  };
 };
 
 /**
@@ -26,15 +49,21 @@ export default function CheckCinematic({ cinematic, skip }) {
   const showModifiers = stageIndex >= 2 && !outcome.autoFailed;
   const showVerdict = stageIndex >= 3;
 
-  const modifierRows = [
-    {
-      id: "modifier",
-      label: outcome.proficient ? "Modifier, proficient" : "Modifier",
-      value: signed(outcome.modifier),
-    },
-  ];
+  // A death saving throw has no modifier at all — not a zero one — so showing
+  // "Modifier +0" would invite the reader to look for the bonus that is missing.
+  const modifierRows = outcome.kind === "death"
+    ? []
+    : [
+      {
+        id: "modifier",
+        label: outcome.proficient ? "Modifier, proficient" : "Modifier",
+        value: signed(outcome.modifier),
+      },
+    ];
 
-  const verdictLabel = outcome.autoFailed
+  const death = outcome.kind === "death" ? deathVerdict(outcome) : null;
+
+  const verdictLabel = death ? death.label : outcome.autoFailed
     ? "Automatic failure"
     : outcome.succeeded === null
       ? "Rolled"
@@ -42,7 +71,7 @@ export default function CheckCinematic({ cinematic, skip }) {
         ? "Success"
         : "Failure";
 
-  const verdictCopy = outcome.autoFailed
+  const verdictCopy = death ? death.copy : outcome.autoFailed
     ? `${outcome.autoFailReasons.join(" and ")} means this save fails without a roll.`
     : outcome.succeeded === null
       ? `${outcome.tokenName} scores ${outcome.total}. No difficulty class was set, so nothing is decided here.`
@@ -50,7 +79,7 @@ export default function CheckCinematic({ cinematic, skip }) {
         ? `${outcome.total} meets or beats DC ${outcome.dc}.`
         : `${outcome.total} falls short of DC ${outcome.dc}.`;
 
-  const verdictTone = outcome.autoFailed || outcome.succeeded === false
+  const verdictTone = death ? death.tone : outcome.autoFailed || outcome.succeeded === false
     ? "failure"
     : outcome.succeeded === true
       ? "success"
@@ -66,7 +95,7 @@ export default function CheckCinematic({ cinematic, skip }) {
         onClick={skip}
       >
         <header className="nf-state-cinematic-head">
-          <span className="kicker kicker-brass">{outcome.kind === "save" ? "Saving throw" : "Ability check"}</span>
+          <span className="kicker kicker-brass">{kickerFor(outcome)}</span>
           <h2>{outcome.tokenName} <Dices size={16} /> {headingFor(outcome)}</h2>
           <p>{outcome.dc === null ? "No difficulty class" : `DC ${outcome.dc}`} · {outcome.mode}</p>
         </header>

@@ -1,12 +1,20 @@
 import { useState } from "react";
-import { HeartPulse, Shield, ShieldHalf, Sword } from "lucide-react";
+import { Heart, HeartPulse, Shield, ShieldHalf, Skull, Sword } from "lucide-react";
 
 import { getItem } from "../domain/catalog.js";
 import { CHECK_MODE_ADVANTAGE, CHECK_MODE_DISADVANTAGE, CHECK_MODE_NORMAL, MAX_CHECK_DC, MIN_CHECK_DC } from "../domain/checks.js";
 import { CONDITIONS } from "../domain/conditions.js";
+import { DAMAGE_TYPES, damageTypeName } from "../domain/damageTypes.js";
 import { equippedWeapons } from "../domain/items.js";
 import { MAX_VITALITY_ADJUSTMENT } from "../domain/vitality.js";
-import { FACTION_LABELS, tokenSaveProfile, tokenSkillProfile } from "../domain/table.js";
+import {
+  DEATH_SAVES_REQUIRED,
+  FACTION_LABELS,
+  isDying,
+  isStable,
+  tokenSaveProfile,
+  tokenSkillProfile,
+} from "../domain/table.js";
 
 const SAVE_LABEL = Object.freeze({
   str: "STR", dex: "DEX", con: "CON", int: "INT", wis: "WIS", cha: "CHA",
@@ -23,6 +31,23 @@ const ROLL_MODES = Object.freeze([
 ]);
 
 const signed = (value) => (value >= 0 ? `+${value}` : String(value).replace("-", "−"));
+
+/** One slot per required save, so the pips are drawn from the rule not a literal. */
+const PIP_SLOTS = Object.freeze(Array.from({ length: DEATH_SAVES_REQUIRED }, (unused, index) => index));
+
+const DOWN_LABEL = Object.freeze({ dying: "Dying", stable: "Stable", dead: "Dead" });
+
+const downState = (token) => (token.dead ? "dead" : isStable(token) ? "stable" : "dying");
+
+/**
+ * The defences worth a badge, in the order they matter: what does nothing at
+ * all, what does half, and what does double.
+ */
+const DEFENSE_BADGES = Object.freeze([
+  { key: "damageImmunities", label: "Immune", tone: "immune" },
+  { key: "damageResistances", label: "Resists", tone: "resistant" },
+  { key: "damageVulnerabilities", label: "Vulnerable", tone: "vulnerable" },
+]);
 
 const healthTone = (hp, maxHp) => {
   const percentage = hp / Math.max(1, maxHp);
@@ -53,6 +78,7 @@ export default function BattleTokenInspector({
   rollCheck,
 }) {
   const [amount, setAmount] = useState(5);
+  const [damageType, setDamageType] = useState("");
   const [tempDraft, setTempDraft] = useState(0);
   const [dc, setDc] = useState(15);
   const [mode, setMode] = useState(CHECK_MODE_NORMAL);
@@ -81,7 +107,31 @@ export default function BattleTokenInspector({
               <Shield size={12} /> {token.tempHp} temporary
             </span>
           )}
-          {token.hp <= 0 && <span className="nf-state-battle-down">Down</span>}
+          {/* "Down" was the whole story when zero hit points was the end of it.
+              Now the difference between dying, stable and dead is the difference
+              between a creature an ally can still save and one they cannot, so
+              the badge has to say which. */}
+          {token.hp <= 0 && (
+            <span className={`nf-state-battle-down nf-state-battle-down-${downState(token)}`}>
+              {DOWN_LABEL[downState(token)]}
+            </span>
+          )}
+          {isDying(token) && (
+            <div className="nf-state-battle-death" role="group" aria-label={`Death saving throws: ${token.deathSaveSuccesses} of ${DEATH_SAVES_REQUIRED} successes, ${token.deathSaveFailures} of ${DEATH_SAVES_REQUIRED} failures`}>
+              <span className="nf-state-battle-death-row" title={`${token.deathSaveSuccesses} of ${DEATH_SAVES_REQUIRED} successes. Three stabilises.`}>
+                <Heart size={11} />
+                {PIP_SLOTS.map((slot) => (
+                  <i className={`nf-state-battle-death-pip${token.deathSaveSuccesses > slot ? " on" : ""}`} key={`success-${slot}`} />
+                ))}
+              </span>
+              <span className="nf-state-battle-death-row" title={`${token.deathSaveFailures} of ${DEATH_SAVES_REQUIRED} failures. Three is death.`}>
+                <Skull size={11} />
+                {PIP_SLOTS.map((slot) => (
+                  <i className={`nf-state-battle-death-pip nf-state-battle-death-fail${token.deathSaveFailures > slot ? " on" : ""}`} key={`failure-${slot}`} />
+                ))}
+              </span>
+            </div>
+          )}
         </div>
         <div className="nf-state-battle-ac">
           <ShieldHalf size={18} />
@@ -97,6 +147,26 @@ export default function BattleTokenInspector({
           </span>
         </div>
       </section>
+
+      {/* Read-only, like the Side tag: these are set in Setup, but they change
+          what every incoming hit does, so they have to be legible mid-fight. */}
+      {(DEFENSE_BADGES.some(({ key }) => token[key].length) || token.dodging || token.disengaging || token.helpedAgainstTokenId) && (
+        <section className="nf-state-battle-defenses" aria-label="Damage defences and turn states">
+          {DEFENSE_BADGES.map(({ key, label, tone }) => (token[key].length ? (
+            <span
+              className={`tag nf-state-battle-defense-${tone}`}
+              key={key}
+              title={`${label} ${token[key].map(damageTypeName).join(", ")} damage. Change this from the Setup inspector.`}
+            >
+              {label} {token[key].map(damageTypeName).join(", ")}
+            </span>
+          ) : null))}
+          {token.dodging && <span className="tag tag-jade" title="Every attack against this creature has disadvantage until the start of its next turn.">Dodging</span>}
+          {token.disengaging && <span className="tag tag-jade" title="This creature can move without drawing an opportunity attack until the start of its next turn.">Disengaged</span>}
+          {token.helpedAgainstTokenId && <span className="tag tag-brass" title="An ally has Helped this creature. Its next attack against the named enemy has advantage.">Helped</span>}
+          {token.reactionSpent && <span className="tag" title="This creature has used its reaction. It refreshes at the start of its own turn.">Reaction used</span>}
+        </section>
+      )}
 
       <section className="nf-state-battle-vitality">
         <div className="unit-top">
@@ -125,12 +195,27 @@ export default function BattleTokenInspector({
           >
             <HeartPulse size={15} /> Heal
           </button>
+          {/* Untyped is the first option and the default, because most of the
+              time the table just wants to take six off and get on with it. A
+              type is only worth naming when the target has a defence to test. */}
+          <label className="field nf-state-battle-vitality-type">
+            <span className="label">Damage type</span>
+            <select
+              className="sel"
+              value={damageType}
+              onChange={(event) => setDamageType(event.target.value)}
+              disabled={disabled}
+            >
+              <option value="">Untyped</option>
+              {DAMAGE_TYPES.map((type) => <option value={type.id} key={type.id}>{type.name}</option>)}
+            </select>
+          </label>
           <button
             type="button"
             className="btn nf-state-battle-damage"
-            onClick={() => damage(token.id, amount)}
+            onClick={() => damage(token.id, amount, damageType || null)}
             disabled={disabled || amount <= 0}
-            title={`Take ${amount} damage on ${token.name}. Temporary hit points absorb it first.`}
+            title={`Take ${amount} ${damageType ? `${damageTypeName(damageType).toLowerCase()} ` : ""}damage on ${token.name}. Resistance and temporary hit points are applied first.`}
           >
             <Sword size={15} /> Damage
           </button>

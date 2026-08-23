@@ -36,9 +36,17 @@ for (const behavior of [
   "unarmedStrikeOption",
   "return equipped.length ? equipped : [unarmedStrikeOption()]",
   "hasProperty(option.weapon, \"loading\")",
-  "applyDamageToPools",
+  // An attack used to call `applyDamageToPools` directly. It now goes through
+  // `resolveIncomingDamage`, which calls that same helper and additionally
+  // handles a hit on a creature already at zero. The contract being pinned here
+  // is unchanged: temporary hit points are still spent before real ones, and
+  // the cinematic is still told how much they soaked.
+  "resolveIncomingDamage",
   "absorbedByTempHp",
 ]) if (!attacks.includes(behavior)) failures.push(`Attack domain is missing ${behavior}.`);
+if (!(await read("src/domain/vitality.js")).includes("applyDamageToPools(token, incoming)")) {
+  failures.push("Incoming damage no longer spends temporary hit points before real ones.");
+}
 
 /* ------------------------------------------------------------------ vitality */
 

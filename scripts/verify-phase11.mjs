@@ -111,7 +111,11 @@ if (/savePatch|onUpdate|Repository|localStorage/.test(pointerMove)) failures.pus
 for (const integration of ["nf-state-table-root", "useDialogA11y", "title={scene?.name", "AttackRangeLayer"]) {
   if (!table.includes(integration)) failures.push(`Table hardening integration is missing ${integration}.`);
 }
-const attackDurability = table.slice(table.indexOf("const resolveAttackTarget"), table.indexOf("const openBattleChest"));
+// Saving before animating now lives in `presentAttack`, which both an ordinary
+// attack and an opportunity attack go through. The rule being checked has not
+// changed — only the function it is written in, which is why the slice moved
+// rather than the assertion.
+const attackDurability = table.slice(table.indexOf("const presentAttack"), table.indexOf("const openBattleChest"));
 const attackSaveIndex = attackDurability.indexOf("savePatch(resolved.value)");
 const attackCinematicIndex = attackDurability.indexOf("setCinematic({");
 if (attackSaveIndex < 0 || attackCinematicIndex < 0 || attackSaveIndex > attackCinematicIndex) {

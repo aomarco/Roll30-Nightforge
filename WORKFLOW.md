@@ -2,12 +2,74 @@
 
 Read this before you write code. It is short on purpose.
 
-There are three rules. They exist because the codebase outlived the memory of
-everyone who wrote it, including the people who wrote it last week.
+The workflow is six steps, in order:
+
+1. **Build what was asked for.**
+2. **Comment as you go.**
+3. **Check that it actually worked.**
+4. **Send it to GitHub.**
+5. **Update `docs/FEATURES.md`.**
+6. **Update `docs/TODO.md`.**
+
+Steps 5 and 6 are not paperwork. Read the next section before you skip them.
 
 ---
 
-## Rule 1 — Comment as you go, not afterwards
+## Why the two documents matter more here than anywhere else
+
+Most of this codebase was written fast, by AI agents, in sessions that no
+longer exist. That has one consequence that shapes everything else:
+
+**Whoever picks this up next starts from nothing.** Not "a bit rusty" —
+nothing. A fresh agent has never seen this project, cannot remember the last
+session, and cannot ask the previous one what it was thinking. Every session is
+someone's first day. The only thing that survives between them is what got
+written into the repository.
+
+The code alone can't carry it. Reading the source tells you what the app does
+right now. It does not tell you:
+
+- what was **tried and abandoned**, so the next session tries it again
+- what was **deliberately left out**, so the next session "fixes" it back in
+- what is **half-built on purpose**, waiting on something else first
+- what is **already finished**, so the next session builds a second copy of it
+
+That is what the two documents are for. `docs/FEATURES.md` is the memory of
+what exists. `docs/TODO.md` is the memory of what doesn't, and why.
+
+**A stale document is worse than no document.** Nobody half-trusts a document
+— they read it and believe it. If `FEATURES.md` claims a feature that was
+deleted, the next agent spends an hour hunting for code that isn't there and
+then writes it again from scratch. If `TODO.md` still lists something you
+finished, it gets built twice and the two versions disagree. If a decision you
+made against something isn't recorded with its reason, it comes back in six
+months and nobody remembers why it was dropped the first time.
+
+The trade is lopsided and it is always worth taking. Updating both documents
+costs about two minutes at the end of a piece of work. Not updating them costs
+the next session hours, and costs you a codebase that slowly stops matching its
+own description.
+
+So: the work is not finished when the code runs. It is finished when the code
+runs, the gate passes, it is pushed, and the two documents are true again.
+
+---
+
+## 1 — Build what was asked for
+
+Build the thing that was actually asked for. Not a smaller version of it, not a
+larger one, not the refactor you noticed on the way past.
+
+- If you find a real problem with the request, say so in a sentence, then keep
+  building. Flag it; don't silently change the job.
+- If you spot something else that needs doing, write it in `docs/TODO.md` and
+  carry on. That is what step 5 is for.
+- Finish the whole thing. If part of it turns out to be blocked, finish
+  everything else and say plainly what you left out and why.
+
+---
+
+## 2 — Comment as you go, not afterwards
 
 Write comments while the reasoning is still in your head. A comment added a day
 later is a guess about your own past thinking.
@@ -51,13 +113,58 @@ should be able to open any file and follow what is happening and why.
 
 ---
 
-## Rule 2 — Update `docs/FEATURES.md` when you finish
+## 3 — Check that it actually worked
+
+Two different questions, and you need both answered before anything is pushed.
+
+**Did the thing you built actually do what was asked?** Open the app and use
+it. Click the button, roll the dice, drag the token, watch the number change.
+
+```bash
+npm run dev
+```
+
+A passing test is not proof that a feature works — it is proof that the code
+you wrote does what you thought you wrote. Plenty of things pass their tests
+and are still wrong on screen: the control renders off the edge, the refusal
+message never appears, the value saves but doesn't survive a reload. Look at
+it.
+
+**Keep this check short.** One quick pass over the thing you actually built,
+then move on. Do not walk the whole app, do not re-check features you did not
+touch, and do not write a throwaway script to drive the browser when clicking
+the button yourself answers the question in ten seconds. The point is a single
+sanity check, not a second test suite — you already have one of those.
+
+**Did you break anything else?** Run the gate. Once, at the end — not between
+pieces of work.
+
+```bash
+npm run verify
+```
+
+This is the same chain CI runs: every unit test, every render smoke suite,
+every phase verifier, the browser journeys, the dependency audit, and a
+production build. It takes a few minutes. Run it anyway.
+
+If either answer is no, go back to step 1. Do not push it and fix it later.
+
+---
+
+## 4 — Send it to GitHub
+
+Commit and push. Work goes on a branch, not straight onto `main`.
+
+Say what changed and why in the commit message. The diff already says what
+moved; the message is for the reason behind it.
+
+---
+
+## 5 — Update `docs/FEATURES.md`
 
 `docs/FEATURES.md` describes the whole app in plain English. It is the single
 place anyone goes to find out what Nightforge does. It is only useful if it is
 true.
-
-When you finish a piece of work, before you commit:
 
 1. **Add** entries for anything the app can now do that it couldn't before.
 2. **Remove** anything that is no longer true. This matters more than adding.
@@ -73,12 +180,14 @@ and the document matches reality.
 
 ---
 
-## Rule 3 — Keep `docs/TODO.md` honest
+## 6 — Update `docs/TODO.md`
 
-`docs/TODO.md` is what's left to build.
+`docs/TODO.md` is what's left to build — and, just as importantly, what was
+considered and turned down. It is the only record of the thinking that never
+made it into the code.
 
 - Cross things off when you build them.
-- Add things when you discover them, including the small ones you find while
+- Add things when you discover them, including the small ones you found while
   doing something else. If you don't write it down it does not exist.
 - If you deliberately decide **not** to build something, don't just delete the
   line — move it to the "Decided against" section with the reason. Otherwise
@@ -86,19 +195,13 @@ and the document matches reality.
 
 ---
 
-## Before you commit
+## The check before you call it done
 
-```bash
-npm run verify
-```
-
-This is the same chain CI runs: every unit test, every render smoke suite,
-every phase verifier, the browser journeys, the dependency audit, and a
-production build. It takes a few minutes. Run it anyway.
-
-Then check yourself against the three rules:
-
+- [ ] The thing that was asked for is built, all of it
 - [ ] New code carries comments that explain the reasoning
+- [ ] You opened the app and watched the change work
+- [ ] `npm run verify` passed
+- [ ] The work is committed and pushed
 - [ ] `docs/FEATURES.md` matches what the app actually does now
 - [ ] `docs/TODO.md` reflects what is genuinely left
 

@@ -3,7 +3,10 @@ import { CONDITIONS, isImmobilized, isIncapacitated } from "./conditions.js";
 import { setMainHand, setOffHand } from "./items.js";
 import {
   appendEncounterLog,
+  CLEARED_TURN_STATE,
   createTurnResources,
+  isDying,
+  isStable,
   normalizeChests,
   normalizeTableTokens,
   normalizeTurnResources,
@@ -39,6 +42,21 @@ const finite = (value, fallback = 0) => {
 export const tokenIsImmobilized = (token) => isImmobilized(token?.conditions);
 
 export const tokenIsIncapacitated = (token) => isIncapacitated(token?.conditions);
+
+/** Help is offered by stepping in beside someone, so it reaches one square. */
+export const HELP_REACH_FEET = 5;
+
+/**
+ * Distance in feet across the square grid, counting a diagonal as one square.
+ * The same measure the ruler and every attack range use, restated here because
+ * the attack module cannot be imported from this one without the two files
+ * importing each other.
+ */
+export const chebyshevFeet = (from, to, viewport) => {
+  const start = setupCellForPosition(from, viewport);
+  const end = setupCellForPosition(to, viewport);
+  return Math.max(Math.abs(end.column - start.column), Math.abs(end.row - start.row)) * MOVEMENT_FEET_PER_CELL;
+};
 
 export const movementMaximum = (resources, token) =>
   normalizeTurnResources(resources, token).movementBase;
@@ -361,6 +379,130 @@ export function activateDash(scene) {
   });
 }
 
+/**
+ * The shared gate for the three plain Action commands: Dodge, Disengage and
+ * Help. They refuse for exactly the same reasons Dash does — the creature is
+ * down or incapacitated, it has already Dashed, it has swapped weapons, or the
+ * Action is gone — so the reasons are written once rather than three times.
+ *
+ * `verb` goes straight into the refusal message, which is why it is capitalised
+ * at the call site: "Dodge is unavailable" reads as the name of the Action.
+ */
+function tacticAvailability(scene, verb) {
+  const context = activeTurnContext(scene);
+  if (!context.ok) return context;
+  const { token, resources } = context.value;
+  if (token.hp <= 0 || tokenIsIncapacitated(token)) return failure(
+    "TACTIC_INCAPACITATED",
+    `${token.name} cannot ${verb} while incapacitated or down.`,
+    "Remove the condition or end the turn.",
+  );
+  if (resources.dashed) return failure("TACTIC_AFTER_DASH", `${verb} is unavailable after Dash.`, "Use remaining movement or end the turn.");
+  if (resources.swapped) return failure("TACTIC_AFTER_SWAP", `${verb} is unavailable after a weapon swap.`, "Use remaining movement or end the turn.");
+  if (resources.actionSpent) return failure(
+    "TACTIC_ACTION_SPENT",
+    `${verb} is unavailable because ${resources.actionType || "the Action"} was already used.`,
+    "Use remaining movement or end the turn.",
+  );
+  return context;
+}
+
+/**
+ * Spending the Action on a tactic, and marking the token with whatever the
+ * tactic leaves behind. The mark goes on the token rather than into turn
+ * resources because every one of these outlives the turn that bought it.
+ */
+function activateTactic(scene, { verb, actionType, patch, logText }) {
+  const available = tacticAvailability(scene, verb);
+  if (!available.ok) return available;
+  const { token, resources, tokens } = available.value;
+  return success({
+    tokens: updateToken(tokens, token.id, patch),
+    encounter: {
+      ...scene.encounter,
+      resources: { [token.id]: { ...resources, actionSpent: true, actionType } },
+      log: appendEncounterLog(scene.encounter.log, logText(token)),
+    },
+  });
+}
+
+export const dodgeAvailability = (scene) => tacticAvailability(scene, "Dodge");
+
+/**
+ * Dodge makes every attack against the creature roll at disadvantage until its
+ * next turn. The flag is all this needs to do: the attack roll already collects
+ * advantage and disadvantage from a list of sources, so Dodge simply adds one.
+ */
+export const activateDodge = (scene) => activateTactic(scene, {
+  verb: "Dodge",
+  actionType: "dodge",
+  patch: { dodging: true },
+  logText: (token) => `${token.name} takes the Dodge Action.`,
+});
+
+export const disengageAvailability = (scene) => tacticAvailability(scene, "Disengage");
+
+export const activateDisengage = (scene) => activateTactic(scene, {
+  verb: "Disengage",
+  actionType: "disengage",
+  patch: { disengaging: true },
+  logText: (token) => `${token.name} Disengages and can move without drawing an opportunity attack.`,
+});
+
+/**
+ * Help has to name two creatures and a distance, so it cannot go through the
+ * shared activator. The ally must be within five feet — the helper is stepping
+ * in beside them, not shouting encouragement across the room — and the
+ * advantage is pinned to one enemy rather than handed out against everyone.
+ */
+export function helpAvailability(scene, allyTokenId, viewport) {
+  const context = tacticAvailability(scene, "Help");
+  if (!context.ok) return context;
+  const { token, tokens } = context.value;
+  const allies = tokens.filter((entry) =>
+    entry.id !== token.id
+    && entry.faction === token.faction
+    && entry.hp > 0
+    && !isIncapacitated(entry.conditions)
+    && chebyshevFeet(token.position, entry.position, viewport) <= HELP_REACH_FEET);
+  if (!allies.length) return failure(
+    "HELP_NO_ALLY_ADJACENT",
+    `${token.name} has no ally within ${HELP_REACH_FEET} feet to Help.`,
+    "Move next to an ally on the same side first.",
+  );
+  if (!allyTokenId) return success({ ...context.value, allies });
+  const ally = allies.find((entry) => entry.id === allyTokenId);
+  if (!ally) return failure(
+    "HELP_ALLY_UNREACHABLE",
+    "That ally is not adjacent, not on your side, or cannot be Helped.",
+    "Choose an ally standing within five feet.",
+  );
+  return success({ ...context.value, allies, ally });
+}
+
+export function activateHelp(scene, allyTokenId, targetTokenId, viewport) {
+  const available = helpAvailability(scene, allyTokenId, viewport);
+  if (!available.ok) return available;
+  const { token, resources, tokens, ally } = available.value;
+  const target = tokens.find((entry) => entry.id === targetTokenId);
+  if (!target || target.faction === token.faction || target.hp <= 0) return failure(
+    "HELP_TARGET_INVALID",
+    "Help has to name the enemy the ally is going to attack.",
+    "Choose a standing enemy as the target.",
+  );
+  return success({
+    tokens: updateToken(tokens, ally.id, { helpedAgainstTokenId: target.id, helpedById: token.id }),
+    encounter: {
+      ...scene.encounter,
+      resources: { [token.id]: { ...resources, actionSpent: true, actionType: "help" } },
+      log: appendEncounterLog(
+        scene.encounter.log,
+        `${token.name} Helps ${ally.name} against ${target.name}, granting advantage on their next attack.`,
+      ),
+    },
+  });
+}
+
 export function attackActionAvailability(scene) {
   const context = activeTurnContext(scene);
   if (!context.ok) return context;
@@ -455,7 +597,10 @@ export function endTurn(scene) {
     const rawIndex = activeIndex + offset;
     const index = rawIndex % order.length;
     const candidate = tokens.find((entry) => entry.id === order[index]);
-    if (candidate && candidate.hp > 0) {
+    // A dying creature still takes its turn — that turn is the death saving
+    // throw. Only the dead are skipped, and a stable creature is skipped too
+    // because it has stopped rolling and has nothing else it can do.
+    if (candidate && (candidate.hp > 0 || (!candidate.dead && !isStable(candidate)))) {
       nextIndex = index;
       wrapped = rawIndex >= order.length;
       break;
@@ -467,7 +612,19 @@ export function endTurn(scene) {
     "Battle completion will be resolved by the completion phase.",
   );
   const nextToken = tokens.find((entry) => entry.id === order[nextIndex]);
+  // Dodging, Disengaging and a spent reaction all last "until the start of your
+  // next turn", and this is that moment. They are cleared on the token because
+  // they have to survive everybody else's turns in between, which turn
+  // resources cannot do — those exist only for whoever is currently active.
+  //
+  // Help is cleared here too, from the other end: the helper's turn coming round
+  // again is the outside limit on how long the offer stands.
+  const beginningTokens = updateToken(tokens, nextToken.id, CLEARED_TURN_STATE).map((entry) =>
+    entry.helpedAgainstTokenId && entry.helpedById === nextToken.id
+      ? { ...entry, helpedAgainstTokenId: null, helpedById: null }
+      : entry);
   return success({
+    tokens: beginningTokens,
     encounter: {
       ...scene.encounter,
       activeIndex: nextIndex,

@@ -3258,3 +3258,115 @@
   letter-spacing: .08em;
   text-transform: uppercase;
 }
+
+/* ---------------------------------------------------------------------------
+   Damage defences, death saving throws, and the turn-scoped tactics.
+   Every selector here is scoped to its own nf-state- name rather than reaching
+   for a shared primitive, because none of these shapes appears anywhere else.
+--------------------------------------------------------------------------- */
+
+.nf-state-battle-down-dying { color: var(--brass); background: var(--brass-tint); }
+.nf-state-battle-down-stable { color: var(--jade); background: var(--jade-tint); }
+
+.nf-state-battle-death {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.nf-state-battle-death-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ink-4);
+}
+
+.nf-state-battle-death-pip {
+  width: 9px;
+  height: 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-full);
+  background: transparent;
+}
+
+.nf-state-battle-death-pip.on {
+  border-color: var(--jade);
+  background: var(--jade);
+  box-shadow: 0 0 7px var(--jade-glow);
+}
+
+.nf-state-battle-death-fail.on {
+  border-color: var(--foe);
+  background: var(--foe);
+  box-shadow: 0 0 7px rgba(226, 108, 131, .4);
+}
+
+.nf-state-battle-defenses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 10px;
+}
+
+.nf-state-battle-defense-immune { color: var(--ink-1); background: rgba(143, 115, 95, .22); border-color: rgba(143, 115, 95, .45); }
+.nf-state-battle-defense-resistant { color: var(--jade); background: var(--jade-tint); border-color: var(--jade-edge); }
+.nf-state-battle-defense-vulnerable { color: var(--foe); background: var(--foe-tint); border-color: rgba(226, 108, 131, .3); }
+
+.nf-state-battle-vitality-type { min-width: 118px; }
+
+.nf-state-cinematic-defense,
+.nf-state-cinematic-dying {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 7px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.nf-state-cinematic-defense-immune { color: var(--ink-2); }
+.nf-state-cinematic-defense-resistant { color: var(--jade); }
+.nf-state-cinematic-defense-vulnerable { color: var(--foe); }
+.nf-state-cinematic-dying { color: var(--brass); }
+
+.nf-state-command-tactics > button > span > small { line-height: 1.35; }
+
+.nf-state-scene-defences { margin-top: 10px; }
+
+.nf-state-scene-defences > small {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+
+.nf-state-scene-defence-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 7px;
+}
+
+.nf-state-scene-defence-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 10.5px;
+}
+
+.nf-state-scene-defence-chip:disabled { cursor: default; opacity: .55; }
+
+.nf-state-scene-defence-add {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) auto;
+  gap: 5px;
+}
+
+.nf-state-table-help-status > .tag { white-space: normal; }

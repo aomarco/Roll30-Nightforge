@@ -265,7 +265,17 @@ to do instead.
   silently change under you because someone levelled up in another tab.
 - **Every token carries** a name, colour, side, position, HP and max HP, AC,
   speed, all six ability scores, save proficiencies, level, size, conditions,
-  an inventory, and a list of attacks.
+  an inventory, a list of attacks, its damage defences, its death-save tally,
+  and the turn-scoped states — whether it is Dodging, whether it has Disengaged,
+  whether its reaction is still available, and any Help an ally gave it.
+- **Those last four live on the token rather than on turn resources**, because
+  every one of them outlives the turn that bought it, and turn resources exist
+  only for whoever is currently active — the rest are discarded when the turn
+  passes. All four are cleared at the start of that creature's own turn.
+- **Damage defences are editable on any token.** Monsters arrive with theirs
+  filled in from the stat block; a Hero starts with none and can be given fire
+  resistance from the Setup inspector card. The editor sits on the card for the
+  same reason the side switch does: a Hero snapshot has no stats drawer.
 - **The side is shown wherever it matters** — a two-button switch on the Setup
   inspector card, and a read-only badge on the battle inspector, since the side
   decides when the fight ends. The switch sits on the card rather than behind
@@ -298,9 +308,14 @@ to do instead.
 - **No levels for monsters.** Deliberate. Monsters carry finished numbers rather
   than a progression that produces them.
 - **Read-only stat block notes** are preserved and displayed: traits, non-attack
-  actions, legendary actions, reactions, resistances, senses, and languages.
-  These are prose for you to read and apply yourself; the app does not enforce
-  them.
+  actions, legendary actions, reactions, senses, and languages. These are prose
+  for you to read and apply yourself; the app does not enforce them.
+- **Damage defences are the exception, and they say which half is which.** The
+  plain single types out of a monster's resistance, immunity and vulnerability
+  lines are imported as real data and applied by the rules engine. Anything
+  qualified — "from nonmagical weapons that aren't silvered" — stays on the same
+  line as prose, labelled as not applied. Without the label the two look
+  identical on the sheet while behaving completely differently at the dice.
 - **141 monsters have Multiattack**, imported as a number of attacks per Action
   (see the attack rules below).
 - **Monster inventories import empty.** The SRD does not publish loot tables —
@@ -374,9 +389,22 @@ split is the single most important design decision in the combat code.
 - **Loading overrides Multiattack.** A weapon with the Loading property fires
   once per Action however large the allowance is, so the first shot closes the
   Action. That covers the Light, Hand, and Heavy Crossbows and the Blowgun.
+- **Resistance, immunity and vulnerability apply to the finished total.** Every
+  weapon and every monster attack already carried a damage type; the target's
+  defences are now compared against it. Immunity reduces the damage to nothing,
+  resistance halves it rounding down, and vulnerability doubles it. Only one
+  ever applies, and immunity wins if a stat block somehow lists two. The
+  cinematic shows the rolled number and what the defence left of it, because
+  "12 halved to 6" is a different story from a 6 that was rolled low.
+- **Qualified defences are shown, never adjudicated.** Roughly a quarter of the
+  monsters with resistances carry a line like "bludgeoning, piercing and
+  slashing from nonmagical weapons that aren't silvered". Nothing in the item
+  catalog records whether a weapon is silvered, adamantine or magical, so there
+  is nothing to judge the qualifier against. Those lines stay in the stat-block
+  notes and are labelled as not applied, next to the plain types that are.
 - **Temporary hit points absorb damage first.** A hit spends the target's
   temporary pool before it touches real hit points, and the cinematic says how
-  much was absorbed.
+  much was absorbed. Resistance is applied before the pool, not after.
 - **The attack cinematic** plays the roll out in stages — spin, natural die,
   modifiers, verdict, damage, impact — so the result is legible rather than a
   number appearing. Authored attacks show a single "Attack bonus" line instead
@@ -396,6 +424,28 @@ split is the single most important design decision in the combat code.
 - **Pathfinding routes around walls and creatures** using A*, bounded to 4,000
   explored cells so a pathological map can't lock the browser up.
 - **Dash** spends your Action to double your movement for the turn.
+- **Dodge** spends your Action to give every attack against you disadvantage
+  until your next turn. It does nothing for a creature that is incapacitated or
+  has no speed, which is what the Action assumes you can still do.
+- **Disengage** spends your Action so that moving away draws no opportunity
+  attack for the rest of the turn.
+- **Help** spends your Action on an ally within five feet and one named enemy.
+  Their next attack against that enemy has advantage. Naming the enemy is what
+  stops one Help turning into advantage on everything they swing at.
+- **Opportunity attacks.** Leaving a square an enemy can reach draws one melee
+  swing from them. Moving while staying inside their reach draws nothing, and a
+  creature only gets one, because a reaction refreshes at the start of its own
+  turn rather than per victim.
+- **A reaction lives on the creature, not on the turn.** It has to: the creature
+  spending one is by definition not the active one. It is spent when the swing
+  is taken and comes back at the start of that creature's own turn.
+- **The swing does not interrupt the move.** By the rules an opportunity attack
+  happens mid-step; here the mover finishes their route and the attack resolves
+  after, one at a time through the ordinary attack cinematic. Making movement
+  interruptible would mean rewriting the plan-and-commit split, and by the time
+  the route is clicked the player has already committed to the destination — so
+  the interruption would change nothing they could act on. It is recorded in
+  `docs/TODO.md` as a real deviation rather than glossed as done.
 - **Swap** changes your equipped weapons mid-fight, with legality checks and
   ordering rules about what you can still do afterwards.
 - **Turns never end automatically.** The app will not advance for you, even when
@@ -439,9 +489,15 @@ split is the single most important design decision in the combat code.
   something fell or how far. You say "you fall thirty feet" and type the damage,
   which logs like any other. Recorded as a closed question in
   [`TODO.md`](./TODO.md), not as a gap.
-- **Healing is capped at the maximum** and cannot revive. A creature at zero is
-  out of this battle; bringing it back needs death saving throws, which do not
-  exist yet.
+- **Healing is capped at the maximum, and it raises the dying.** Any amount of
+  healing at all puts a dying Hero back on their feet, clears their death-save
+  tally, and takes the Unconscious condition off. Only the genuinely dead are
+  refused.
+- **Damage can be typed by hand too.** The inspector has a damage-type box
+  beside the amount, defaulting to Untyped. Untyped damage ignores resistance,
+  which is deliberate: most of the time the table just wants to take six off,
+  and making the type compulsory would turn every quick adjustment into a
+  second decision.
 - **Temporary hit points are a separate pool** that sits in front of real
   health. They absorb damage first, are not restored by healing, and are not
   capped by the maximum.
@@ -452,6 +508,42 @@ split is the single most important design decision in the combat code.
   creature by hand completes the encounter exactly as a killing blow does,
   including ammunition recovery.
 - **Every change is logged** as a sentence in the encounter log.
+
+## Death saving throws
+
+- **Heroes only.** A monster that drops to zero simply dies, which is the SRD
+  rule and also what keeps a Battle finishing when the last goblin falls rather
+  than leaving it bleeding out forever. Only a token standing on a Hero record
+  gets the clock.
+- **Dropping to zero is not the end.** A Hero falls unconscious, starts with a
+  clean tally, and rolls a d20 against 10 on each of their turns. There is no
+  modifier and no proficiency — a death save is not really a saving throw, it is
+  a coin the size of a d20.
+- **Three successes stabilise; three failures kill.** A natural 1 counts as two
+  failures. A natural 20 is not a success on the tally at all — it stands the
+  creature up at 1 hit point.
+- **A hit on a dying creature is a failed death save**, and a critical is two.
+  It takes no hit points, because there are none left to take.
+- **Damage large enough to blow through the whole hit point maximum on top of
+  reaching zero kills outright.** The overflow is worked out before the pools
+  clamp at zero, because by the time they return the negative number is gone.
+- **A dying creature keeps its side in the fight.** The Battle ends when one
+  side has nobody standing *and* nobody dying — a hero bleeding out has not lost
+  yet, and ending it over their body would take away the chance for an ally to
+  reach them. The winner is still named from whoever is actually upright, and a
+  survivor with a comrade still down is not named as the sole victor.
+- **A dying creature still takes its turn**, and that turn is the roll. The
+  command bar collapses to a single "Roll death save" button, because a dying
+  creature has no Action, no Bonus Action and no movement, and showing four dead
+  keys would be four separate lies. A stable creature is skipped in the order
+  entirely — it has stopped rolling.
+- **Dying is not a sixteenth condition.** It is derived from being at zero and
+  not dead, and the existing Unconscious condition already carries exactly the
+  right mechanics. The inspector shows three success pips and three failure pips
+  plus a plain Dying / Stable / Dead reading.
+- **A save written before any of this loads unchanged.** A creature already at
+  zero in an old save reads as dead, because in the world that save was written
+  in, zero was final. Anything else would quietly revive every corpse.
 
 ## Conditions
 
@@ -569,6 +661,10 @@ split is the single most important design decision in the combat code.
 - **Temporary hit points reset too**, by both Restart and Abandon. A buffer
   belongs to the fight that granted it; carrying it forward would leave a token
   with more health than its sheet says.
+- **The fallen get up, and so does the death-save tally.** Restart and Abandon
+  both clear it, along with Dodge, Disengage, Help and any spent reaction. An
+  abandoned Battle did not happen, so nothing that happened in it follows a
+  creature out.
 - **Abandoning a battle returns the scene to Setup** and discards the encounter,
   keeping every token, wall, and chest you placed.
 
@@ -687,15 +783,18 @@ split is the single most important design decision in the combat code.
 - **`npm run verify` is the whole gate** and is exactly what CI runs: every unit
   test, every render smoke suite, every phase verifier, the browser journeys,
   a dependency audit, and a production build.
-- **301 unit tests** covering domain rules, repositories, and integration.
+- **340 unit tests** covering domain rules, repositories, and integration.
 - **23 pinned-Chromium browser journeys** driving the real app.
 - **21 deterministic visual baselines** per platform.
 - **Three kinds of check, by design:**
-  - **Unit tests** (`phaseN.test.js`, `rules.test.js`) prove the rules are right
-  - **Render smoke** (`phaseN-render-smoke.mjs`, `rules-render-smoke.mjs`)
+  - **Unit tests** (`phaseN.test.js`, `rules.test.js`, `reactions.test.js`) prove
+    the rules are right
+  - **Render smoke** (`phaseN-render-smoke.mjs`, `rules-render-smoke.mjs`,
+    `reactions-render-smoke.mjs`)
     server-renders real screens and asserts on the markup, catching UI breakage
     without a browser
-  - **Verifiers** (`verify-phaseN.mjs`, `verify-rules.mjs`) grep the source, enforcing
+  - **Verifiers** (`verify-phaseN.mjs`, `verify-rules.mjs`, `verify-reactions.mjs`)
+    grep the source, enforcing
     architectural rules that tests can't see — domain purity, no forbidden
     storage keys, bounded SVG output
 - **Verifiers assert on literal source text.** Some of them check for exact
@@ -744,6 +843,6 @@ one, change it here too:
 | Skills | 18 | |
 | Experience thresholds | 20 | `src/domain/heroes.js` |
 | Error codes | 70+ | across `src/domain/` |
-| Unit tests | 301 | `src/*.test.js` |
+| Unit tests | 340 | `src/*.test.js` |
 | Browser journeys | 23 | Playwright |
 | Acceptance journeys | 47 | `PARITY_REGISTER.md` |

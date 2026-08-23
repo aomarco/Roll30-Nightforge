@@ -10,6 +10,8 @@ import {
 } from "./items.js";
 import {
   appendEncounterLog,
+  CLEARED_DEATH_STATE,
+  CLEARED_TURN_STATE,
   createTurnResources,
   normalizeBattleItems,
   normalizeChests,
@@ -379,21 +381,32 @@ export function encounterExperienceAward(tokens, encounter) {
  * between, so it falls back to last-creature-standing. That keeps a
  * monster-versus-monster brawl playable instead of completing it the instant
  * initiative is rolled.
+ *
+ * A dying creature is still in the fight. It is at zero hit points and cannot
+ * act, but it is not gone: an ally who reaches it in time puts it back on its
+ * feet, and ending the Battle over its body would take that chance away. So the
+ * side test asks who is left rather than who is standing, while the winner is
+ * still named from whoever is actually upright — a hero bleeding out has not won
+ * anything.
  */
 export function completeEncounterIfNeeded(tokens, encounter) {
   const normalizedTokens = normalizeTableTokens(tokens);
   if (!encounter || encounter.status !== "active") return success({ tokens: normalizedTokens, encounter }, { completed: false, recovery: [] });
   const living = normalizedTokens.filter((token) => token.hp > 0);
+  const inTheFight = normalizedTokens.filter((token) => token.hp > 0 || !token.dead);
   const sidesPresent = new Set(normalizedTokens.map((token) => token.faction));
-  const sidesStanding = new Set(living.map((token) => token.faction));
-  const decided = sidesPresent.size > 1 ? sidesStanding.size <= 1 : living.length <= 1;
+  const sidesLeft = new Set(inTheFight.map((token) => token.faction));
+  const decided = sidesPresent.size > 1 ? sidesLeft.size <= 1 : inTheFight.length <= 1;
   if (!decided) return success({ tokens: normalizedTokens, encounter }, { completed: false, recovery: [] });
   const recovered = encounter.ammunitionRecovered
     ? { tokens: normalizedTokens, recovery: [] }
     : recoverCompletionAmmunition(normalizedTokens, encounter.ammoSpentByToken);
   // A lone survivor is still named, because "Grix wins" tells the table more
   // than "the foes win" when there is only one of them left to say it about.
-  const winnerTokenId = living.length === 1 ? living[0].id : null;
+  // The test counts everyone left rather than everyone standing: a hero who won
+  // with a comrade bleeding out beside them did not win alone, and naming them
+  // as the sole victor would write the comrade out of the sentence.
+  const winnerTokenId = living.length === 1 && inTheFight.length === 1 ? living[0].id : null;
   const winnerFaction = living.length ? living[0].faction : null;
   const resultText = winnerTokenId
     ? `${living[0].name} wins the Battle.`
@@ -772,6 +785,10 @@ export function restartCompletedBattle(scene, { random = Math.random } = {}) {
     // ended; a restart is a fresh fight, so the buffer does not come with it.
     tempHp: 0,
     conditions: [],
+    // A restart is a fresh fight: the fallen are on their feet with a clean
+    // death-save tally, and nobody is still Dodging from the last one.
+    ...CLEARED_DEATH_STATE,
+    ...CLEARED_TURN_STATE,
     // Weapons thrown during the last run are back in hand.
     attacks: token.attacks.map((attack) => ({ ...attack, thrown: false })),
   }));

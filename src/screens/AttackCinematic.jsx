@@ -1,10 +1,18 @@
-import { Shield, Sparkles, Swords, Target } from "lucide-react";
+import { Shield, ShieldHalf, Skull, Sparkles, Swords, Target } from "lucide-react";
+
+import { damageTypeName } from "../domain/damageTypes.js";
 
 const STAGES = ["spin", "natural", "modifiers", "verdict", "damage", "impact"];
 
 /** Milliseconds between one modifier row appearing and the next. */
 const MODIFIER_STAGGER = 240;
 const DAMAGE_STAGGER = 170;
+
+const DEFENSE_COPY = Object.freeze({
+  immune: "Immune to",
+  resistant: "Resistant to",
+  vulnerable: "Vulnerable to",
+});
 
 const signed = (value) => (value >= 0 ? `+${value}` : String(value).replace("-", "−"));
 
@@ -128,6 +136,28 @@ export default function AttackCinematic({ cinematic, skip }) {
               {outcome.absorbedByTempHp > 0 && (
                 <em className="nf-state-cinematic-absorbed"> · <strong className="numeral">{outcome.absorbedByTempHp}</strong> absorbed by temporary hit points</em>
               )}
+            </p>
+          )}
+
+          {/* The dice above show what was rolled; this shows what the target's
+              defences left of it. Both are needed, because "12 halved to 6" is a
+              different story from a 6 that was simply rolled low. */}
+          {showImpact && outcome.damageDefense?.defense && (
+            <p className={`nf-state-cinematic-defense nf-state-cinematic-defense-${outcome.damageDefense.defense}`}>
+              <ShieldHalf size={13} /> {DEFENSE_COPY[outcome.damageDefense.defense]} {damageTypeName(outcome.damageDefense.damageType)} damage
+              {outcome.damageDefense.defense === "immune"
+                ? <> · <strong className="numeral">{outcome.damageDefense.incoming}</strong> reduced to <strong className="numeral">0</strong></>
+                : <> · <strong className="numeral">{outcome.damageDefense.incoming}</strong> → <strong className="numeral">{outcome.damageDefense.amount}</strong></>}
+            </p>
+          )}
+
+          {showImpact && (outcome.downed || outcome.dyingHit || outcome.died) && (
+            <p className="nf-state-cinematic-dying">
+              <Skull size={13} /> {outcome.died
+                ? `${outcome.targetName} is dead.`
+                : outcome.dyingHit
+                  ? `A hit on a dying creature. ${outcome.deathSaveFailuresAdded === 2 ? "Two failed death saving throws" : "One failed death saving throw"}.`
+                  : `${outcome.targetName} falls unconscious and begins making death saving throws.`}
             </p>
           )}
         </div>
