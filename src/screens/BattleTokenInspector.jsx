@@ -76,12 +76,14 @@ export default function BattleTokenInspector({
   setTempHp,
   rollSave,
   rollCheck,
+  round = 1,
 }) {
   const [amount, setAmount] = useState(5);
   const [damageType, setDamageType] = useState("");
   const [tempDraft, setTempDraft] = useState(0);
   const [dc, setDc] = useState(15);
   const [mode, setMode] = useState(CHECK_MODE_NORMAL);
+  const [conditionDuration, setConditionDuration] = useState("");
   const weapons = equippedWeapons(token);
   const armour = getItem(token.armorId);
   const shield = getItem(token.shieldId);
@@ -352,21 +354,34 @@ export default function BattleTokenInspector({
           <span className="unit-label">Conditions</span>
           <span className="tag tag-jade">{token.conditions.length || "None"}</span>
         </div>
+        <label className="field">
+          <span className="label">New condition duration</span>
+          <select className="sel" value={conditionDuration} onChange={(event) => setConditionDuration(event.target.value)} disabled={disabled}>
+            <option value="">Permanent</option>
+            <option value="1">1 round</option>
+            <option value="2">2 rounds</option>
+            <option value="3">3 rounds</option>
+            <option value="5">5 rounds</option>
+            <option value="10">10 rounds</option>
+          </select>
+        </label>
         <div className="afflict">
           {CONDITIONS.map((condition) => {
             const on = token.conditions.includes(condition.id);
+            const immune = token.conditionImmunities.includes(condition.id);
+            const expiry = token.conditionExpiries?.[condition.id];
             return (
               <button
                 key={condition.id}
                 type="button"
                 className={`toggle-chip nf-state-condition-chip${on ? " on" : ""}`}
                 style={on ? { "--nf-condition": condition.color } : undefined}
-                onClick={() => changeCondition(condition.id)}
-                disabled={busy || locked}
-                title={condition.note}
+                onClick={() => changeCondition(condition.id, { durationRounds: conditionDuration || null })}
+                disabled={busy || locked || (immune && !on)}
+                title={immune && !on ? `${token.name} is immune to ${condition.name}.` : `${condition.note}${expiry ? ` Expires when round ${expiry} begins.` : ""}`}
                 aria-pressed={on}
               >
-                {condition.name}
+                {condition.name}{immune && !on ? " · immune" : expiry ? ` · R${Math.max(0, expiry - round)}` : ""}
               </button>
             );
           })}

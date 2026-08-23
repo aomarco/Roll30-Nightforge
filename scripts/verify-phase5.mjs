@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import { resolve } from "node:path";
 
-import { AMMUNITION, ARMOR, GEAR, ITEM_CATALOG, MAGIC_ITEMS, WEAPONS, WORN_MAGIC_ITEMS } from "../src/domain/catalog.js";
+import { AMMUNITION, ARMOR, GEAR, HEALING_POTIONS, ITEM_CATALOG, MAGIC_ITEMS, WEAPONS, WORN_MAGIC_ITEMS } from "../src/domain/catalog.js";
 
 const root = resolve(import.meta.dirname, "..");
 const read = (file) => readFile(resolve(root, file), "utf8");
@@ -21,11 +21,13 @@ for (const file of [
 const actualCounts = {
   weapons: WEAPONS.length, ammunition: AMMUNITION.length, armor: ARMOR.length,
   gear: GEAR.length, inertMagicItems: MAGIC_ITEMS.length, wornMagicItems: WORN_MAGIC_ITEMS.length,
+  healingPotions: HEALING_POTIONS.length,
 };
 for (const [name, expected] of Object.entries(catalogManifest.counts)) {
   if (actualCounts[name] !== expected) failures.push(`${name}: expected ${expected}, received ${actualCounts[name]}.`);
 }
-if (ITEM_CATALOG.length !== 355 || new Set(ITEM_CATALOG.map((item) => item.id)).size !== 355) failures.push("Combined catalog must contain 355 unique IDs.");
+if (ITEM_CATALOG.length !== 359 || new Set(ITEM_CATALOG.map((item) => item.id)).size !== 359) failures.push("Combined catalog must contain 359 unique IDs.");
+if (HEALING_POTIONS.some((item) => item.implementedEffect !== "healing-potion" || !item.healingDice || !Number.isInteger(item.healingBonus))) failures.push("Healing potions must carry executable healing formulas.");
 if (await hash(catalogManifest.generated.file) !== catalogManifest.generated.sha256) failures.push("Generated catalog differs from its source manifest.");
 
 const expectedRanges = { blowgun: [25, 50], sling: [30, 60], "crossbow-hand": [40, 80], shortbow: [40, 80], "crossbow-light": [60, 120], "crossbow-heavy": [80, 160], longbow: [80, 160] };
@@ -80,5 +82,5 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Phase 5 catalogs contain 36 weapons, 4 ammunition, 13 armour, 183 gear, 113 inert magic items, and 6 worn items.");
+console.log("Phase 5 catalogs contain 36 weapons, 4 ammunition, 13 armour, 183 gear, 113 inert magic items, 6 worn items, and 4 healing potions.");
 console.log("Inventory, catalog filtering, equipment legality, magic bonuses, Gear drawers, clean-room boundaries, and generated-source integrity are present.");

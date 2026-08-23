@@ -70,6 +70,73 @@ export function normalizeConditions(conditions) {
   return result;
 }
 
+/** Condition immunities use the same canonical IDs as active conditions. */
+export const normalizeConditionImmunities = (immunities) => normalizeConditions(immunities);
+
+/**
+ * Timed conditions expire when the encounter reaches the stored round. An
+ * absent entry means the condition is permanent until somebody removes it.
+ */
+export function normalizeConditionExpiries(expiries, conditions = []) {
+  if (!expiries || typeof expiries !== "object" || Array.isArray(expiries)) return {};
+  const active = new Set(normalizeConditions(conditions));
+  return Object.fromEntries(Object.entries(expiries).flatMap(([conditionId, round]) => {
+    const condition = conditionById(conditionId);
+    const expiry = Math.floor(Number(round));
+    return condition && active.has(condition.id) && Number.isFinite(expiry) && expiry > 0
+      ? [[condition.id, expiry]]
+      : [];
+  }));
+}
+
+export function changeCondition({ conditions, conditionExpiries, conditionImmunities }, conditionId, {
+  currentRound = 1,
+  durationRounds = null,
+} = {}) {
+  const condition = conditionById(conditionId);
+  if (!condition) return { ok: false, code: "UNKNOWN_CONDITION", message: "That condition is not part of the Nightforge condition engine.", recovery: "Choose one of the 15 available conditions.", retryable: false };
+  const current = normalizeConditions(conditions);
+  const expiries = normalizeConditionExpiries(conditionExpiries, current);
+  if (current.includes(condition.id)) {
+    const { [condition.id]: removed, ...remainingExpiries } = expiries;
+    return { ok: true, value: current.filter((id) => id !== condition.id), conditionExpiries: remainingExpiries, condition, active: false };
+  }
+  if (normalizeConditionImmunities(conditionImmunities).includes(condition.id)) {
+    return {
+      ok: false,
+      code: "CONDITION_IMMUNE",
+      message: `${condition.name} cannot be applied because this creature is immune to it.`,
+      recovery: "Choose another condition or edit the creature's condition immunities in Setup.",
+      retryable: false,
+      condition,
+    };
+  }
+  const rounds = durationRounds === null || durationRounds === undefined || durationRounds === ""
+    ? null
+    : Math.max(1, Math.min(600, Math.floor(Number(durationRounds) || 1)));
+  return {
+    ok: true,
+    value: [...current, condition.id],
+    conditionExpiries: rounds ? { ...expiries, [condition.id]: Math.max(1, Math.floor(Number(currentRound) || 1)) + rounds } : expiries,
+    condition,
+    active: true,
+  };
+}
+
+export function expireConditionsAtRound(conditions, conditionExpiries, round) {
+  const current = normalizeConditions(conditions);
+  const expiries = normalizeConditionExpiries(conditionExpiries, current);
+  const reached = Math.max(1, Math.floor(Number(round) || 1));
+  const expired = current.filter((conditionId) => expiries[conditionId] && expiries[conditionId] <= reached);
+  if (!expired.length) return { conditions: current, conditionExpiries: expiries, expired: [] };
+  const expiredSet = new Set(expired);
+  return {
+    conditions: current.filter((conditionId) => !expiredSet.has(conditionId)),
+    conditionExpiries: Object.fromEntries(Object.entries(expiries).filter(([conditionId]) => !expiredSet.has(conditionId))),
+    expired,
+  };
+}
+
 export const isIncapacitated = (conditions) =>
   normalizeConditions(conditions).some((conditionId) => CONDITION_BY_ID[conditionId].incapacitated);
 
@@ -112,14 +179,5 @@ export const targetAutoCritical = (conditions, rangeType = "melee") =>
   rangeType === "melee" && normalizeConditions(conditions).some((conditionId) => CONDITION_BY_ID[conditionId].autoCriticalMelee);
 
 export function toggleCondition(conditions, conditionId) {
-  const condition = conditionById(conditionId);
-  if (!condition) return { ok: false, code: "UNKNOWN_CONDITION", message: "That condition is not part of the Nightforge condition engine.", recovery: "Choose one of the 15 available conditions.", retryable: false };
-  const current = normalizeConditions(conditions);
-  return {
-    ok: true,
-    value: current.includes(condition.id)
-      ? current.filter((id) => id !== condition.id)
-      : [...current, condition.id],
-    condition,
-  };
+  return changeCondition({ conditions }, conditionId);
 }

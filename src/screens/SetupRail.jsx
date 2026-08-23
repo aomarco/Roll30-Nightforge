@@ -3,6 +3,7 @@ import {
   ChevronDown,
   Eye,
   EyeOff,
+  Grid3x3,
   Image as ImageIcon,
   MoreHorizontal,
   Package,
@@ -121,6 +122,13 @@ export default function SetupRail({
           title="Ruler — drag across the board to measure"
           active={activeTool === "ruler"}
           onClick={() => chooseTool("ruler")}
+        />
+        <RailButton
+          icon={Grid3x3}
+          label="Paint terrain"
+          title="Paint terrain — click squares to mark double movement cost"
+          active={activeTool === "terrain"}
+          onClick={() => chooseTool("terrain")}
         />
         <RailButton
           icon={ImageIcon}

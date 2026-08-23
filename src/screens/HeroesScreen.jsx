@@ -17,7 +17,8 @@ import {
 import {
   ABILITIES,
   ALIGNMENTS,
-  BACKGROUNDS,
+  applyBackgroundBenefits,
+  BACKGROUND_DETAILS,
   canSetBaseAbility,
   CLASSES,
   deriveHero,
@@ -227,10 +228,11 @@ export default function HeroesScreen({
 
   const changeClass = (classId) => {
     const selectedClass = CLASSES.find((entry) => entry.id === classId) || CLASSES[0];
+    const backgroundSkills = BACKGROUND_DETAILS.find((entry) => entry.id === activeHero.backgroundBenefitId)?.skills || [];
     apply({
       classId: selectedClass.id,
       saveProficiencies: [...selectedClass.saveProficiencies],
-      skillProficiencies: [],
+      skillProficiencies: [...backgroundSkills],
     });
   };
 
@@ -244,6 +246,21 @@ export default function HeroesScreen({
       subraceId: nextSubrace?.id || null,
       languages: [...new Set([...grantedLanguages(nextRace.id, nextSubrace?.id), ...chosenLanguages])],
     });
+  };
+
+  const changeBackground = (backgroundId) => {
+    const changed = applyBackgroundBenefits(activeHero, backgroundId);
+    if (!changed.ok) {
+      setLocalError(changed);
+      return changed;
+    }
+    const result = apply(changed.value);
+    if (result?.ok) {
+      const nextDraft = { ...draftRef.current, background: changed.background.name };
+      draftRef.current = nextDraft;
+      setDrafts(nextDraft);
+    }
+    return result;
   };
 
   const changeSubrace = (subraceId) => {
@@ -297,7 +314,9 @@ export default function HeroesScreen({
   // available and leaves the decision to the person playing the Hero.
   const earnedLevel = activeHero ? levelForXp(activeHero.xp) : 1;
   const xpRemaining = activeHero ? xpToNextLevel(activeHero.xp) : null;
-  const selectedSkills = activeHero?.skillProficiencies.length || 0;
+  const activeBackground = BACKGROUND_DETAILS.find((entry) => entry.id === activeHero?.backgroundBenefitId) || null;
+  const backgroundSkills = new Set(activeBackground?.skills || []);
+  const selectedSkills = activeHero?.skillProficiencies.filter((skillId) => !backgroundSkills.has(skillId)).length || 0;
   const overRecommended =
     selectedClass.id === "fighter" && selectedSkills > selectedClass.recommendedSkillCount;
   const saveMessage = visibleError
@@ -500,8 +519,14 @@ export default function HeroesScreen({
                   </label>
                   <label className="field span-all">
                     <span className="label">Background</span>
-                    <input className="inp" value={drafts.background} list="nightforge-backgrounds" onChange={(event) => queueDraft("background", event.target.value)} onBlur={flushDraft} placeholder="Acolyte, Soldier, Sage…" />
-                    <datalist id="nightforge-backgrounds">{BACKGROUNDS.map((background) => <option value={background} key={background} />)}</datalist>
+                    <select className="sel" value={activeHero.backgroundBenefitId || ""} onChange={(event) => changeBackground(event.target.value)}>
+                      <option value="">Choose a background</option>
+                      {BACKGROUND_DETAILS.map((entry) => <option value={entry.id} key={entry.id}>{entry.name}</option>)}
+                    </select>
+                    {activeHero.backgroundBenefitId && (() => {
+                      const entry = BACKGROUND_DETAILS.find((candidate) => candidate.id === activeHero.backgroundBenefitId);
+                      return entry ? <small>{entry.skills.map((id) => SKILLS.find((skill) => skill.id === id)?.name).join(" + ")} · {entry.tools.length ? entry.tools.join(", ") : "no tool proficiency"} · starting gear added</small> : null;
+                    })()}
                   </label>
                   <div className="field span-all">
                     <span className="label">Languages</span>
@@ -601,18 +626,22 @@ export default function HeroesScreen({
                     <div className="nf-state-hero-skills">
                       {SKILLS.map((skill) => {
                         const proficient = activeHero.skillProficiencies.includes(skill.id);
+                        const backgroundGranted = backgroundSkills.has(skill.id);
                         return (
                           <button
                             type="button"
                             key={skill.id}
                             className={`toggle-chip${proficient ? " on" : ""}`}
                             aria-pressed={proficient}
-                            title={proficient
+                            disabled={backgroundGranted}
+                            title={backgroundGranted
+                              ? `${skill.name}: granted by ${activeBackground.name}.`
+                              : proficient
                               ? `${skill.name}: proficient. Tap to remove proficiency and lose +${derived.proficiency}.`
                               : `${skill.name}: not proficient. Tap to add proficiency and gain +${derived.proficiency}.`}
                             onClick={() => apply({ skillProficiencies: toggleValue(activeHero.skillProficiencies, skill.id) })}
                           >
-                            <span>{skill.name} <small>{skill.ability.toUpperCase()}</small></span>
+                            <span>{skill.name} <small>{backgroundGranted ? `${skill.ability.toUpperCase()} · background` : skill.ability.toUpperCase()}</small></span>
                             <strong className="numeral">{formatModifier(skillModifier(activeHero, derived, skill))}</strong>
                           </button>
                         );

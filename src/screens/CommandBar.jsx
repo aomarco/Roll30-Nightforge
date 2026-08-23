@@ -75,6 +75,8 @@ export default function CommandBar({
   tacticState = { ok: false, message: "Battle is not active." },
   helpState = { ok: false, message: "Battle is not active." },
   stabilizeState = { ok: false, message: "Battle is not active." },
+  readyState = { ok: false, message: "Battle is not active." },
+  potionState = { ok: false, message: "No potion is available." },
   attack,
   dash,
   swap,
@@ -82,6 +84,14 @@ export default function CommandBar({
   disengage,
   help,
   stabilize,
+  ready,
+  specialAttack,
+  grappleState = { grappledTargets: [], escape: { ok: false } },
+  escapeGrapple,
+  releaseGrapple,
+  drinkPotion,
+  movementModes = [],
+  chooseMovementMode,
   rollDeath,
   end,
   openChest,
@@ -94,17 +104,20 @@ export default function CommandBar({
   // Dash is one press away from wasting a turn, so it asks twice.
   const [dashArmed, setDashArmed] = useState(false);
   const [draft, setDraft] = useState(() => initialSwapDraft || { ...token.loadout });
+  const [readyTrigger, setReadyTrigger] = useState("target-moves");
   const weapons = useMemo(() => token.inventory
     .map((entry) => ({ item: ITEM_BY_ID[entry.itemId], quantity: entry.quantity }))
     .filter(({ item }) => item?.kind === "weapon"), [token.inventory]);
   const validation = validateSwapLoadout(token, draft);
   const maximum = movementMaximum(resources, token);
   const remaining = movementRemaining(resources, token);
+  const selectedSpeed = movementModes.find(({ mode }) => mode === (resources.movementMode || "walk"))?.speed || token.baseSpeed;
 
   useEffect(() => {
     setPanel(null);
     setDashArmed(false);
     setDraft({ ...token.loadout });
+    setReadyTrigger("target-moves");
   }, [token.id]);
 
   useEffect(() => {
@@ -127,6 +140,12 @@ export default function CommandBar({
       if (next === "swap") setDraft({ ...token.loadout });
       return next;
     });
+  };
+
+  const enterTargeting = (start) => {
+    const result = start();
+    if (result?.ok) setPanel(null);
+    return result;
   };
 
   const totalSegments = Math.min(
@@ -189,8 +208,8 @@ export default function CommandBar({
       available: dashState.ok,
       reason: dashState.ok
         ? dashArmed
-          ? `Press again to spend the Action and add ${token.baseSpeed} feet.`
-          : `Adds ${token.baseSpeed} feet of movement. Press twice to confirm.`
+          ? `Press again to spend the Action and add ${selectedSpeed} feet.`
+          : `Adds ${selectedSpeed} feet of movement. Press twice to confirm.`
         : dashState.message,
       onClick: () => {
         if (!dashArmed) { setDashArmed(true); return; }
@@ -217,7 +236,7 @@ export default function CommandBar({
       icon: ShieldHalf,
       label: "Tactics",
       available: tacticState.ok,
-      reason: tacticState.ok ? "Dodge, Disengage, Help an ally, or stabilise a dying Hero." : tacticState.message,
+      reason: tacticState.ok ? "Dodge, Disengage, Help, Ready, Grapple, Shove, use a potion, or stabilise." : tacticState.message,
       onClick: () => togglePanel("tactics"),
       expands: true,
     },
@@ -256,7 +275,7 @@ export default function CommandBar({
                 <button
                   className="nf-state-command-option"
                   key={option.key}
-                  onClick={() => attack({ kind: "action", weaponId: option.weaponId, hand: option.hand, attackId: option.attackId })}
+                  onClick={() => enterTargeting(() => attack({ kind: "action", weaponId: option.weaponId, hand: option.hand, attackId: option.attackId }))}
                   disabled={busy || !option.supply.ok}
                   title={option.supply.ok ? "Enter targeting mode" : option.supply.message}
                 >
@@ -300,6 +319,16 @@ export default function CommandBar({
             <p className="note">{swapState.message} {swapState.recovery}</p>
           )}
 
+          {panel === "tactics" && grappleState.grappledTargets?.length > 0 && (
+            <div className="nf-state-command-options nf-state-command-tactics">
+              <span className="nf-state-command-group">Held creatures</span>
+              {grappleState.grappledTargets.map((target) => (
+                <button className="nf-state-command-option" type="button" key={`release-${target.id}`} onClick={() => releaseGrapple(target.id)} disabled={busy}>
+                  <X size={16} /><span><strong>Release {target.name}</strong><small>Release the grapple without spending an Action.</small></span>
+                </button>
+              ))}
+            </div>
+          )}
           {panel === "tactics" && tacticState.ok && (
             <div className="nf-state-command-options nf-state-command-tactics">
               <button className="nf-state-command-option" type="button" onClick={dodge} disabled={busy} title="Spend the Action to Dodge.">
@@ -316,13 +345,55 @@ export default function CommandBar({
                   <small>Move away without drawing an opportunity attack for the rest of this turn.</small>
                 </span>
               </button>
+              <span className="nf-state-command-group">Ready an attack</span>
+              <label className="field">
+                <span className="label">Trigger</span>
+                <select className="sel" value={readyTrigger} onChange={(event) => setReadyTrigger(event.target.value)} disabled={busy || !readyState.ok}>
+                  <option value="target-moves">Target moves</option>
+                  <option value="target-attacks">Target attacks</option>
+                  <option value="target-ends-turn">Target ends its turn</option>
+                </select>
+              </label>
+              {readyState.ok && attackState.ok ? attackState.value.options.map((option) => (
+                <button
+                  className="nf-state-command-option"
+                  type="button"
+                  key={`ready-${option.key}`}
+                  onClick={() => enterTargeting(() => ready({ trigger: readyTrigger, weaponId: option.weaponId, hand: option.hand, attackId: option.attackId, attackName: option.weapon.name }))}
+                  disabled={busy || !option.supply.ok}
+                >
+                  <Hourglass size={16} />
+                  <span><strong>Ready {option.weapon.name}</strong><small>Spend the Action, then choose the triggering enemy.</small></span>
+                </button>
+              )) : <p className="note">{readyState.message || attackState.message}</p>}
+              <span className="nf-state-command-group">Contested attacks</span>
+              {grappleState.escape?.ok && (
+                <button className="nf-state-command-option" type="button" onClick={escapeGrapple} disabled={busy}>
+                  <Footprints size={16} /><span><strong>Escape {grappleState.escape.value.grappler.name}</strong><small>Spend the Action on Athletics or Acrobatics versus the grappler's Athletics.</small></span>
+                </button>
+              )}
+              <button className="nf-state-command-option" type="button" onClick={() => enterTargeting(() => specialAttack("grapple"))} disabled={busy}>
+                <HandHelping size={16} /><span><strong>Grapple</strong><small>Athletics versus Athletics or Acrobatics; choose an adjacent enemy.</small></span>
+              </button>
+              <button className="nf-state-command-option" type="button" onClick={() => enterTargeting(() => specialAttack("shove-prone"))} disabled={busy}>
+                <ChevronsRight size={16} /><span><strong>Shove prone</strong><small>Win a contested check to knock an adjacent enemy prone.</small></span>
+              </button>
+              <button className="nf-state-command-option" type="button" onClick={() => enterTargeting(() => specialAttack("shove-push"))} disabled={busy}>
+                <ChevronsRight size={16} /><span><strong>Push 5 feet</strong><small>Win a contested check to push an adjacent enemy into an open square.</small></span>
+              </button>
+              <span className="nf-state-command-group">Healing potions</span>
+              {potionState.ok ? potionState.value.potions.flatMap(({ item, quantity }) => potionState.value.targets.map((target) => (
+                <button className="nf-state-command-option" type="button" key={`${item.id}-${target.id}`} onClick={() => drinkPotion(item.id, target.id)} disabled={busy}>
+                  <HeartPulse size={16} /><span><strong>{item.name} → {target.name}</strong><small>{item.healingDice}d4 + {item.healingBonus} healing · {quantity} carried</small></span>
+                </button>
+              ))) : <p className="note">{potionState.message}</p>}
               {helpState.ok
                 ? helpState.value.allies.map((ally) => (
                   <button
                     className="nf-state-command-option"
                     key={ally.id}
                     type="button"
-                    onClick={() => help(ally.id)}
+                    onClick={() => enterTargeting(() => help(ally.id))}
                     disabled={busy}
                     title={`Spend the Action to Help ${ally.name}, then choose the enemy they are going for.`}
                   >
@@ -460,7 +531,11 @@ export default function CommandBar({
               ? `${remaining} of ${maximum} feet of movement left this turn.`
               : `${token.name} has used all ${maximum} feet of movement this turn.`}
           >
-            <em>Speed</em>
+            {movementModes.length > 1
+              ? <select className="nf-state-command-movement-mode" aria-label="Movement mode" value={resources.movementMode || "walk"} onChange={(event) => chooseMovementMode(event.target.value)} disabled={busy}>
+                {movementModes.map(({ mode, speed }) => <option value={mode} key={mode}>{mode} {speed}</option>)}
+              </select>
+              : <em>{resources.movementMode || "walk"}</em>}
             <span className="nf-state-command-speed-track" role="img" aria-label={`${remaining} of ${maximum} feet of movement remaining`}>
               {Array.from({ length: totalSegments }, (unused, index) => (
                 <i

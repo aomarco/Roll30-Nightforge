@@ -1,5 +1,5 @@
 import { ITEM_BY_ID } from "./catalog.js";
-import { wornMagicBonuses } from "./items.js";
+import { normalizeInventoryEntries, wornMagicBonuses } from "./items.js";
 
 export const ABILITY_KEYS = Object.freeze(["str", "dex", "con", "int", "wis", "cha"]);
 
@@ -109,6 +109,63 @@ export const BACKGROUNDS = Object.freeze([
   "Acolyte", "Charlatan", "Criminal", "Entertainer", "Folk Hero", "Guild Artisan",
   "Hermit", "Noble", "Outlander", "Sage", "Sailor", "Soldier", "Urchin",
 ]);
+
+const background = (id, name, skills, tools, equipment) => Object.freeze({
+  id,
+  name,
+  skills: Object.freeze(skills),
+  tools: Object.freeze(tools),
+  equipment: Object.freeze(equipment.map(([itemId, quantity = 1]) => Object.freeze({ itemId, quantity }))),
+});
+
+/** Catalog-backed defaults are used where a background normally offers a choice. */
+export const BACKGROUND_DETAILS = Object.freeze([
+  background("acolyte", "Acolyte", ["insight", "religion"], [], [["amulet"], ["book"], ["block-of-incense", 5], ["vestments"], ["clothes-common"], ["pouch"]]),
+  background("charlatan", "Charlatan", ["deception", "sleight-of-hand"], ["disguise-kit", "forgery-kit"], [["clothes-fine"], ["disguise-kit"], ["forgery-kit"], ["pouch"]]),
+  background("criminal", "Criminal", ["deception", "stealth"], ["dice-set", "thieves-tools"], [["crowbar"], ["clothes-common"], ["pouch"]]),
+  background("entertainer", "Entertainer", ["acrobatics", "performance"], ["disguise-kit", "lute"], [["lute"], ["clothes-costume"], ["pouch"]]),
+  background("folk-hero", "Folk Hero", ["animal-handling", "survival"], ["smiths-tools", "vehicles-land"], [["smiths-tools"], ["shovel"], ["pot-iron"], ["clothes-common"], ["pouch"]]),
+  background("guild-artisan", "Guild Artisan", ["insight", "persuasion"], ["smiths-tools"], [["smiths-tools"], ["clothes-travelers"], ["pouch"]]),
+  background("hermit", "Hermit", ["medicine", "religion"], ["herbalism-kit"], [["case-map-or-scroll"], ["blanket"], ["clothes-common"], ["herbalism-kit"], ["pouch"]]),
+  background("noble", "Noble", ["history", "persuasion"], ["dice-set"], [["clothes-fine"], ["signet-ring"], ["case-map-or-scroll"], ["pouch"]]),
+  background("outlander", "Outlander", ["athletics", "survival"], ["flute"], [["quarterstaff"], ["hunting-trap"], ["clothes-travelers"], ["pouch"]]),
+  background("sage", "Sage", ["arcana", "history"], [], [["ink-1-ounce-bottle"], ["ink-pen"], ["small-knife"], ["clothes-common"], ["pouch"]]),
+  background("sailor", "Sailor", ["athletics", "perception"], ["navigators-tools", "vehicles-water"], [["club"], ["rope-silk-50-feet"], ["clothes-common"], ["pouch"]]),
+  background("soldier", "Soldier", ["athletics", "intimidation"], ["dice-set", "vehicles-land"], [["dice-set"], ["clothes-common"], ["pouch"]]),
+  background("urchin", "Urchin", ["sleight-of-hand", "stealth"], ["disguise-kit", "thieves-tools"], [["small-knife"], ["case-map-or-scroll"], ["clothes-common"], ["pouch"]]),
+]);
+
+export const backgroundById = (id) => BACKGROUND_DETAILS.find((entry) => entry.id === String(id || "").trim().toLowerCase()) || null;
+export const backgroundByName = (name) => BACKGROUND_DETAILS.find((entry) => entry.name.toLowerCase() === String(name || "").trim().toLowerCase()) || null;
+
+const subtractGrantedEquipment = (inventory, equipment) => {
+  const quantities = new Map(normalizeInventoryEntries(inventory).inventory.map((entry) => [entry.itemId, entry.quantity]));
+  for (const grant of equipment || []) quantities.set(grant.itemId, Math.max(0, (quantities.get(grant.itemId) || 0) - grant.quantity));
+  return [...quantities].flatMap(([itemId, quantity]) => quantity > 0 ? [{ itemId, quantity }] : []);
+};
+
+export function applyBackgroundBenefits(hero, backgroundId) {
+  const next = backgroundById(backgroundId) || backgroundByName(backgroundId);
+  if (!next) return { ok: false, code: "BACKGROUND_UNKNOWN", message: "Choose one of the thirteen Nightforge backgrounds.", recovery: "Select a background from the list.", retryable: false };
+  const previous = backgroundById(hero?.backgroundBenefitId);
+  const previousSkills = new Set(previous?.skills || []);
+  const previousTools = new Set(previous?.tools || []);
+  const chosenSkills = (hero?.skillProficiencies || []).filter((id) => !previousSkills.has(id));
+  const chosenTools = (hero?.toolProficiencies || []).filter((id) => !previousTools.has(id));
+  const retainedInventory = subtractGrantedEquipment(hero?.inventory, previous?.equipment || []);
+  const inventory = normalizeInventoryEntries([...retainedInventory, ...next.equipment]).inventory;
+  return {
+    ok: true,
+    value: {
+      background: next.name,
+      backgroundBenefitId: next.id,
+      skillProficiencies: [...new Set([...chosenSkills, ...next.skills])],
+      toolProficiencies: [...new Set([...chosenTools, ...next.tools])],
+      inventory,
+    },
+    background: next,
+  };
+}
 
 export const SAVING_THROWS = Object.freeze(
   ABILITIES.map((ability) => Object.freeze({ ...ability })),

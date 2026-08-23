@@ -57,7 +57,10 @@ for (const behavior of [
 if (combat.includes("wallsVisible")) failures.push("Movement incorrectly ignores hidden persisted walls.");
 if (!combat.includes("wall.type") || !combat.includes("normalizeWalls")) failures.push("Movement does not preserve both full- and half-wall geometry.");
 if (!combat.includes("movementSpent: context.resources.movementSpent + plan.value.costFeet")) failures.push("Movement does not charge the complete accepted route.");
-if (!combat.includes("resources.movementBase + token.baseSpeed")) failures.push("Dash does not add one complete Speed value.");
+const addsWalkSpeed = combat.includes("resources.movementBase + token.baseSpeed");
+const addsSelectedModeSpeed = combat.includes("resources.movementBase + modeSpeed")
+  && combat.includes("token.speeds?.[resources.movementMode]");
+if (!addsWalkSpeed && !addsSelectedModeSpeed) failures.push("Dash does not add one complete selected Speed value.");
 if (!combat.includes("resources: { [nextToken.id]: createTurnResources(nextToken) }")) failures.push("End Turn does not discard old resources and create a fresh next turn.");
 
 const table = await read("src/screens/TableScreen.jsx");

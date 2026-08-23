@@ -2,12 +2,13 @@ import {
   AMMUNITION,
   ARMOR,
   GEAR,
+  HEALING_POTIONS,
   MAGIC_ITEMS,
   WEAPONS,
   WORN_MAGIC_ITEMS,
 } from "./catalog.generated.js";
 
-export { AMMUNITION, ARMOR, GEAR, MAGIC_ITEMS, WEAPONS, WORN_MAGIC_ITEMS };
+export { AMMUNITION, ARMOR, GEAR, HEALING_POTIONS, MAGIC_ITEMS, WEAPONS, WORN_MAGIC_ITEMS };
 
 export const ITEM_CATALOG = Object.freeze([
   ...WEAPONS,
@@ -16,6 +17,7 @@ export const ITEM_CATALOG = Object.freeze([
   ...GEAR,
   ...MAGIC_ITEMS,
   ...WORN_MAGIC_ITEMS,
+  ...HEALING_POTIONS,
 ]);
 
 export const ITEM_BY_ID = Object.freeze(
@@ -31,7 +33,7 @@ export const CATALOG_FACETS = Object.freeze({
   weaponClasses: uniqueSorted(WEAPONS.map((item) => item.weaponClass)),
   armorClasses: uniqueSorted(ARMOR.map((item) => item.armorClass)),
   gearCategories: uniqueSorted(GEAR.map((item) => item.gearCategory)),
-  magicRarities: uniqueSorted([...MAGIC_ITEMS, ...WORN_MAGIC_ITEMS].map((item) => item.rarity)),
+  magicRarities: uniqueSorted([...MAGIC_ITEMS, ...WORN_MAGIC_ITEMS, ...HEALING_POTIONS].map((item) => item.rarity)),
   weaponProperties: uniqueSorted(WEAPONS.flatMap((item) => item.properties)),
   damageTypes: uniqueSorted(WEAPONS.map((item) => item.damageType)),
   rangeBands: Object.freeze(["melee", "close", "medium", "long"]),

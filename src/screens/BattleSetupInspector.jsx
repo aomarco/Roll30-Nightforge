@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { CircleDot, Minus, MoreVertical, Package, Plus, Search, X } from "lucide-react";
 
 import { formatCost, getItem, itemSubtitle, ITEM_CATALOG } from "../domain/catalog.js";
+import { CONDITIONS } from "../domain/conditions.js";
 import { DAMAGE_TYPES, damageTypeName } from "../domain/damageTypes.js";
 import { FACTION_LABELS, MAX_ATTACKS_PER_ACTION, TOKEN_FACTIONS, TOKEN_SIZES } from "../domain/table.js";
 import { formatChallengeRating } from "../domain/monsters.js";
@@ -93,6 +94,9 @@ const draftFromToken = (token) => ({
   maxHp: token?.maxHp ?? 10,
   ac: token?.ac ?? 10,
   baseSpeed: token?.baseSpeed ?? 30,
+  flySpeed: token?.speeds?.fly ?? 0,
+  swimSpeed: token?.speeds?.swim ?? 0,
+  climbSpeed: token?.speeds?.climb ?? 0,
   strength: token?.strength ?? 10,
   dexterity: token?.dexterity ?? 10,
   constitution: token?.constitution ?? 10,
@@ -273,6 +277,35 @@ function DefenceEditor({ token, save, busy }) {
   );
 }
 
+function ConditionImmunityEditor({ token, save, busy }) {
+  const immunities = token.conditionImmunities || [];
+  const toggle = (conditionId) => save({
+    conditionImmunities: immunities.includes(conditionId)
+      ? immunities.filter((id) => id !== conditionId)
+      : [...immunities, conditionId],
+  });
+  return (
+    <div className="nf-state-scene-defences">
+      <div className="unit-top"><span className="unit-label">Condition immunity</span><span className="tag numeral">{immunities.length || "None"}</span></div>
+      <div className="afflict">
+        {CONDITIONS.map((condition) => (
+          <button
+            key={condition.id}
+            type="button"
+            className={`toggle-chip${immunities.includes(condition.id) ? " on" : ""}`}
+            onClick={() => toggle(condition.id)}
+            disabled={busy}
+            aria-pressed={immunities.includes(condition.id)}
+            title={`Prevent ${condition.name} from being applied during Battle.`}
+          >
+            {condition.name}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /**
  * The parts of a stat block the engine cannot run yet - saving-throw actions,
  * legendary actions, traits, resistances. Shown so the table can read and
@@ -324,6 +357,7 @@ function ManualTokenFields({ token, save, busy, close }) {
     token.maxHp,
     token.ac,
     token.baseSpeed,
+    token.speeds,
     token.strength,
     token.dexterity,
     token.level,
@@ -336,6 +370,12 @@ function ManualTokenFields({ token, save, busy, close }) {
     const result = save({
       ...draft,
       ...Object.fromEntries(numericFields.map(([field]) => [field, Number(draft[field])])),
+      speeds: {
+        walk: Number(draft.baseSpeed),
+        fly: Number(draft.flySpeed),
+        swim: Number(draft.swimSpeed),
+        climb: Number(draft.climbSpeed),
+      },
     });
     if (!result || result.ok) close();
   };
@@ -348,6 +388,12 @@ function ManualTokenFields({ token, save, busy, close }) {
           <div className="micro" key={field}>
             <label>{label}</label>
             <input className="inp" type="number" aria-label={label} min={minimum ?? undefined} max={maximum ?? undefined} value={draft[field]} onChange={change(field)} disabled={busy} />
+          </div>
+        ))}
+        {[['flySpeed', 'Fly speed'], ['swimSpeed', 'Swim speed'], ['climbSpeed', 'Climb speed']].map(([field, label]) => (
+          <div className="micro" key={field}>
+            <label>{label}</label>
+            <input className="inp" type="number" aria-label={label} min="0" step="5" value={draft[field]} onChange={change(field)} disabled={busy} />
           </div>
         ))}
         <div className="micro wide">
@@ -571,7 +617,12 @@ export default function BattleSetupInspector({
             ))}
           </span>
         </div>
+        <label className="nf-state-attack-toggle">
+          <input type="checkbox" checked={token.surprised} onChange={(event) => saveToken({ surprised: event.target.checked })} disabled={busy} />
+          <span><strong>Surprised in round one</strong> · this creature loses its first turn</span>
+        </label>
         <DefenceEditor token={token} save={saveToken} busy={busy} />
+        <ConditionImmunityEditor token={token} save={saveToken} busy={busy} />
         {!token.heroId && (
           <div className="nf-state-scene-attacks">
             {token.attacks.map((attack) => (

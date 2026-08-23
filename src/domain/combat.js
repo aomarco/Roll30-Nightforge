@@ -1,5 +1,5 @@
 import { ITEM_BY_ID } from "./catalog.js";
-import { CONDITIONS, isImmobilized, isIncapacitated } from "./conditions.js";
+import { changeCondition, CONDITIONS, expireConditionsAtRound, isImmobilized, isIncapacitated } from "./conditions.js";
 import { setMainHand, setOffHand } from "./items.js";
 import {
   appendEncounterLog,
@@ -7,6 +7,8 @@ import {
   createTurnResources,
   isDying,
   isStable,
+  MOVEMENT_MODES,
+  normalizeDifficultTerrain,
   normalizeChests,
   normalizeTableTokens,
   normalizeTurnResources,
@@ -14,6 +16,8 @@ import {
   setupCellForPosition,
   setupGridMetrics,
   setupPositionForCell,
+  tokenSkillModifier,
+  TOKEN_SIZES,
   updateToken,
 } from "./table.js";
 
@@ -45,6 +49,12 @@ export const tokenIsIncapacitated = (token) => isIncapacitated(token?.conditions
 
 /** Help is offered by stepping in beside someone, so it reaches one square. */
 export const HELP_REACH_FEET = 5;
+export const SPECIAL_ATTACK_REACH_FEET = 5;
+export const READY_TRIGGER_OPTIONS = Object.freeze([
+  { id: "target-moves", label: "when the target moves" },
+  { id: "target-attacks", label: "when the target attacks" },
+  { id: "target-ends-turn", label: "when the target ends its turn" },
+]);
 
 /**
  * Distance in feet across the square grid, counting a diagonal as one square.
@@ -165,6 +175,9 @@ export function findMovementRoute({
   tokens = [],
   chests = [],
   walls = [],
+  difficultTerrain = [],
+  movementMode = "walk",
+  movementCostMultiplier = 1,
   movingTokenId,
   viewport,
   searchLimit = PATH_SEARCH_LIMIT,
@@ -172,8 +185,10 @@ export function findMovementRoute({
   const metrics = setupGridMetrics(viewport);
   const startCell = setupCellForPosition(start, viewport);
   const goalCell = setupCellForPosition(destination, viewport);
-  if (sameCell(startCell, goalCell)) return { ok: true, cells: [startCell], visited: 0 };
+  if (sameCell(startCell, goalCell)) return { ok: true, cells: [startCell], stepCosts: [], visited: 0 };
   const occupied = occupiedCellSet({ tokens, chests, movingTokenId, viewport });
+  const terrain = new Set(normalizeDifficultTerrain(difficultTerrain));
+  const multiplier = Math.max(1, Math.floor(finite(movementCostMultiplier, 1)));
   const segments = wallSegments(walls, viewport);
   const startKey = cellKey(startCell);
   const goalKey = cellKey(goalCell);
@@ -204,7 +219,8 @@ export function findMovementRoute({
         key = previous.key;
       }
       cells.reverse();
-      return { ok: true, cells, visited };
+      const stepCosts = cells.slice(1).map((cell) => (movementMode === "fly" ? 1 : terrain.has(cellKey(cell)) ? 2 : 1) * multiplier);
+      return { ok: true, cells, stepCosts, visited };
     }
 
     for (const [columnDelta, rowDelta] of directions) {
@@ -227,7 +243,7 @@ export function findMovementRoute({
         ) continue;
       }
 
-      const tentative = current.g + 1;
+      const tentative = current.g + (movementMode === "fly" ? 1 : terrain.has(neighborKey) ? 2 : 1) * multiplier;
       if (tentative >= (scores.get(neighborKey) ?? Infinity)) continue;
       cameFrom.set(neighborKey, { key: current.key, cell: current.cell });
       scores.set(neighborKey, tentative);
@@ -278,12 +294,19 @@ export function planActiveMovement(scene, tokenId, destination, viewport, option
   const startCell = setupCellForPosition(token?.position, viewport);
   const origin = setupPositionForCell(startCell, viewport);
   if (!available.ok) return { ...available, tokenId, route: [origin], cells: [startCell], reachableIndex: 0, landingIndex: 0, costFeet: 0 };
+  const grappledTarget = available.value.tokens.find((entry) => entry.grappledById === token.id && entry.conditions.includes("grappled")) || null;
+  const draggingAtFullSpeed = grappledTarget
+    && TOKEN_SIZES.indexOf(grappledTarget.size) <= TOKEN_SIZES.indexOf(token.size) - 2;
+  const movementCostMultiplier = grappledTarget && !draggingAtFullSpeed ? 2 : 1;
   const route = findMovementRoute({
     start: token.position,
     destination,
     tokens: scene.tokens,
     chests: scene.chests,
     walls: scene.walls,
+    difficultTerrain: scene.difficultTerrain,
+    movementMode: available.value.resources.movementMode,
+    movementCostMultiplier,
     movingTokenId: token.id,
     viewport,
     searchLimit: options.searchLimit,
@@ -298,9 +321,17 @@ export function planActiveMovement(scene, tokenId, destination, viewport, option
   const positions = route.cells.map((cell) => setupPositionForCell(cell, viewport));
   const occupied = occupiedCellSet({ tokens: scene.tokens, chests: scene.chests, movingTokenId: token.id, viewport });
   const remainingCells = Math.floor(movementRemaining(available.value.resources, token) / MOVEMENT_FEET_PER_CELL);
-  let landingIndex = Math.min(route.cells.length - 1, remainingCells);
+  let landingIndex = 0;
+  let costCells = 0;
+  for (let index = 1; index < route.cells.length; index += 1) {
+    const nextCost = route.stepCosts[index - 1] || 1;
+    if (costCells + nextCost > remainingCells) break;
+    costCells += nextCost;
+    landingIndex = index;
+  }
   while (landingIndex > 0 && occupied.has(cellKey(route.cells[landingIndex]))) landingIndex -= 1;
-  const costFeet = landingIndex * MOVEMENT_FEET_PER_CELL;
+  costCells = route.stepCosts.slice(0, landingIndex).reduce((total, step) => total + step, 0);
+  const costFeet = costCells * MOVEMENT_FEET_PER_CELL;
   return success({
     tokenId,
     cells: route.cells,
@@ -309,9 +340,11 @@ export function planActiveMovement(scene, tokenId, destination, viewport, option
     landingIndex,
     landing: positions[landingIndex],
     costFeet,
-    requestedFeet: Math.max(0, route.cells.length - 1) * MOVEMENT_FEET_PER_CELL,
+    requestedFeet: route.stepCosts.reduce((total, step) => total + step, 0) * MOVEMENT_FEET_PER_CELL,
     overBudget: landingIndex < route.cells.length - 1,
     visited: route.visited,
+    grappledTargetId: grappledTarget?.id || null,
+    movementCostMultiplier,
   });
 }
 
@@ -331,13 +364,34 @@ export function moveActiveToken(scene, tokenId, destination, viewport, options =
     movementSpent: context.resources.movementSpent + plan.value.costFeet,
     swapChoice: context.resources.swapped ? "movement" : context.resources.swapChoice,
   };
-  const tokens = updateToken(context.tokens, tokenId, { position: plan.value.landing });
+  let tokens = updateToken(context.tokens, tokenId, { position: plan.value.landing });
+  if (plan.value.grappledTargetId) {
+    const followPosition = plan.value.route[Math.max(0, plan.value.landingIndex - 1)];
+    tokens = updateToken(tokens, plan.value.grappledTargetId, { position: followPosition });
+  }
   const encounter = {
     ...scene.encounter,
     resources: { [tokenId]: resources },
-    log: appendEncounterLog(scene.encounter.log, `${context.token.name} moves ${plan.value.costFeet} feet.`),
+    log: appendEncounterLog(scene.encounter.log, `${context.token.name} moves ${plan.value.costFeet} feet using ${context.resources.movementMode}${plan.value.grappledTargetId ? " while dragging a grappled creature" : ""}.`),
   };
   return success({ tokens, encounter }, { plan: plan.value });
+}
+
+export function selectMovementMode(scene, mode) {
+  const context = activeTurnContext(scene);
+  if (!context.ok) return context;
+  const { token, resources } = context.value;
+  if (!MOVEMENT_MODES.includes(mode)) return failure("MOVEMENT_MODE_UNKNOWN", "That movement mode is not available.", "Choose walk, fly, swim, or climb.");
+  const speed = Math.max(0, Math.floor(finite(token.speeds?.[mode])));
+  if (speed <= 0) return failure("MOVEMENT_MODE_UNAVAILABLE", `${token.name} has no ${mode} speed.`, "Choose a movement mode shown on the token.");
+  const movementBase = speed * (resources.dashed ? 2 : 1);
+  return success({
+    encounter: {
+      ...scene.encounter,
+      resources: { [token.id]: { ...resources, movementMode: mode, movementBase } },
+      log: appendEncounterLog(scene.encounter.log, `${token.name} switches to ${mode} movement (${speed} feet).`),
+    },
+  }, { mode, speed });
 }
 
 export function dashAvailability(scene) {
@@ -363,9 +417,10 @@ export function activateDash(scene) {
   const available = dashAvailability(scene);
   if (!available.ok) return available;
   const { token, resources } = available.value;
+  const modeSpeed = Math.max(0, Math.floor(finite(token.speeds?.[resources.movementMode], token.baseSpeed)));
   const next = {
     ...resources,
-    movementBase: resources.movementBase + token.baseSpeed,
+    movementBase: resources.movementBase + modeSpeed,
     actionSpent: true,
     actionType: "dash",
     dashed: true,
@@ -448,6 +503,236 @@ export const activateDisengage = (scene) => activateTactic(scene, {
   patch: { disengaging: true },
   logText: (token) => `${token.name} Disengages and can move without drawing an opportunity attack.`,
 });
+
+export const readyAvailability = (scene) => tacticAvailability(scene, "Ready");
+
+export function activateReady(scene, specification = {}) {
+  const available = readyAvailability(scene);
+  if (!available.ok) return available;
+  const { token, resources, tokens } = available.value;
+  const trigger = READY_TRIGGER_OPTIONS.some((entry) => entry.id === specification.trigger)
+    ? specification.trigger
+    : null;
+  const target = tokens.find((entry) => entry.id === specification.targetTokenId);
+  if (!target || target.faction === token.faction || target.hp <= 0) return failure(
+    "READY_TARGET_INVALID",
+    "A readied attack needs a standing enemy as its trigger target.",
+    "Choose a standing creature on the other side.",
+  );
+  if (!trigger) return failure("READY_TRIGGER_INVALID", "Choose when the readied attack should trigger.", "Choose movement, attack, or end of turn.");
+  const attack = specification.attackId
+    ? token.attacks.find((entry) => entry.id === specification.attackId)
+    : null;
+  const weapon = specification.weaponId ? ITEM_BY_ID[specification.weaponId] : null;
+  const equipped = weapon?.kind === "weapon" && [token.loadout.mainHand, token.loadout.offHand].includes(weapon.id);
+  if (!attack && !equipped) return failure("READY_ATTACK_INVALID", "That attack is no longer available to Ready.", "Choose an equipped weapon or an authored attack.");
+  const readiedAction = {
+    trigger,
+    targetTokenId: target.id,
+    weaponId: attack ? null : weapon.id,
+    attackId: attack?.id || null,
+    hand: attack ? null : (["mainHand", "offHand"].includes(specification.hand) ? specification.hand : token.loadout.mainHand === weapon.id ? "mainHand" : "offHand"),
+  };
+  return success({
+    tokens: updateToken(tokens, token.id, { readiedAction }),
+    encounter: {
+      ...scene.encounter,
+      resources: { [token.id]: { ...resources, actionSpent: true, actionType: "ready" } },
+      log: appendEncounterLog(scene.encounter.log, `${token.name} Readies an attack ${READY_TRIGGER_OPTIONS.find((entry) => entry.id === trigger).label} (${target.name}).`),
+    },
+  }, { readiedAction, target });
+}
+
+function specialAttackAvailability(scene, targetTokenId, viewport, verb) {
+  const available = tacticAvailability(scene, verb);
+  if (!available.ok) return available;
+  const { token, tokens } = available.value;
+  const target = tokens.find((entry) => entry.id === targetTokenId);
+  if (!target || target.faction === token.faction || target.hp <= 0) return failure(
+    "SPECIAL_ATTACK_TARGET_INVALID",
+    `${verb} needs a standing enemy target.`,
+    "Choose a standing creature on the other side.",
+  );
+  if (chebyshevFeet(token.position, target.position, viewport) > SPECIAL_ATTACK_REACH_FEET) return failure(
+    "SPECIAL_ATTACK_OUT_OF_REACH",
+    `${target.name} is beyond five-foot reach.`,
+    "Move adjacent to the target first.",
+  );
+  if (TOKEN_SIZES.indexOf(target.size) > TOKEN_SIZES.indexOf(token.size) + 1) return failure(
+    "SPECIAL_ATTACK_TARGET_TOO_LARGE",
+    `${target.name} is more than one size larger than ${token.name}.`,
+    "Choose a target no more than one size larger.",
+  );
+  return success({ ...available.value, target });
+}
+
+const contestRoll = (token, skillId, random) => {
+  const die = Math.floor(Math.max(0, Math.min(0.999999999999, Number(random?.()) || 0)) * 20) + 1;
+  const modifier = tokenSkillModifier(token, skillId);
+  return { die, modifier, total: die + modifier, skillId };
+};
+
+function spendSpecialAttack(scene, context, tokens, actionType, logText) {
+  return {
+    tokens,
+    encounter: {
+      ...scene.encounter,
+      resources: { [context.token.id]: { ...context.resources, actionSpent: true, actionType } },
+      log: appendEncounterLog(scene.encounter.log, logText),
+    },
+  };
+}
+
+export function performGrapple(scene, targetTokenId, viewport, { random = Math.random } = {}) {
+  const available = specialAttackAvailability(scene, targetTokenId, viewport, "Grapple");
+  if (!available.ok) return available;
+  const { token, target, tokens } = available.value;
+  const held = tokens.find((entry) => entry.grappledById === token.id && entry.conditions.includes("grappled"));
+  if (held && held.id !== target.id) return failure(
+    "GRAPPLE_ALREADY_HOLDING",
+    `${token.name} is already grappling ${held.name}.`,
+    "Release that grapple before starting another.",
+  );
+  const attackerRoll = contestRoll(token, "athletics", random);
+  const defenderSkill = tokenSkillModifier(target, "acrobatics") > tokenSkillModifier(target, "athletics") ? "acrobatics" : "athletics";
+  const defenderRoll = contestRoll(target, defenderSkill, random);
+  const won = attackerRoll.total > defenderRoll.total;
+  let nextTokens = tokens;
+  let immunity = false;
+  if (won) {
+    const changed = changeCondition(target, "grappled");
+    immunity = !changed.ok && changed.code === "CONDITION_IMMUNE";
+    if (changed.ok) nextTokens = updateToken(tokens, target.id, { conditions: changed.value, conditionExpiries: changed.conditionExpiries, grappledById: token.id });
+  }
+  const successState = won && !immunity;
+  return success(spendSpecialAttack(
+    scene,
+    available.value,
+    nextTokens,
+    "grapple",
+    `${token.name} ${successState ? "grapples" : "fails to grapple"} ${target.name} (${attackerRoll.total} vs ${defenderRoll.total})${immunity ? "; the target is immune" : ""}.`,
+  ), { attackerRoll, defenderRoll, success: successState, immune: immunity, target });
+}
+
+export function escapeGrappleAvailability(scene) {
+  const available = tacticAvailability(scene, "Escape a grapple");
+  if (!available.ok) return available;
+  const { token, tokens } = available.value;
+  const grappler = token.grappledById ? tokens.find((entry) => entry.id === token.grappledById) : null;
+  if (!grappler || !token.conditions.includes("grappled")) return failure(
+    "GRAPPLE_ESCAPE_NOT_NEEDED",
+    `${token.name} is not held in a grapple.`,
+    "Choose another tactic.",
+  );
+  return success({ ...available.value, grappler });
+}
+
+export function escapeGrapple(scene, { random = Math.random } = {}) {
+  const available = escapeGrappleAvailability(scene);
+  if (!available.ok) return available;
+  const { token, grappler, tokens, resources } = available.value;
+  const escapeSkill = tokenSkillModifier(token, "acrobatics") > tokenSkillModifier(token, "athletics") ? "acrobatics" : "athletics";
+  const escapeRoll = contestRoll(token, escapeSkill, random);
+  const holdRoll = contestRoll(grappler, "athletics", random);
+  const escaped = escapeRoll.total > holdRoll.total;
+  const { grappled: removed, ...conditionExpiries } = token.conditionExpiries || {};
+  const nextTokens = escaped
+    ? updateToken(tokens, token.id, {
+      conditions: token.conditions.filter((condition) => condition !== "grappled"),
+      conditionExpiries,
+      grappledById: null,
+    })
+    : tokens;
+  return success({
+    tokens: nextTokens,
+    encounter: {
+      ...scene.encounter,
+      resources: { [token.id]: { ...resources, actionSpent: true, actionType: "escape-grapple" } },
+      log: appendEncounterLog(scene.encounter.log, `${token.name} ${escaped ? "escapes" : "fails to escape"} ${grappler.name}'s grapple (${escapeRoll.total} vs ${holdRoll.total}).`),
+    },
+  }, { escaped, escapeRoll, holdRoll, grappler });
+}
+
+export function releaseGrapple(scene, targetTokenId) {
+  const context = activeTurnContext(scene);
+  if (!context.ok) return context;
+  const { token, tokens } = context.value;
+  const target = tokens.find((entry) => entry.id === targetTokenId && entry.grappledById === token.id && entry.conditions.includes("grappled"));
+  if (!target) return failure("GRAPPLE_RELEASE_TARGET_INVALID", `${token.name} is not grappling that creature.`, "Choose a creature currently grappled by the active token.");
+  const { grappled: removed, ...conditionExpiries } = target.conditionExpiries || {};
+  return success({
+    tokens: updateToken(tokens, target.id, {
+      conditions: target.conditions.filter((condition) => condition !== "grappled"),
+      conditionExpiries,
+      grappledById: null,
+    }),
+    encounter: {
+      ...scene.encounter,
+      log: appendEncounterLog(scene.encounter.log, `${token.name} releases ${target.name} from the grapple.`),
+    },
+  }, { target });
+}
+
+export function performShove(scene, targetTokenId, mode, viewport, { random = Math.random } = {}) {
+  const available = specialAttackAvailability(scene, targetTokenId, viewport, "Shove");
+  if (!available.ok) return available;
+  if (!["prone", "push"].includes(mode)) return failure("SHOVE_MODE_INVALID", "Choose whether to push the target or knock it prone.", "Choose push or prone.");
+  const { token, target, tokens } = available.value;
+  const attackerRoll = contestRoll(token, "athletics", random);
+  const defenderSkill = tokenSkillModifier(target, "acrobatics") > tokenSkillModifier(target, "athletics") ? "acrobatics" : "athletics";
+  const defenderRoll = contestRoll(target, defenderSkill, random);
+  const won = attackerRoll.total > defenderRoll.total;
+  let nextTokens = tokens;
+  let successState = won;
+  let reason = "";
+  if (won && mode === "prone") {
+    const changed = changeCondition(target, "prone");
+    if (!changed.ok) {
+      successState = false;
+      reason = " but the target is immune";
+    } else {
+      nextTokens = updateToken(tokens, target.id, { conditions: changed.value, conditionExpiries: changed.conditionExpiries });
+    }
+  }
+  if (won && mode === "push") {
+    const attackerCell = setupCellForPosition(token.position, viewport);
+    const targetCell = setupCellForPosition(target.position, viewport);
+    const destinationCell = {
+      column: targetCell.column + Math.sign(targetCell.column - attackerCell.column),
+      row: targetCell.row + Math.sign(targetCell.row - attackerCell.row),
+    };
+    const metrics = setupGridMetrics(viewport);
+    const occupied = occupiedCellSet({ tokens, chests: scene.chests, movingTokenId: target.id, viewport });
+    const blocked = destinationCell.column < 0 || destinationCell.column >= metrics.columns
+      || destinationCell.row < 0 || destinationCell.row >= metrics.rows
+      || occupied.has(cellKey(destinationCell))
+      || movementEdgeBlocked(targetCell, destinationCell, scene.walls, viewport);
+    if (blocked) {
+      successState = false;
+      reason = " but there is no open square behind the target";
+    } else {
+      const position = setupPositionForCell(destinationCell, viewport);
+      const grappler = target.grappledById ? tokens.find((entry) => entry.id === target.grappledById) : null;
+      const breaksGrapple = grappler && chebyshevFeet(grappler.position, position, viewport) > SPECIAL_ATTACK_REACH_FEET;
+      const { grappled: removed, ...conditionExpiries } = target.conditionExpiries || {};
+      nextTokens = updateToken(tokens, target.id, {
+        position,
+        ...(breaksGrapple ? {
+          conditions: target.conditions.filter((condition) => condition !== "grappled"),
+          conditionExpiries,
+          grappledById: null,
+        } : {}),
+      });
+    }
+  }
+  return success(spendSpecialAttack(
+    scene,
+    available.value,
+    nextTokens,
+    `shove-${mode}`,
+    `${token.name} ${successState ? mode === "push" ? "pushes" : "knocks prone" : "fails to shove"} ${target.name} (${attackerRoll.total} vs ${defenderRoll.total})${reason}.`,
+  ), { attackerRoll, defenderRoll, success: successState, mode, target });
+}
 
 /**
  * Help has to name two creatures and a distance, so it cannot go through the
@@ -600,17 +885,20 @@ export function endTurn(scene) {
     "Roll the death save, then end the turn.",
   );
   let nextIndex = null;
-  let wrapped = false;
+  let nextRound = Math.max(1, Math.floor(finite(scene.encounter.round, 1)));
+  const surprised = new Set(scene.encounter.surprisedTokenIds || []);
   for (let offset = 1; offset <= order.length; offset += 1) {
     const rawIndex = activeIndex + offset;
     const index = rawIndex % order.length;
+    const candidateRound = Math.max(1, Math.floor(finite(scene.encounter.round, 1))) + Math.floor(rawIndex / order.length);
     const candidate = tokens.find((entry) => entry.id === order[index]);
+    if (candidateRound === 1 && candidate && surprised.has(candidate.id)) continue;
     // A dying creature still takes its turn — that turn is the death saving
     // throw. Only the dead are skipped, and a stable creature is skipped too
     // because it has stopped rolling and has nothing else it can do.
     if (candidate && (candidate.hp > 0 || (!candidate.dead && !isStable(candidate)))) {
       nextIndex = index;
-      wrapped = rawIndex >= order.length;
+      nextRound = candidateRound;
       break;
     }
   }
@@ -620,6 +908,7 @@ export function endTurn(scene) {
     "Battle completion will be resolved by the completion phase.",
   );
   const nextToken = tokens.find((entry) => entry.id === order[nextIndex]);
+  const wrapped = nextRound > Math.max(1, Math.floor(finite(scene.encounter.round, 1)));
   // Dodging, Disengaging and a spent reaction all last "until the start of your
   // next turn", and this is that moment. They are cleared on the token because
   // they have to survive everybody else's turns in between, which turn
@@ -627,7 +916,16 @@ export function endTurn(scene) {
   //
   // Help is cleared here too, from the other end: the helper's turn coming round
   // again is the outside limit on how long the offer stands.
-  const beginningTokens = updateToken(tokens, nextToken.id, CLEARED_TURN_STATE).map((entry) =>
+  const timedTokens = wrapped ? tokens.map((entry) => {
+    const expired = expireConditionsAtRound(entry.conditions, entry.conditionExpiries, nextRound);
+    return {
+      ...entry,
+      conditions: expired.conditions,
+      conditionExpiries: expired.conditionExpiries,
+      grappledById: expired.expired.includes("grappled") ? null : entry.grappledById,
+    };
+  }) : tokens;
+  const beginningTokens = updateToken(timedTokens, nextToken.id, CLEARED_TURN_STATE).map((entry) =>
     entry.helpedAgainstTokenId && entry.helpedById === nextToken.id
       ? { ...entry, helpedAgainstTokenId: null, helpedById: null }
       : entry);
@@ -636,7 +934,7 @@ export function endTurn(scene) {
     encounter: {
       ...scene.encounter,
       activeIndex: nextIndex,
-      round: Math.max(1, Math.floor(finite(scene.encounter.round, 1))) + (wrapped ? 1 : 0),
+      round: nextRound,
       resources: { [nextToken.id]: createTurnResources(nextToken) },
       log: appendEncounterLog(scene.encounter.log, `${token.name} ends the turn. ${nextToken.name} is active.`),
     },

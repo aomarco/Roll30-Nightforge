@@ -7,6 +7,7 @@ import {
   CATALOG_FACETS,
   filterCatalog,
   GEAR,
+  HEALING_POTIONS,
   ITEM_BY_ID,
   ITEM_CATALOG,
   MAGIC_ITEMS,
@@ -47,8 +48,9 @@ test("Phase 5 catalogs contain every exact clean-room item count", () => {
   assert.equal(GEAR.length, 183);
   assert.equal(MAGIC_ITEMS.length, 113);
   assert.equal(WORN_MAGIC_ITEMS.length, 6);
-  assert.equal(ITEM_CATALOG.length, 355);
-  assert.equal(new Set(ITEM_CATALOG.map((item) => item.id)).size, 355);
+  assert.equal(HEALING_POTIONS.length, 4);
+  assert.equal(ITEM_CATALOG.length, 359);
+  assert.equal(new Set(ITEM_CATALOG.map((item) => item.id)).size, 359);
 });
 
 test("weapon catalog excludes unsupported Net mechanics and retains SRD weapon classes", () => {

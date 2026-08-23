@@ -37,6 +37,7 @@ import {
   mainAttackAvailability,
   opportunityAttacksFor,
   performWeaponAttack,
+  readiedAttacksFor,
   toggleBattleCondition,
 } from "../domain/attacks.js";
 import {
@@ -44,15 +45,23 @@ import {
   activateDisengage,
   activateDodge,
   activateHelp,
+  activateReady,
   dashAvailability,
   dodgeAvailability,
   endTurn,
+  escapeGrapple,
+  escapeGrappleAvailability,
   helpAvailability,
   movementMaximum,
   movementRemaining,
   moveActiveToken,
   performWeaponSwap,
   planActiveMovement,
+  performGrapple,
+  performShove,
+  readyAvailability,
+  releaseGrapple,
+  selectMovementMode,
   swapAvailability,
 } from "../domain/combat.js";
 import { performAbilityCheck, performSavingThrow } from "../domain/checks.js";
@@ -62,7 +71,7 @@ import {
   stabilizeCreature,
 } from "../domain/death.js";
 import { CONDITIONS, conditionById } from "../domain/conditions.js";
-import { damageToken, healToken, setTemporaryHp } from "../domain/vitality.js";
+import { damageToken, healToken, healingPotionAvailability, setTemporaryHp, useHealingPotion } from "../domain/vitality.js";
 import {
   chestCommandOptions,
   lootCommandOptions,
@@ -290,6 +299,18 @@ function WallAndRulerLayer({ walls, wallsVisible, wallDraft, wallHover, rulerDra
   );
 }
 
+function DifficultTerrainLayer({ cells = [] }) {
+  if (!cells.length) return null;
+  return (
+    <div className="nf-state-table-terrain" aria-label={`${cells.length} difficult terrain squares`}>
+      {cells.map((key) => {
+        const [column, row] = key.split(":").map(Number);
+        return <i key={key} style={{ left: `${column * 5}%`, top: `${row * (100 / 12)}%`, width: "5%", height: `${100 / 12}%` }} />;
+      })}
+    </div>
+  );
+}
+
 function MovementRouteLayer({ preview, boardSize }) {
   if (!preview?.route?.length) return null;
   const reachable = preview.route.slice(0, (preview.reachableIndex || 0) + 1);
@@ -431,6 +452,7 @@ function TableToolsDrawer({
                 <button className={`btn ${activeTool === "wall-full" ? "btn-key" : "btn-line"}`} onClick={() => chooseTool("wall-full")}><PenLine size={15} /> Draw full wall</button>
                 <button className={`btn ${activeTool === "wall-half" ? "btn-key" : "btn-line"}`} onClick={() => chooseTool("wall-half")}><PenLine size={15} /> Draw half-wall</button>
                 <button className={`btn ${activeTool === "ruler" ? "btn-key" : "btn-line"}`} onClick={() => chooseTool("ruler")}><Ruler size={15} /> Ruler</button>
+                <button className={`btn ${activeTool === "terrain" ? "btn-key" : "btn-line"}`} onClick={() => chooseTool("terrain")}><Grid3x3 size={15} /> Paint terrain</button>
                 <button className="btn btn-line" onClick={toggleWalls} disabled={busy}>{wallsVisible ? <EyeOff size={15} /> : <Eye size={15} />}{wallsVisible ? "Hide walls" : "Show walls"}</button>
               </div>
               {activeTool?.startsWith("wall-") && (
@@ -515,6 +537,8 @@ export default function TableScreen({
   // Help is chosen in two halves — the ally from the command bar, the enemy off
   // the board — so it needs its own targeting mode alongside the attack one.
   const [helpDraft, setHelpDraft] = useState(null);
+  const [readyDraft, setReadyDraft] = useState(null);
+  const [specialDraft, setSpecialDraft] = useState(null);
   // Opportunity attacks queue up behind a move and resolve one at a time, each
   // through the ordinary attack cinematic.
   const [reactionQueue, setReactionQueue] = useState([]);
@@ -601,6 +625,8 @@ export default function TableScreen({
     setMovementPreview(null);
     setAttackDraft(null);
     setHelpDraft(null);
+    setReadyDraft(null);
+    setSpecialDraft(null);
     setCinematic(null);
     setRetrievalCinematic(null);
     setLootChestId(null);
@@ -687,6 +713,16 @@ export default function TableScreen({
         setLocalError(null);
         return;
       }
+      if (readyDraft) {
+        setReadyDraft(null);
+        setLocalError(null);
+        return;
+      }
+      if (specialDraft) {
+        setSpecialDraft(null);
+        setLocalError(null);
+        return;
+      }
       if (lootChestId || lootTokenId) {
         setLootChestId(null);
         setLootTokenId(null);
@@ -701,7 +737,7 @@ export default function TableScreen({
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [activeTool, attackDraft, combatLocked, drawerOpen, helpDraft, lootChestId, wallDraft, walls]);
+  }, [activeTool, attackDraft, combatLocked, drawerOpen, helpDraft, readyDraft, specialDraft, lootChestId, wallDraft, walls]);
 
   /**
    * Heal scenes saved before every path snapped. One pass when a scene opens
@@ -745,8 +781,15 @@ export default function TableScreen({
   };
 
   const onMapPointerDown = (event) => {
-    if (event.button !== 0 || combatLocked || attackDraft || helpDraft) return;
+    if (event.button !== 0 || combatLocked || attackDraft || helpDraft || readyDraft || specialDraft) return;
     const point = localPoint(event);
+    if (activeTool === "terrain") {
+      const cell = setupCellForPosition(point, setupViewport());
+      const key = `${cell.column}:${cell.row}`;
+      const current = scene?.difficultTerrain || [];
+      savePatch({ difficultTerrain: current.includes(key) ? current.filter((entry) => entry !== key) : [...current, key] });
+      return;
+    }
     if (activeTool === "wall-full" || activeTool === "wall-half") {
       const type = activeTool === "wall-half" ? "half" : "full";
       setWallDraft((current) => ({ type, points: [...(current?.type === type ? current.points : []), point] }));
@@ -776,7 +819,7 @@ export default function TableScreen({
 
   const onTokenPointerDown = (event, token) => {
     if (activeTool || event.button !== 0 || combatLocked) return;
-    if (attackDraft || helpDraft) {
+    if (attackDraft || helpDraft || readyDraft || specialDraft) {
       event.stopPropagation();
       return;
     }
@@ -823,7 +866,7 @@ export default function TableScreen({
 
   const onTokenKeyDown = (event, token) => {
     const delta = ARROW_DELTAS[event.key];
-    const canMove = !activeTool && !attackDraft && !helpDraft && !combatLocked &&
+    const canMove = !activeTool && !attackDraft && !helpDraft && !readyDraft && !specialDraft && !combatLocked &&
       (isPlay || isSetup || (isActiveBattle && token.id === active?.id));
     if (!delta || !canMove) return;
     event.preventDefault();
@@ -880,12 +923,15 @@ export default function TableScreen({
       return moved;
     }
     const reactions = isActiveBattle ? opportunityAttacksFor(scene, moved.plan, viewport) : [];
+    const readyReactions = isActiveBattle
+      ? readiedAttacksFor(scene, "target-moves", tokenId).map((entry) => ({ ...entry, landingPosition: moved.plan.landing }))
+      : [];
     const saved = savePatch(moved.value);
     if (saved.ok) {
       setArrivalId(tokenId);
       if (arrivalTimerRef.current) clearTimeout(arrivalTimerRef.current);
       arrivalTimerRef.current = setTimeout(() => setArrivalId(null), 520);
-      if (reactions.length) setReactionQueue(reactions);
+      if (readyReactions.length || reactions.length) setReactionQueue([...readyReactions, ...reactions]);
     }
     return saved;
   };
@@ -1383,6 +1429,90 @@ export default function TableScreen({
     return savePatch(helped.value);
   };
 
+  const startReady = (specification) => {
+    const available = readyAvailability(scene);
+    if (!available.ok) {
+      setLocalError(available);
+      return available;
+    }
+    setAttackDraft(null);
+    setHelpDraft(null);
+    setSpecialDraft(null);
+    setReadyDraft(specification);
+    setLocalError(null);
+    return available;
+  };
+
+  const confirmReady = (targetTokenId) => {
+    if (!readyDraft) return { ok: false, message: "No Ready Action is waiting for a target." };
+    const readied = activateReady(scene, { ...readyDraft, targetTokenId });
+    if (!readied.ok) {
+      setLocalError(readied);
+      return readied;
+    }
+    setReadyDraft(null);
+    return savePatch(readied.value);
+  };
+
+  const startSpecialAttack = (kind) => {
+    setAttackDraft(null);
+    setHelpDraft(null);
+    setReadyDraft(null);
+    setSpecialDraft({ kind });
+    setLocalError(null);
+    return { ok: true };
+  };
+
+  const confirmSpecialAttack = (targetTokenId) => {
+    if (!specialDraft) return { ok: false, message: "No special attack is waiting for a target." };
+    const viewport = setupViewport();
+    const resolved = specialDraft.kind === "grapple"
+      ? performGrapple(scene, targetTokenId, viewport, { random })
+      : performShove(scene, targetTokenId, specialDraft.kind === "shove-prone" ? "prone" : "push", viewport, { random });
+    if (!resolved.ok) {
+      setLocalError(resolved);
+      return resolved;
+    }
+    setSpecialDraft(null);
+    return savePatch(resolved.value);
+  };
+
+  const tryEscapeGrapple = () => {
+    const escaped = escapeGrapple(scene, { random });
+    if (!escaped.ok) {
+      setLocalError(escaped);
+      return escaped;
+    }
+    return savePatch(escaped.value);
+  };
+
+  const letGoOfGrapple = (targetTokenId) => {
+    const released = releaseGrapple(scene, targetTokenId);
+    if (!released.ok) {
+      setLocalError(released);
+      return released;
+    }
+    return savePatch(released.value);
+  };
+
+  const drinkPotion = (itemId, targetTokenId) => {
+    const used = useHealingPotion(scene, itemId, targetTokenId, setupViewport(), { random });
+    if (!used.ok) {
+      setLocalError(used);
+      return used;
+    }
+    return savePatch(used.value);
+  };
+
+  const changeMovementMode = (mode) => {
+    const selectedMode = selectMovementMode(scene, mode);
+    if (!selectedMode.ok) {
+      setLocalError(selectedMode);
+      return selectedMode;
+    }
+    return savePatch(selectedMode.value);
+  };
+
   const rollTokenDeathSave = (tokenId) => {
     if (!isActiveBattle || combatLocked) return { ok: false, message: "Death saving throws need an active unlocked Battle." };
     return presentCheck(rollDeathSave(scene, tokenId, { random }));
@@ -1479,9 +1609,15 @@ export default function TableScreen({
     // stale scene can never snap it back to where the route began.
     const viewport = setupViewport();
     const currentTarget = tableTokens.find((token) => token.id === next.targetId);
-    const currentCell = currentTarget ? setupCellForPosition(currentTarget.position, viewport) : null;
-    const landingCell = setupCellForPosition(next.landingPosition, viewport);
-    if (!currentCell || currentCell.column !== landingCell.column || currentCell.row !== landingCell.row) return;
+    if (!currentTarget) {
+      setReactionQueue(rest);
+      return;
+    }
+    if (next.landingPosition) {
+      const currentCell = setupCellForPosition(currentTarget.position, viewport);
+      const landingCell = setupCellForPosition(next.landingPosition, viewport);
+      if (currentCell.column !== landingCell.column || currentCell.row !== landingCell.row) return;
+    }
     const resolved = performWeaponAttack(
       scene,
       {
@@ -1492,6 +1628,8 @@ export default function TableScreen({
         hand: next.hand,
         attackId: next.attackId,
         targetPosition: next.departurePosition,
+        reactionType: next.type === "ready" ? "ready" : "opportunity",
+        readyTrigger: next.trigger,
         viewport,
       },
       { random, battleItemIdFactory },
@@ -1510,6 +1648,8 @@ export default function TableScreen({
       setLocalError(resolved);
       return resolved;
     }
+    const readyReactions = readiedAttacksFor(scene, "target-attacks", active.id);
+    if (readyReactions.length) setReactionQueue((current) => [...current, ...readyReactions]);
     return presentAttack(resolved, targetId);
   };
 
@@ -1639,9 +1779,9 @@ export default function TableScreen({
     return saved;
   };
 
-  const changeSelectedCondition = (conditionId) => {
+  const changeSelectedCondition = (conditionId, options = {}) => {
     if (!selected || !isActiveBattle || combatLocked) return { ok: false, message: "Select an active Battle token before changing conditions." };
-    const changed = toggleBattleCondition(scene, selected.id, conditionId);
+    const changed = toggleBattleCondition(scene, selected.id, conditionId, options);
     if (!changed.ok) {
       setLocalError(changed);
       return changed;
@@ -1713,6 +1853,7 @@ export default function TableScreen({
 
   const finishTurn = () => {
     if (combatLocked) return { ok: false, code: "ATTACK_RESOLVING", message: "Finish resolving the current attack before ending the turn." };
+    const readyReactions = readiedAttacksFor(scene, "target-ends-turn", active.id);
     const ended = endTurn(scene);
     if (!ended.ok) {
       setLocalError(ended);
@@ -1728,6 +1869,7 @@ export default function TableScreen({
       setLootTokenId(null);
       setImpact(null);
       setInteraction(null);
+      if (readyReactions.length) setReactionQueue((current) => [...current, ...readyReactions]);
     }
     return result;
   };
@@ -1740,9 +1882,11 @@ export default function TableScreen({
         ? "Click points for a half-wall · Escape to finish"
         : activeTool === "ruler"
           ? "Drag across the Table to measure"
-          : activeTool === "delete"
-            ? "Click an object to delete it · drag a box for several"
-            : null;
+          : activeTool === "terrain"
+            ? "Click squares to paint or erase difficult terrain"
+            : activeTool === "delete"
+              ? "Click an object to delete it · drag a box for several"
+              : null;
   const orderedTokens = isBattle
     ? (scene?.encounter?.initiativeOrder || []).map((tokenId) => tableTokens.find((token) => token.id === tokenId)).filter(Boolean)
     : tableTokens;
@@ -1753,11 +1897,18 @@ export default function TableScreen({
   const attackState = isActiveBattle ? mainAttackAvailability(scene) : { ok: false, message: "Battle is not active." };
   const bonusState = isActiveBattle ? bonusAttackAvailability(scene) : { ok: false, message: "Battle is not active." };
   const tacticState = isActiveBattle ? dodgeAvailability(scene) : { ok: false, message: "Battle is not active." };
+  const readyState = isActiveBattle ? readyAvailability(scene) : { ok: false, message: "Battle is not active." };
   const battleViewport = setupViewport();
   // Asked without an ally so it comes back with the list of who is close
   // enough, which is what the Tactics panel needs to offer.
   const helpState = isActiveBattle ? helpAvailability(scene, null, battleViewport) : { ok: false, message: "Battle is not active." };
   const stabilizeState = isActiveBattle ? stabilizeAvailability(scene, null, battleViewport) : { ok: false, message: "Battle is not active." };
+  const potionState = isActiveBattle ? healingPotionAvailability(scene, null, battleViewport) : { ok: false, message: "Battle is not active." };
+  const grappleState = isActiveBattle ? {
+    grappledTargets: tableTokens.filter((token) => token.grappledById === active?.id && token.conditions.includes("grappled")),
+    escape: escapeGrappleAvailability(scene),
+  } : { grappledTargets: [], escape: { ok: false } };
+  const movementModes = active ? Object.entries(active.speeds || {}).flatMap(([mode, speed]) => speed > 0 ? [{ mode, speed }] : []) : [];
   const battleChestOptions = isActiveBattle ? chestCommandOptions(scene, battleViewport) : [];
   const battleRetrievalOptions = isActiveBattle ? retrievalCommandOptions(scene, battleViewport) : [];
   const battleLootOptions = isActiveBattle ? lootCommandOptions(scene, battleViewport) : [];
@@ -1811,6 +1962,7 @@ export default function TableScreen({
                 ))}
               </div>
             )}
+            <DifficultTerrainLayer cells={scene?.difficultTerrain || []} />
             {deleteMarquee && (
               <div
                 className="nf-state-table-marquee"
@@ -1876,17 +2028,18 @@ export default function TableScreen({
             })}
             {visibleTokens.map((token) => {
               const targetState = attackTargetStates[token.id];
+              const tacticTargetable = Boolean((helpDraft || readyDraft || specialDraft) && active && token.faction !== active.faction && token.hp > 0);
               const conditions = token.conditions.map(conditionById).filter(Boolean);
               const embedded = embeddedByCarrier[token.id] || [];
               return (
               <button
                 key={token.id}
-                className={`piece${selectedId === token.id ? " on" : ""}${isActiveBattle && token.id === active?.id ? " acting" : ""}${tokenPreview?.id === token.id && tokenPreview.blocked ? " blocked" : ""}${arrivalId === token.id ? " nf-state-table-arriving" : ""}${targetState?.ok ? " nf-state-table-targetable" : ""}${isBattle && token.hp <= 0 ? " nf-state-token-down" : ""}${impact?.targetId === token.id ? ` nf-state-table-hit${impact.critical ? " nf-state-table-critical" : ""}` : ""}`}
+                className={`piece${selectedId === token.id ? " on" : ""}${isActiveBattle && token.id === active?.id ? " acting" : ""}${tokenPreview?.id === token.id && tokenPreview.blocked ? " blocked" : ""}${arrivalId === token.id ? " nf-state-table-arriving" : ""}${targetState?.ok || tacticTargetable ? " nf-state-table-targetable" : ""}${isBattle && token.hp <= 0 ? " nf-state-token-down" : ""}${impact?.targetId === token.id ? ` nf-state-table-hit${impact.critical ? " nf-state-table-critical" : ""}` : ""}`}
                 style={{ left: `${token.position.xPercent}%`, top: `${token.position.yPercent}%`, "--piece": token.color }}
                 onPointerDown={(event) => onTokenPointerDown(event, token)}
                 onKeyDown={(event) => onTokenKeyDown(event, token)}
-                onClick={(event) => { event.stopPropagation(); if (attackDraft) resolveAttackTarget(token.id); else if (helpDraft) confirmHelp(token.id); else { setSelectedId(token.id); setSelectedChestId(null); } }}
-                aria-label={attackDraft ? targetState?.ok ? `Attack ${token.name}` : `${token.name} unavailable as target` : helpDraft ? `Help ${helpDraft.allyName} against ${token.name}` : `${token.name}${isPlay || isSetup || (isActiveBattle && token.id === active?.id) ? ", use arrow keys to move" : ""}`}
+                onClick={(event) => { event.stopPropagation(); if (attackDraft) resolveAttackTarget(token.id); else if (helpDraft) confirmHelp(token.id); else if (readyDraft) confirmReady(token.id); else if (specialDraft) confirmSpecialAttack(token.id); else { setSelectedId(token.id); setSelectedChestId(null); } }}
+                aria-label={attackDraft ? targetState?.ok ? `Attack ${token.name}` : `${token.name} unavailable as target` : helpDraft ? `Help ${helpDraft.allyName} against ${token.name}` : readyDraft ? `Ready against ${token.name}` : specialDraft ? `${specialDraft.kind} ${token.name}` : `${token.name}${isPlay || isSetup || (isActiveBattle && token.id === active?.id) ? ", use arrow keys to move" : ""}`}
               >
                 <span className="piece-disc">{initials(token.name)}</span>
                 {isBattle && token.hp <= 0 && (
@@ -1944,6 +2097,8 @@ export default function TableScreen({
       {movementPreview && <div className="nf-state-table-tool-status glass grained" role="status"><span className={`tag ${movementPreview.ok ? routePreview?.overBudget ? "tag-foe" : "tag-jade" : "tag-foe"}`}>{movementPreview.ok ? routePreview.overBudget ? `${routePreview.costFeet} ft reachable · ${routePreview.requestedFeet - routePreview.costFeet} ft over` : `${routePreview.costFeet} ft route · release to move` : movementPreview.message}</span></div>}
       {attackDraft && <div className="nf-state-table-tool-status nf-state-table-attack-status glass grained" role="status"><span className="tag tag-jade">Choose a target · {attackDraft.rangeModel.option.weapon.name}</span>{attackDraft.rangeModel.bands.map((band) => <span className={`tag nf-state-table-range-key nf-state-table-range-key-${band.tone}`} key={band.id}>{band.label}</span>)}<button className="glyph" onClick={() => setAttackDraft(null)} title="Cancel targeting" aria-label="Cancel targeting"><X size={15} /></button></div>}
       {helpDraft && <div className="nf-state-table-tool-status nf-state-table-help-status glass grained" role="status"><span className="tag tag-brass">Helping {helpDraft.allyName} · choose the enemy they are going for</span><button className="glyph" onClick={() => setHelpDraft(null)} title="Cancel Help" aria-label="Cancel Help"><X size={15} /></button></div>}
+      {readyDraft && <div className="nf-state-table-tool-status nf-state-table-help-status glass grained" role="status"><span className="tag tag-brass">Readying {readyDraft.attackName || "an attack"} · choose the triggering enemy</span><button className="glyph" onClick={() => setReadyDraft(null)} title="Cancel Ready" aria-label="Cancel Ready"><X size={15} /></button></div>}
+      {specialDraft && <div className="nf-state-table-tool-status nf-state-table-help-status glass grained" role="status"><span className="tag tag-brass">{specialDraft.kind === "grapple" ? "Grapple" : specialDraft.kind === "shove-prone" ? "Shove prone" : "Push 5 feet"} · choose an adjacent enemy</span><button className="glyph" onClick={() => setSpecialDraft(null)} title="Cancel contested attack" aria-label="Cancel contested attack"><X size={15} /></button></div>}
       {visibleError && !drawerOpen && (
         briefRefusal(visibleError)
           ? (
@@ -2086,6 +2241,7 @@ export default function TableScreen({
                 setTempHp={setSelectedTempHp}
                 rollSave={rollTokenSave}
                 rollCheck={rollTokenCheck}
+                round={scene.encounter.round}
               />
             )}
             {isPlay && <button className="btn btn-hazard btn-sm btn-wide" onClick={removeSelectedPlayToken} disabled={busy}><Trash2 size={15} /> Remove token</button>}
@@ -2108,12 +2264,22 @@ export default function TableScreen({
           attack={startAttack}
           dash={useDash}
           tacticState={tacticState}
+          readyState={readyState}
+          potionState={potionState}
           helpState={helpState}
           stabilizeState={stabilizeState}
           dodge={useDodge}
           disengage={useDisengage}
           help={startHelp}
           stabilize={stabilizeToken}
+          ready={startReady}
+          specialAttack={startSpecialAttack}
+          grappleState={grappleState}
+          escapeGrapple={tryEscapeGrapple}
+          releaseGrapple={letGoOfGrapple}
+          drinkPotion={drinkPotion}
+          movementModes={movementModes}
+          chooseMovementMode={changeMovementMode}
           rollDeath={rollTokenDeathSave}
           swap={useWeaponSwap}
           end={finishTurn}

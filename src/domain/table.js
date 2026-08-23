@@ -1,5 +1,10 @@
 import { ITEM_BY_ID } from "./catalog.js";
-import { normalizeConditions } from "./conditions.js";
+import {
+  isIncapacitated,
+  normalizeConditionExpiries,
+  normalizeConditionImmunities,
+  normalizeConditions,
+} from "./conditions.js";
 import { damageTypeName, normalizeDamageTypeList, normalizeDamageTypes } from "./damageTypes.js";
 import {
   ABILITY_KEYS,
@@ -60,6 +65,7 @@ export const revivedTokenPatch = (token, hp = 1) => ({
   deathSaveFailures: 0,
   dead: false,
   conditions: token.conditions.filter((condition) => condition !== "unconscious"),
+  conditionExpiries: Object.fromEntries(Object.entries(token.conditionExpiries || {}).filter(([condition]) => condition !== "unconscious")),
 });
 
 /** The state a creature is reset to when a Battle restarts or is abandoned. */
@@ -84,6 +90,7 @@ export const CLEARED_TURN_STATE = Object.freeze({
   disengaging: false,
   helpedAgainstTokenId: null,
   helpedById: null,
+  readiedAction: null,
 });
 
 export const DEFAULT_CAMERA = Object.freeze({ x: 0, y: 0, zoom: 1 });
@@ -269,6 +276,7 @@ const uniqueNormalizedRecords = (records, normalize) => {
 };
 
 export const TOKEN_SIZES = Object.freeze(["tiny", "small", "medium", "large", "huge", "gargantuan"]);
+export const MOVEMENT_MODES = Object.freeze(["walk", "fly", "swim", "climb"]);
 
 /**
  * Which side of a fight a creature is on. Two sides only: the rules need to
@@ -276,6 +284,30 @@ export const TOKEN_SIZES = Object.freeze(["tiny", "small", "medium", "large", "h
  * Bystanders are modelled by leaving them off the board, not by a neutral team.
  */
 export const TOKEN_FACTIONS = Object.freeze(["ally", "foe"]);
+
+export function normalizeSpeeds(input, fallback = 30) {
+  const source = input && typeof input === "object" && !Array.isArray(input) ? input : {};
+  const walk = Math.max(0, Math.floor(finite(source.walk, fallback)));
+  return Object.fromEntries(MOVEMENT_MODES.map((mode) => [
+    mode,
+    mode === "walk" ? walk : Math.max(0, Math.floor(finite(source[mode], 0))),
+  ]));
+}
+
+export function normalizeDifficultTerrain(input) {
+  const seen = new Set();
+  for (const candidate of Array.isArray(input) ? input : []) {
+    const match = typeof candidate === "string" ? /^(\d+):(\d+)$/.exec(candidate) : null;
+    const column = match ? Number(match[1]) : Math.floor(finite(candidate?.column, -1));
+    const row = match ? Number(match[2]) : Math.floor(finite(candidate?.row, -1));
+    if (column >= 0 && column < SCENE_COLUMNS && row >= 0 && row < SCENE_ROWS) seen.add(`${column}:${row}`);
+  }
+  return [...seen].sort((left, right) => {
+    const [lc, lr] = left.split(":").map(Number);
+    const [rc, rr] = right.split(":").map(Number);
+    return lr - rr || lc - rc;
+  });
+}
 
 export const FACTION_LABELS = Object.freeze({ ally: "Ally", foe: "Foe" });
 
@@ -409,6 +441,19 @@ export function normalizeTokenAttacks(attacks) {
   return normalized;
 }
 
+export const READY_TRIGGERS = Object.freeze(["target-moves", "target-attacks", "target-ends-turn"]);
+
+export function normalizeReadiedAction(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return null;
+  const targetTokenId = typeof input.targetTokenId === "string" && input.targetTokenId.trim() ? input.targetTokenId.trim() : null;
+  const trigger = READY_TRIGGERS.includes(input.trigger) ? input.trigger : null;
+  const weaponId = typeof input.weaponId === "string" && input.weaponId.trim() ? input.weaponId.trim() : null;
+  const attackId = typeof input.attackId === "string" && input.attackId.trim() ? input.attackId.trim() : null;
+  const hand = ["mainHand", "offHand"].includes(input.hand) ? input.hand : null;
+  if (!targetTokenId || !trigger || (!weaponId && !attackId)) return null;
+  return { trigger, targetTokenId, weaponId, attackId, hand };
+}
+
 export function normalizeTableToken(input = {}, { id, ordinal = 0 } = {}) {
   const tokenId = typeof input.id === "string" && input.id.trim()
     ? input.id.trim()
@@ -420,6 +465,7 @@ export function normalizeTableToken(input = {}, { id, ordinal = 0 } = {}) {
   const inventoryResult = normalizeInventoryEntries(input.inventory);
   const heroId = typeof input.heroId === "string" && input.heroId.trim() ? input.heroId.trim() : null;
   const hp = Math.max(0, Math.min(maxHp, Math.floor(finite(input.hp, maxHp))));
+  const speeds = normalizeSpeeds(input.speeds, Math.max(0, Math.floor(finite(input.baseSpeed ?? input.speed, 30))));
   const token = {
     id: tokenId,
     heroId,
@@ -440,7 +486,8 @@ export function normalizeTableToken(input = {}, { id, ordinal = 0 } = {}) {
     // to maxHp and are not restored by healing.
     tempHp: Math.max(0, Math.floor(finite(input.tempHp, 0))),
     ac: Math.max(0, Math.floor(finite(input.ac, 10))),
-    baseSpeed: Math.max(0, Math.floor(finite(input.baseSpeed ?? input.speed, 30))),
+    baseSpeed: speeds.walk,
+    speeds,
     strength: Math.max(1, Math.floor(finite(input.strength, 10))),
     dexterity: Math.max(1, Math.floor(finite(input.dexterity, 10))),
     constitution: Math.max(1, Math.floor(finite(input.constitution, 10))),
@@ -456,6 +503,9 @@ export function normalizeTableToken(input = {}, { id, ordinal = 0 } = {}) {
     // changed since.
     skillProficiencies: Array.isArray(input.skillProficiencies)
       ? [...new Set(input.skillProficiencies.filter((skill) => SKILL_BY_ID[skill]))]
+      : [],
+    toolProficiencies: Array.isArray(input.toolProficiencies)
+      ? [...new Set(input.toolProficiencies.filter((tool) => typeof tool === "string" && tool.trim()))]
       : [],
     level: Math.max(1, Math.min(20, Math.floor(finite(input.level, 1)))),
     // Experience this creature is worth when defeated. Monsters bring it from
@@ -478,6 +528,8 @@ export function normalizeTableToken(input = {}, { id, ordinal = 0 } = {}) {
     enchantments: input.enchantments && typeof input.enchantments === "object" ? input.enchantments : {},
     wornItemIds: Array.isArray(input.wornItemIds) ? [...new Set(input.wornItemIds.filter((value) => typeof value === "string"))] : [],
     conditions: normalizeConditions(input.conditions),
+    conditionImmunities: normalizeConditionImmunities(input.conditionImmunities),
+    conditionExpiries: normalizeConditionExpiries(input.conditionExpiries, input.conditions),
     // Which damage types this creature shrugs off, ignores, or suffers double
     // from. Monsters bring these from their stat block; everything else starts
     // empty, which is exactly how every save written before today behaved.
@@ -511,6 +563,14 @@ export function normalizeTableToken(input = {}, { id, ordinal = 0 } = {}) {
     reactionSpent: Boolean(input.reactionSpent),
     dodging: Boolean(input.dodging),
     disengaging: Boolean(input.disengaging),
+    // Setup marks which creatures lose their first turn. The encounter keeps a
+    // snapshot of those IDs, so editing Setup after a Battle cannot rewrite an
+    // encounter already in progress.
+    surprised: Boolean(input.surprised),
+    grappledById: typeof input.grappledById === "string" && input.grappledById.trim()
+      ? input.grappledById.trim()
+      : null,
+    readiedAction: normalizeReadiedAction(input.readiedAction),
     // Set on the creature being helped, naming the one target the advantage
     // applies to. Help is aimed at a specific enemy, not handed out at large.
     helpedAgainstTokenId: typeof input.helpedAgainstTokenId === "string" && input.helpedAgainstTokenId.trim()
@@ -545,12 +605,34 @@ export function createPlayToken({ id, ordinal = 0, name } = {}) {
   }, { id, ordinal });
 }
 
+export function repairGrappleLinks(tokens) {
+  const byId = new Map(tokens.map((token) => [token.id, token]));
+  return tokens.map((token) => {
+    if (!token.grappledById) return token;
+    const grappler = byId.get(token.grappledById);
+    if (token.conditions.includes("grappled") && grappler && grappler.hp > 0 && !isIncapacitated(grappler.conditions)) return token;
+    const { grappled: removed, ...conditionExpiries } = token.conditionExpiries || {};
+    return {
+      ...token,
+      conditions: token.conditions.filter((condition) => condition !== "grappled"),
+      conditionExpiries,
+      grappledById: null,
+    };
+  });
+}
+
 export const updateToken = (tokens, tokenId, patch) =>
-  normalizeTableTokens(tokens).map((token, ordinal) =>
+  repairGrappleLinks(normalizeTableTokens(tokens).map((token, ordinal) =>
     token.id === tokenId
-      ? normalizeTableToken({ ...token, ...patch }, { id: token.id, ordinal })
+      ? normalizeTableToken({
+        ...token,
+        ...patch,
+        ...("baseSpeed" in (patch || {}) && !("speeds" in (patch || {}))
+          ? { speeds: { ...token.speeds, walk: patch.baseSpeed } }
+          : {}),
+      }, { id: token.id, ordinal })
       : token,
-  );
+  ));
 
 export const removeToken = (tokens, tokenId) =>
   normalizeTableTokens(tokens).filter((token) => token.id !== tokenId);
@@ -593,6 +675,7 @@ export function createMonsterToken(monster, { id, ordinal = 0, position, name } 
     maxHp: monster.hp,
     ac: monster.ac,
     baseSpeed: monster.baseSpeed,
+    speeds: monster.speed,
     strength: monster.strength,
     dexterity: monster.dexterity,
     constitution: monster.constitution,
@@ -611,6 +694,7 @@ export function createMonsterToken(monster, { id, ordinal = 0, position, name } 
     damageResistances: resistances.applied,
     damageImmunities: immunities.applied,
     damageVulnerabilities: vulnerabilities.applied,
+    conditionImmunities: monster.conditionImmunities,
     statBlockNotes: {
       multiattack: monster.multiattackNote,
       resistances: unappliedNote(resistances),
@@ -640,6 +724,7 @@ export function createHeroTokenSnapshot(hero, { id, ordinal = 0, position } = {}
     maxHp: derived.hp,
     ac: derived.ac,
     baseSpeed: derived.speed,
+    speeds: { walk: derived.speed },
     strength: derived.finalAbilities.str,
     dexterity: derived.finalAbilities.dex,
     constitution: derived.finalAbilities.con,
@@ -648,6 +733,7 @@ export function createHeroTokenSnapshot(hero, { id, ordinal = 0, position } = {}
     charisma: derived.finalAbilities.cha,
     saveProficiencies: hero.saveProficiencies || [],
     skillProficiencies: hero.skillProficiencies || [],
+    toolProficiencies: hero.toolProficiencies || [],
     level: derived.level,
     initiativeBonus: derived.initiative,
     size: derived.size,
@@ -901,7 +987,8 @@ export function findOpenSetupPosition(position, options = {}) {
 }
 
 export const createTurnResources = (token) => ({
-  movementBase: Math.max(0, Math.floor(finite(token?.baseSpeed, 30))),
+  movementMode: "walk",
+  movementBase: Math.max(0, Math.floor(finite(token?.speeds?.walk, token?.baseSpeed ?? 30))),
   movementSpent: 0,
   actionSpent: false,
   actionType: null,
@@ -929,10 +1016,15 @@ export const createTurnResources = (token) => ({
 
 export function normalizeTurnResources(resources, token) {
   const defaults = createTurnResources(token);
-  const movementBase = Math.max(defaults.movementBase, Math.floor(finite(resources?.movementBase, defaults.movementBase)));
-  const movementSpent = Math.max(0, Math.min(movementBase, Math.floor(finite(resources?.movementSpent))));
+  const movementMode = MOVEMENT_MODES.includes(resources?.movementMode) && Number(token?.speeds?.[resources.movementMode]) > 0
+    ? resources.movementMode
+    : defaults.movementMode;
+  const modeSpeed = Math.max(0, Math.floor(finite(token?.speeds?.[movementMode], token?.baseSpeed ?? 0)));
+  const movementBase = Math.max(modeSpeed, Math.floor(finite(resources?.movementBase, modeSpeed)));
+  const movementSpent = Math.max(0, Math.floor(finite(resources?.movementSpent)));
   const swapChoice = ["attack", "movement"].includes(resources?.swapChoice) ? resources.swapChoice : null;
   return {
+    movementMode,
     movementBase,
     movementSpent,
     actionSpent: Boolean(resources?.actionSpent),
@@ -1059,6 +1151,9 @@ export function normalizeEncounter(encounter, tokens = []) {
     initiatives,
     activeIndex,
     round: Math.max(1, Math.floor(finite(encounter.round, 1))),
+    surprisedTokenIds: Array.isArray(encounter.surprisedTokenIds)
+      ? [...new Set(encounter.surprisedTokenIds.filter((tokenId) => tokenIds.has(tokenId)))]
+      : [],
     resources: activeToken ? { [activeToken.id]: normalizeTurnResources(resourceInput, activeToken) } : {},
     battleItems: normalizeBattleItems(encounter.battleItems, tokens),
     ammoSpentByToken: normalizeAmmoSpentByToken(encounter.ammoSpentByToken, tokens),
@@ -1106,6 +1201,8 @@ export function restoreSetupTokens(tokens, snapshot) {
       // than its sheet says.
       tempHp: 0,
       conditions: [],
+      conditionExpiries: {},
+      grappledById: null,
       // The dying and the dead both stand up again. An abandoned Battle did not
       // happen, so nothing that happened in it should follow a creature out.
       ...CLEARED_DEATH_STATE,
@@ -1166,6 +1263,8 @@ export function prepareBattleStart(scene, { viewport, random = Math.random } = {
       ...token,
       position,
       conditions: [],
+      conditionExpiries: {},
+      grappledById: null,
       // A new Battle starts everyone whole, upright, and with a reaction in
       // hand. Nothing carries in from Setup or from a previous encounter.
       ...CLEARED_DEATH_STATE,
@@ -1183,20 +1282,29 @@ export function prepareBattleStart(scene, { viewport, random = Math.random } = {
   const initiativeOrder = snappedTokens
     .map((token) => token.id)
     .sort((left, right) => initiatives[right] - initiatives[left] || orderIndex.get(left) - orderIndex.get(right));
-  const firstToken = snappedTokens.find((token) => token.id === initiativeOrder[0]);
+  const surprisedTokenIds = snappedTokens.filter((token) => token.surprised).map((token) => token.id);
+  const surprisedSet = new Set(surprisedTokenIds);
+  const firstReadyIndex = initiativeOrder.findIndex((tokenId) => !surprisedSet.has(tokenId));
+  const activeIndex = firstReadyIndex < 0 ? 0 : firstReadyIndex;
+  const round = firstReadyIndex < 0 ? 2 : 1;
+  const firstToken = snappedTokens.find((token) => token.id === initiativeOrder[activeIndex]);
   const encounter = {
     version: 1,
     status: "active",
     initiativeOrder,
     initiatives,
-    activeIndex: 0,
-    round: 1,
+    activeIndex,
+    round,
+    surprisedTokenIds,
     resources: firstToken ? { [firstToken.id]: createTurnResources(firstToken) } : {},
     battleItems: [],
     ammoSpentByToken: {},
     ammunitionRecovered: false,
     winnerTokenId: null,
-    log: [`Battle began with ${snappedTokens.length} tokens.`],
+    log: [
+      `Battle began with ${snappedTokens.length} tokens.`,
+      ...(surprisedTokenIds.length ? [`${surprisedTokenIds.length} surprised creature${surprisedTokenIds.length === 1 ? " loses" : "s lose"} a turn in round one.`] : []),
+    ],
     setupTokens: Object.fromEntries(snappedTokens.map((token) => [token.id, { position: token.position, hp: token.hp }])),
   };
   return { ok: true, value: { tokens: snappedTokens, chests: snappedChests, encounter } };

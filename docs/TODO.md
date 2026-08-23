@@ -18,7 +18,7 @@ anything you decide against to the bottom **with the reason**.
 | 1 | Classes | 2 of 12 | Fighter and Wizard. No features, no subclasses |
 | 2 | Levels | Yes | 1–20, but only HP and proficiency scale |
 | 3 | Races and subraces | All 9 + 4 | Bonuses, speed, size. No racial traits |
-| 4 | Backgrounds | 13 names | Text field only |
+| 4 | Backgrounds | All 13 | Grant their two skills, tool proficiencies, and catalog-backed starting equipment |
 | 5 | Feats | No | — |
 | 6 | Character creation | Yes | Point buy, skills, saves, languages |
 | 7 | Skills and ability checks | All 18 | Rollable, with advantage and a DC |
@@ -27,16 +27,16 @@ anything you decide against to the bottom **with the reason**.
 | 10 | Weapons | All 36 | Yes, incl. properties except Special and Monk |
 | 11 | Armor and shields | All 13 | Yes |
 | 12 | Magic weapons and armor | Yes | +1 to +3 enchantments work |
-| 13 | Magic items | 119 | 6 work, 113 inert. No potions, attunement, or charges |
+| 13 | Magic items | 123 | 10 work: 6 worn items and 4 healing potions. 113 remain inert; no attunement or charges |
 | 14 | Monsters | All 334 | Yes. Traits, reactions, legendary actions are text only |
-| 15 | Conditions | All 15 | Yes, but never expire. Exhaustion is tracked, not laddered — decided against |
+| 15 | Conditions | All 15 | Permanent or timed; immunity enforced. Exhaustion is tracked, not laddered — decided against |
 | 16 | Attack rolls | Yes | Advantage, crits, multiattack, two-weapon, thrown, ammo |
 | 17 | Damage | Yes | Typed. Resistance, immunity and vulnerability all apply |
 | 18 | Healing, temp HP, death saves | Yes | Heroes must roll once on their dying turn; healing raises them; adjacent allies can stabilise with Medicine |
 | 19 | Initiative and turns | Yes | Yes |
-| 20 | Movement | Yes | Walking only. No fly/swim/climb, difficult terrain, forced movement |
-| 21 | Reactions | Yes | Opportunity attacks resolve from the departure square. No Ready. The swing does not interrupt the move |
-| 22 | Other actions | Partly | Unarmed strikes, Dodge, Disengage, Help, Stabilise. No Hide, Grapple, Shove |
+| 20 | Movement | Yes | Walking, flying, swimming, climbing, and difficult terrain. No general forced movement |
+| 21 | Reactions | Yes | Opportunity attacks and Ready. An opportunity swing still does not interrupt the move |
+| 22 | Other actions | Partly | Unarmed strikes, Dodge, Disengage, Help, Stabilise, Grapple, and Shove. No Hide |
 | 23 | Vision | Partly | Walls block sight. No cover, light levels, or darkvision |
 | 24 | Concentration | No | — |
 | 25 | Rests | No | No short/long rest, no hit dice |
@@ -44,7 +44,7 @@ anything you decide against to the bottom **with the reason**.
 | 27 | Money | Prices exist | Can't buy anything |
 | 28 | XP | Yes | Awarded at battle end by hand. Only defeated foes count |
 | 29 | Falling and hazards | No | Decided against — applied by hand with the damage control |
-| 30 | Surprise | No | — |
+| 30 | Surprise | Yes | Setup can mark creatures that lose their first turn and cannot react beforehand |
 | 31 | Languages, alignment, CR | Yes | Reference only — correct as is |
 | 32 | Sides | Yes | Ally or foe per token; a Battle ends when one side stands |
 
@@ -133,18 +133,23 @@ a rule was once wrong is worth more than a tidy list.
 - [x] **Dodge, Disengage, Help** — flags on the token, not on turn resources:
       all three outlive the turn that bought them, and turn resources exist only
       for whoever is currently active.
-- [ ] **Ready** — the other reaction Action. The reaction resource now exists,
-      so this is a trigger and a stored intent rather than new plumbing.
+- [x] **Ready** — spend the Action, choose an equipped or authored attack, name
+      an enemy, and choose whether its movement, attack, or end of turn releases
+      the reaction. The intent expires at the creature's next turn if it never
+      fires, and resolving it spends the ordinary reaction resource.
 - [ ] **Interrupting movement with an opportunity attack** — the swing currently
       resolves after the mover finishes their route. Making it interrupt means
       making `moveActiveToken` resumable, which is a bigger change than the
       reaction itself was. Only matters when the swing would down the mover
       mid-route.
-- [ ] **Condition immunity** — the monster data already carries it in
-      machine-readable form, which makes this the cheapest thing on the list.
-- [ ] **Condition durations** — rounds are already counted; tie conditions to them
-- [ ] **Surprise round** — skip turn one for some tokens
-- [ ] **Fly, swim, climb speeds** — imported already; pick which one applies
+- [x] **Condition immunity** — monster data is enforced and every Setup token
+      has the same editor, so an immune condition cannot be applied.
+- [x] **Condition durations** — apply a condition permanently or for 1, 2, 3,
+      5, or 10 rounds; the round transition removes it automatically.
+- [x] **Surprise round** — Setup marks surprised creatures, round one skips
+      them, and their reactions stay locked until their skipped turn has passed.
+- [x] **Fly, swim, climb speeds** — imported monster speeds and editable manual
+      speeds feed a movement-mode selector. Dash uses the selected speed.
 
 ### Weeks
 
@@ -155,15 +160,22 @@ a rule was once wrong is worth more than a tidy list.
       creature keeps its side in the fight, so allies have time to reach it, and
       healing raises it. The active Hero must roll once before End Turn; an
       adjacent ally can spend an Action on DC 10 Medicine to stabilise them.
-- [ ] **Difficult terrain** — paint cells, double movement cost
+- [x] **Difficult terrain** — paint or erase cells from the Setup rail. Entering
+      one costs twice as much movement; flying ignores it.
 - [ ] **Money and shopping** — prices exist; needs a purse and a shop
-- [ ] **Potions** — now unblocked; healing exists and they can call it
-- [ ] **Backgrounds** — skills, tools, and equipment per background
+- [x] **Potions** — all four SRD healing potions roll their formula, heal the
+      active creature or an adjacent living creature, consume one item, and
+      spend the Action.
+- [x] **Backgrounds** — all thirteen grant two skills, their tool proficiencies,
+      and catalog-backed starting equipment. Changing background swaps
+      only the previous background's grants.
 - [ ] **Racial traits** — 38 individual rules
 - [ ] **Forced movement** — push and pull, needs collision handling
 - [ ] **Cover** — wall geometry exists, but half vs. three-quarters is fiddly
-- [ ] **Grapple and shove** — needs contested checks. The single-roll half now
-      exists, so this is one function that rolls twice and compares.
+- [x] **Grapple and shove** — contested Athletics versus the defender's better
+      Athletics or Acrobatics. Grapple immobilises, supports escape, release,
+      and half-speed dragging; Shove either knocks prone or pushes five feet
+      with wall, board-edge, and collision checks.
 
 ### Months
 
@@ -172,7 +184,8 @@ a rule was once wrong is worth more than a tidy list.
       because the creature spending it is never the active one. Range is checked
       from the departure square after movement persists. Movement now has a
       consequence. **Not done:** the swing does not interrupt the move, and
-      Ready still does not exist — see the two entries below.
+      Ready now uses the same reaction resource; only movement interruption is
+      still outstanding.
 - [ ] **Hide** — needs Stealth, plus per-token visibility
 - [ ] **Attunement and charges** — a new system touching every item
 - [ ] **Feats** — each one is bespoke
@@ -188,17 +201,11 @@ a rule was once wrong is worth more than a tidy list.
 
 ## Suggested order
 
-Resistance, death saves, reactions, Dodge, Disengage and Help all landed in one
-update. Damage now has consequences that depend on who is taking it, a downed
-Hero has a story rather than an ending, and standing next to someone finally
-means something.
-
-Next: **condition immunity**, which is the cheapest thing left — the monster
-data already carries it as machine-readable ids, so it is a lookup rather than a
-feature. Then **Ready**, because the reaction resource it needs now exists and
-it is the last common Action still missing. Then **condition durations**: rounds
-are already counted, conditions are the one system in the app that never expires
-on its own, and everything else worth building wants durations first.
+Condition immunity and durations, surprise, all four movement modes, difficult
+terrain, Ready, healing potions, backgrounds, Grapple and Shove have landed.
+The next smallest combat gap is **interrupting movement with an opportunity
+attack**. After that, **money and shopping** can turn the existing prices into a
+usable economy, followed by the broader **forced movement** system.
 
 ---
 
@@ -209,7 +216,7 @@ on its own, and everything else worth building wants durations first.
       nothing now. New work is named by feature instead — `test:rules`,
       `verify:rules` — so the migration has somewhere to go.
 - [ ] **`README.md` overlaps `FEATURES.md`.** The test count is correct again
-      (340 in both), but the README still duplicates the design language and the
+      (353 in both), but the README still duplicates the design language and the
       screen-by-screen table that now live in `FEATURES.md`. Cut it back to how
       to run it and how to deploy it, and let `FEATURES.md` be the one
       description of the app.
@@ -276,7 +283,9 @@ review, and do not build them without a decision that reopens the entry first.
   progression that generates them. A stat block already is the result.
 - **Automatic turn ending.** The app never advances the turn for you, even when
   you have nothing left to spend. Ending a turn is always deliberate.
-- **Automatic conditions.** Nothing inflicts a condition on its own. The person
-  running the game decides what's happening to whom.
+- **Automatic conditions from authored attacks and descriptive effects.** The
+  person running the game decides those. Explicit rule actions are different:
+  Grapple and Shove apply the condition they just resolved, while ordinary
+  attack riders and monster prose remain manual.
 - **Bundling SRD source data in the repo.** `DND 5E Data/` stays external and
   gitignored. Only generated output is committed.
