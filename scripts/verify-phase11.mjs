@@ -168,7 +168,19 @@ for (const contract of ["storage-quota-exceeded", "previous valid state remains 
   if (!stateRepository.includes(contract)) failures.push(`State recovery contract is missing ${contract}.`);
 }
 const artworkRepository = await read("src/storage/artworkRepository.js");
-if (!artworkRepository.includes("artwork-quota-exceeded") || !artworkRepository.includes("previous artwork remains active")) failures.push("Artwork quota recovery contract is incomplete.");
+// The codes are built from a prefix now that Hero portraits share this
+// repository and need their own error family. The artwork prefix must stay the
+// default, so Scene artwork keeps the exact codes the rest of the app branches
+// on, and the quota refusal must still promise the previous image survives.
+for (const contract of [
+  "`${codePrefix}-quota-exceeded`",
+  "codePrefix = \"artwork\"",
+  "previous image remains active",
+]) {
+  if (!artworkRepository.includes(contract)) failures.push(`Artwork quota recovery contract is missing ${contract}.`);
+}
+const runtime = await read("src/application/browserRuntime.js");
+if (!runtime.includes("codePrefix: \"portrait\"")) failures.push("Hero portraits must report portrait errors, not Scene artwork errors.");
 
 if (PATH_SEARCH_LIMIT !== 4000) failures.push("A* pathfinding must remain capped at exactly 4,000 cells.");
 const attacks = await read("src/domain/attacks.js");

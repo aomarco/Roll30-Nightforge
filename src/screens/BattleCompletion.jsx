@@ -5,6 +5,16 @@ import { encounterExperienceAward } from "../domain/encounter.js";
 
 export default function BattleCompletion({ encounter, tokens, busy = false, restart, awardXp }) {
   const winner = tokens.find((token) => token.id === encounter?.winnerTokenId) || null;
+  // A side can win with several creatures still standing, and then there is no
+  // single winner to name. Falling back to winnerFaction is what stops that
+  // outcome reading as "No survivor" when in fact the whole party lived.
+  const winningSide = winner
+    ? `${winner.name} wins`
+    : encounter?.winnerFaction === "ally"
+      ? "The party wins"
+      : encounter?.winnerFaction === "foe"
+        ? "The foes win"
+        : "No survivor";
   const spent = Object.values(encounter?.ammoSpentByToken || {}).reduce((total, byItem) =>
     total + Object.values(byItem || {}).reduce((itemTotal, quantity) => itemTotal + Number(quantity || 0), 0), 0);
   const recovered = Object.values(encounter?.ammoSpentByToken || {}).flatMap((byItem) => Object.entries(byItem || {}))
@@ -16,7 +26,7 @@ export default function BattleCompletion({ encounter, tokens, busy = false, rest
   return (
     <section className="nf-state-battle-complete glass grained" role="status" aria-label="Battle complete">
       <span className="nf-state-battle-complete-icon"><Trophy size={22} /></span>
-      <div><span className="kicker kicker-brass">Battle complete</span><h2>{winner ? `${winner.name} wins` : "No survivor"}</h2><p>{spent ? `${recovered} of ${spent} fired ammunition recovered${ammoKinds.length ? ` · ${ammoKinds.join(", ")}` : ""}.` : "No ammunition recovery was required."}</p></div>
+      <div><span className="kicker kicker-brass">Battle complete</span><h2>{winningSide}</h2><p>{spent ? `${recovered} of ${spent} fired ammunition recovered${ammoKinds.length ? ` · ${ammoKinds.join(", ")}` : ""}.` : "No ammunition recovery was required."}</p></div>
       {award.total > 0 && (
         <div className="nf-state-battle-xp">
           <span className="kicker">Experience</span>

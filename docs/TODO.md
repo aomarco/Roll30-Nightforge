@@ -42,13 +42,52 @@ anything you decide against to the bottom **with the reason**.
 | 25 | Rests | No | No short/long rest, no hit dice |
 | 26 | Loot and chests | Yes | Yes |
 | 27 | Money | Prices exist | Can't buy anything |
-| 28 | XP | Yes | Awarded at battle end by hand |
+| 28 | XP | Yes | Awarded at battle end by hand. Only defeated foes count |
 | 29 | Falling and hazards | No | — |
 | 30 | Surprise | No | — |
 | 31 | Languages, alignment, CR | Yes | Reference only — correct as is |
+| 32 | Sides | Yes | Ally or foe per token; a Battle ends when one side stands |
 
 A turn currently offers four buttons: Attack, Bonus, Swap, Dash — plus move and
 End Turn.
+
+---
+
+## Bugs
+
+Things that are built but wrong, as opposed to things that aren't built. These
+come before new features — a broken rule is worse than a missing one, because
+you can plan around a missing one.
+
+**The page is currently clear.** The five bugs below were fixed on
+`feat/core-rules`; they are kept here, crossed off, because knowing a rule was
+once wrong is worth more than a tidy list.
+
+- [x] **A battle can't end while two heroes are alive.** Completion fired when
+      one creature was left standing, not one side. Fixed by adding a `faction`
+      field to the token — ally or foe, defaulted from whether the token has a
+      Hero behind it, so existing saves load with the right sides and no schema
+      bump — and making `completeEncounterIfNeeded` ask whether one *side* is
+      standing. A fight where every token shares a side falls back to
+      last-creature-standing, so a monster brawl does not complete on turn one.
+      The side is editable on the Setup inspector card and shown read-only
+      during Battle. Defeated allies no longer pay out experience.
+- [x] **The ruler disagreed with the rules engine on diagonals.**
+      `rulerDistanceFeet` now takes the larger axis rather than the sum, which
+      is what movement, attack range and adjacency already did. A test pins the
+      ruler and `attackDistanceFeet` to the same answer on a diagonal, a
+      straight line, and a knight's move.
+- [x] **Temporary hit points survived Restart and Abandon.** Both paths now
+      clear `tempHp`, in `restartCompletedBattle` and `restoreSetupTokens`.
+- [x] **Two GitHub workflows raced to deploy the same Pages site.**
+      `deploy.yml` is deleted. `deploy-pages.yml` was and remains the real one:
+      it runs the full gate and picks the build base from the repository.
+- [x] **Hero portraits reported scene-artwork errors.**
+      `createArtworkRepository` now takes `item`, `collection` and `codePrefix`
+      labels. Two nouns rather than one because English needs both — `item` sits
+      in object position ("could not load a Hero portrait") and `collection` is
+      the mass noun ("storage for Hero portraits is full"). Scene artwork keeps
+      the `artwork-*` codes the rest of the app branches on, as the defaults.
 
 ---
 
@@ -81,8 +120,10 @@ End Turn.
 ### Weeks
 
 - [ ] **Death saves** — needs a dying state, and battle-end needs redefining.
-      Now unblocked: healing exists, so a stabilised creature has something to
-      come back to.
+      Fully unblocked now: healing exists so a stabilised creature has something
+      to come back to, and `completeEncounterIfNeeded` already asks whether one
+      side is standing, so the dying state slots into a check that is asking the
+      right question.
 - [ ] **Difficult terrain** — paint cells, double movement cost
 - [ ] **Money and shopping** — prices exist; needs a purse and a shop
 - [ ] **Potions** — now unblocked; healing exists and they can call it
@@ -112,12 +153,18 @@ End Turn.
 
 ## Suggested order
 
-Saving throws, skill checks, and healing are done, which unblocks a lot.
+The bugs are cleared, including battle completion — so the completion card,
+the experience award and restart are all reachable in a normal party for the
+first time.
 
 Next: **death saves**, so a downed creature has a story rather than an ending.
-Then **resistance and immunity**, the cheapest remaining win — the data is
-already imported and thrown away. Then **reactions and opportunity attacks**,
-which is what makes position matter.
+Saving throws, skill checks and healing are all done, which unblocks it, and it
+was waiting on the completion fix because both touch the same check — that
+dependency is now paid off, and `completeEncounterIfNeeded` already asks the
+side-aware question death saves need. Then **resistance and immunity**, the
+cheapest remaining feature: the data is already imported and thrown away as
+prose. Then **reactions and opportunity attacks**, which is what makes position
+matter.
 
 ---
 
@@ -127,9 +174,36 @@ which is what makes position matter.
       `verify-phase12`. The numbers meant something during the rebuild and mean
       nothing now. New work is named by feature instead — `test:rules`,
       `verify:rules` — so the migration has somewhere to go.
-- [ ] **`README.md` drifts and overlaps.** It quoted 241 tests when the real
-      number was 252, and duplicates the design language and screen table now in
-      `FEATURES.md`. Cut it to how to run and how to deploy.
+- [ ] **`README.md` overlaps `FEATURES.md`.** The test count is correct again
+      (289 in both), but the README still duplicates the design language and the
+      screen-by-screen table that now live in `FEATURES.md`. Cut it back to how
+      to run it and how to deploy it, and let `FEATURES.md` be the one
+      description of the app.
+- [ ] **No linter and no type checking.** There is no ESLint config and no
+      TypeScript. The gap is filled by fourteen `verify-phase*.mjs` scripts,
+      several of which assert on literal source strings — `verify-rules.mjs`
+      checks `attacks.js` for the exact text of a return statement. Those checks
+      would be free and refactor-proof as unit tests or lint rules; as greps
+      they punish cleanup and still miss real type errors.
+- [ ] **The font pipeline differs between dev and production.** `core.css` keeps
+      a Google Fonts `@import` that a Vite plugin strips with a regex at build
+      time, so `npm run dev` uses CDN fonts and the build uses local ones.
+      Reformatting that one line onto two would silently ship remote fonts with
+      nothing to catch it. Delete the `@import` and the plugin, and let the
+      local `@font-face` rules stand on their own.
+- [ ] **`functional-states.css` has outgrown its brief.** At 3,206 lines it is
+      larger than the other six stylesheets combined, and now holds every
+      `@font-face` as well as the responsive and state hardening it was meant
+      for. The `core.css`-plus-per-screen split described in the README no
+      longer matches what is on disk.
+- [ ] **`TableScreen.jsx` is 1,971 lines** with around thirty pieces of
+      `useState` and twenty-four `initial*` props that exist only for test
+      injection. The inspectors were extracted; the interaction state machine
+      wasn't.
+- [ ] **Superseded planning files are still tracked.** `PROJECT_AUDIT.txt`
+      (56KB), `Phase Completion.txt` (136KB) and
+      `NIGHTFORGE_FULL_FUNCTIONALITY_PORT_PLAN.txt` (45KB) sit in the repository
+      root and are replaced by `docs/`.
 - [ ] **Monster inventories import empty.** The SRD publishes no loot tables.
       Needs hand-authoring or a generator.
 - [ ] **Initiative can't be edited** — it's rolled automatically at battle start

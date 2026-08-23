@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { CircleDot, Minus, MoreVertical, Package, Plus, Search, X } from "lucide-react";
 
 import { formatCost, getItem, itemSubtitle, ITEM_CATALOG } from "../domain/catalog.js";
-import { MAX_ATTACKS_PER_ACTION, TOKEN_SIZES } from "../domain/table.js";
+import { FACTION_LABELS, MAX_ATTACKS_PER_ACTION, TOKEN_FACTIONS, TOKEN_SIZES } from "../domain/table.js";
 import { formatChallengeRating } from "../domain/monsters.js";
 import { useDialogA11y } from "../ui/useDialogA11y.js";
 import GearChapter from "./GearChapter.jsx";
@@ -371,6 +371,11 @@ function OverflowMenu({ label, items }) {
  * gear, chest contents, deletion — sits behind the overflow menu and opens as
  * a drawer, which is what keeps the card as compact as the reference design
  * while losing none of the old inspector's abilities.
+ *
+ * The one exception is the side switch. A Hero snapshot has no stats drawer at
+ * all, so putting the switch behind one would leave Heroes unable to change
+ * sides — and the side is what decides when the Battle ends, so it cannot be
+ * the only field on a token that some tokens can never reach.
  */
 export default function BattleSetupInspector({
   token,
@@ -477,6 +482,24 @@ export default function BattleSetupInspector({
           {stats.map(([label, value]) => (
             <span key={label}><small>{label}</small><strong className="numeral">{value}</strong></span>
           ))}
+        </div>
+        <div className="nf-state-scene-faction" role="group" aria-label="Side">
+          <small>Side</small>
+          <span className="nf-state-scene-faction-switch">
+            {TOKEN_FACTIONS.map((faction) => (
+              <button
+                key={faction}
+                type="button"
+                className={`nf-state-faction-${faction}` + (token.faction === faction ? " on" : "")}
+                aria-pressed={token.faction === faction}
+                disabled={busy || token.faction === faction}
+                title={`Fight on the ${FACTION_LABELS[faction].toLowerCase()} side. A Battle ends when only one side is left standing.`}
+                onClick={() => saveToken({ faction })}
+              >
+                {FACTION_LABELS[faction]}
+              </button>
+            ))}
+          </span>
         </div>
         {!token.heroId && (
           <div className="nf-state-scene-attacks">

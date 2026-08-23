@@ -205,6 +205,15 @@ const uniqueNormalizedRecords = (records, normalize) => {
 
 export const TOKEN_SIZES = Object.freeze(["tiny", "small", "medium", "large", "huge", "gargantuan"]);
 
+/**
+ * Which side of a fight a creature is on. Two sides only: the rules need to
+ * answer "is one side left standing", and nothing in 5e needs a third answer.
+ * Bystanders are modelled by leaving them off the board, not by a neutral team.
+ */
+export const TOKEN_FACTIONS = Object.freeze(["ally", "foe"]);
+
+export const FACTION_LABELS = Object.freeze({ ally: "Ally", foe: "Foe" });
+
 export const MAX_ATTACKS_PER_ACTION = 10;
 
 const attackSlug = (value, fallback) => {
@@ -329,11 +338,19 @@ export function normalizeTableToken(input = {}, { id, ordinal = 0 } = {}) {
   if (!tokenId) throw new TypeError("A Table token requires a stable id.");
   const maxHp = Math.max(1, Math.floor(finite(input.maxHp, 10)));
   const inventoryResult = normalizeInventoryEntries(input.inventory);
+  const heroId = typeof input.heroId === "string" && input.heroId.trim() ? input.heroId.trim() : null;
   const token = {
     id: tokenId,
-    heroId: typeof input.heroId === "string" && input.heroId.trim() ? input.heroId.trim() : null,
+    heroId,
     name: typeof input.name === "string" && input.name.trim() ? input.name.trim() : `Token ${ordinal + 1}`,
     color: colorPattern.test(input.color || "") ? input.color : TOKEN_COLORS[ordinal % TOKEN_COLORS.length],
+    // Which side this creature fights on. Saves written before factions
+    // existed carry no value, so the default has to reconstruct the intent:
+    // a token with a Hero behind it is a party member, anything else is not.
+    // That is exactly the ally/foe split every existing save already implies,
+    // so old battles load with the sides the table always understood them to
+    // have, and no schema bump is needed.
+    faction: TOKEN_FACTIONS.includes(input.faction) ? input.faction : (heroId ? "ally" : "foe"),
     position: normalizePosition(input.position || input),
     hp: Math.max(0, Math.min(maxHp, Math.floor(finite(input.hp, maxHp)))),
     maxHp,
@@ -911,6 +928,9 @@ export function normalizeEncounter(encounter, tokens = []) {
     // flag is what stops a second press from paying the party twice.
     xpAwarded: Boolean(encounter.xpAwarded),
     winnerTokenId: tokenIds.has(encounter.winnerTokenId) ? encounter.winnerTokenId : null,
+    // The winning side. Set even when several creatures are left standing,
+    // which is the case winnerTokenId alone cannot describe.
+    winnerFaction: TOKEN_FACTIONS.includes(encounter.winnerFaction) ? encounter.winnerFaction : null,
     log: normalizeEncounterLog(encounter.log),
     setupTokens: normalizeSetupSnapshot(encounter.setupTokens, tokenIds),
   };
@@ -941,6 +961,11 @@ export function restoreSetupTokens(tokens, snapshot) {
     return {
       ...token,
       hp: token.maxHp,
+      // Temporary hit points belong to the fight that granted them. Leaving
+      // them behind would carry a buffer out of an abandoned battle and into
+      // the next one, which reads as a token that mysteriously has more health
+      // than its sheet says.
+      tempHp: 0,
       conditions: [],
       position: saved ? normalizePosition(saved.position) : token.position,
     };
@@ -1141,7 +1166,12 @@ export function rulerDistanceFeet(start, end, { width, height, gridSize } = {}) 
   const startRow = Math.floor((finite(start?.yPercent) / 100) * cellsY);
   const endColumn = Math.floor((finite(end?.xPercent) / 100) * cellsX);
   const endRow = Math.floor((finite(end?.yPercent) / 100) * cellsY);
-  const crossedSquares = Math.abs(endColumn - startColumn) + Math.abs(endRow - startRow);
+  // A diagonal step costs one square, not two — the SRD's optional "every
+  // diagonal is 5 ft" variant, which is what movement, attack range and
+  // adjacency all already use. Summing the two axes instead would make the
+  // ruler read 30 ft where an attack that measured 15 ft is legal, and the
+  // only thing worse than an unruled map is a ruler that contradicts the rules.
+  const crossedSquares = Math.max(Math.abs(endColumn - startColumn), Math.abs(endRow - startRow));
   return crossedSquares * 5;
 }
 

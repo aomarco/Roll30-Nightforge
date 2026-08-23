@@ -53,7 +53,22 @@ export function createIndexedDbArtworkAdapter(
   };
 }
 
-export function createArtworkRepository(adapter) {
+/**
+ * Both Scene artwork and Hero portraits are blobs in IndexedDB and share this
+ * repository. Only the wording differs, so the labels arrive as arguments: a
+ * portrait that failed to load used to apologise about Scene artwork, which
+ * sends the reader looking at the wrong screen for the problem.
+ *
+ * Two labels rather than one, because English needs both. `item` is a single
+ * thing in object position ("could not load a Hero portrait") and `collection`
+ * is the mass noun for the whole store ("storage for Hero portraits is full").
+ * One label cannot fill both slots without reading wrong in one of them.
+ */
+export function createArtworkRepository(adapter, {
+  item = "Scene artwork",
+  collection = "Scene artwork",
+  codePrefix = "artwork",
+} = {}) {
   if (!adapter) throw new TypeError("ArtworkRepository requires an artwork adapter.");
 
   const invoke = async (operation, args, failureDetails) => {
@@ -62,10 +77,10 @@ export function createArtworkRepository(adapter) {
     } catch (error) {
       if (operation === "put" && isQuotaExceededError(error)) {
         return fromThrown(
-          "artwork-quota-exceeded",
-          "Nightforge artwork storage is full.",
+          `${codePrefix}-quota-exceeded`,
+          `Nightforge storage for ${collection} is full.`,
           error,
-          "Remove unused Scene artwork or choose a smaller image, then retry. Your previous artwork remains active.",
+          `Remove unused ${collection} or choose a smaller image, then retry. Your previous image remains active.`,
         );
       }
       return fromThrown(
@@ -80,27 +95,27 @@ export function createArtworkRepository(adapter) {
   return {
     get: (key) =>
       invoke("get", [key], {
-        code: "artwork-read-failed",
-        message: "Nightforge could not load Scene artwork.",
-        recovery: "Keep the Scene open and retry loading the artwork.",
+        code: `${codePrefix}-read-failed`,
+        message: `Nightforge could not load ${item}.`,
+        recovery: "Keep this screen open and retry loading the image.",
       }),
     put: (key, blob) =>
       invoke("put", [key, blob], {
-        code: "artwork-write-failed",
-        message: "Nightforge could not save Scene artwork.",
-        recovery: "Your previous artwork remains active. Retry with this or a smaller image.",
+        code: `${codePrefix}-write-failed`,
+        message: `Nightforge could not save ${item}.`,
+        recovery: "Your previous image remains active. Retry with this or a smaller image.",
       }),
     remove: (key) =>
       invoke("remove", [key], {
-        code: "artwork-delete-failed",
-        message: "Nightforge could not remove stored Scene artwork.",
+        code: `${codePrefix}-delete-failed`,
+        message: `Nightforge could not remove ${item} from storage.`,
         recovery: "The cleanup will be safe to retry later.",
       }),
     keys: () =>
       invoke("keys", [], {
-        code: "artwork-list-failed",
-        message: "Nightforge could not inspect stored Scene artwork.",
-        recovery: "Retry before running artwork cleanup.",
+        code: `${codePrefix}-list-failed`,
+        message: `Nightforge could not inspect stored ${collection}.`,
+        recovery: "Retry before running cleanup.",
       }),
   };
 }

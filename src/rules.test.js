@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   UNARMED_STRIKE,
+  attackDistanceFeet,
   attackOptionsForToken,
   performWeaponAttack,
 } from "./domain/attacks.js";
@@ -17,7 +18,11 @@ import {
   conditionAutoFailsSave,
   conditionSaveModes,
 } from "./domain/conditions.js";
-import { encounterExperienceAward } from "./domain/encounter.js";
+import {
+  completeEncounterIfNeeded,
+  encounterExperienceAward,
+  restartCompletedBattle,
+} from "./domain/encounter.js";
 import {
   MAX_LEVEL,
   XP_THRESHOLDS,
@@ -30,10 +35,13 @@ import {
   createHeroTokenSnapshot,
   createManualToken,
   createTurnResources,
+  restoreSetupTokens,
+  rulerDistanceFeet,
   setupPositionForCell,
   tokenSkillModifier,
   tokenSkillProfile,
 } from "./domain/table.js";
+import { createArtworkRepository } from "./storage/artworkRepository.js";
 import {
   applyDamageToPools,
   damageToken,
@@ -552,4 +560,160 @@ test("any token can be asked to roll, not only the one whose turn it is", () => 
   assert.equal(rolled.ok, true);
   assert.equal(rolled.outcome.tokenId, "bystander");
   assert.equal(rolled.outcome.modifier, 2);
+});
+
+/* ------------------------------------------------- sides and battle completion */
+
+test("a token's side defaults from what it is, so old saves load with sides", () => {
+  const hero = createHeroTokenSnapshot(
+    createHeroRecord({ id: "hero-1", name: "Wren" }, { id: "hero-1", now: NOW }),
+    { id: "wren", position: at(1, 1) },
+  );
+  assert.equal(hero.faction, "ally");
+  assert.equal(token("goblin", 2, 1).faction, "foe");
+  // An explicit side always wins over the inferred one.
+  assert.equal(token("pet", 3, 1, { faction: "ally" }).faction, "ally");
+  assert.equal(token("nonsense", 4, 1, { faction: "banana" }).faction, "foe");
+});
+
+test("a party of two finishes the Battle once every foe is down", () => {
+  const first = token("first", 1, 1, { faction: "ally" });
+  const second = token("second", 2, 1, { faction: "ally" });
+  const monster = token("monster", 3, 1, { faction: "foe", hp: 0, xp: 200 });
+  const scene = battleScene({ tokens: [first, second, monster] });
+  const completed = completeEncounterIfNeeded(scene.tokens, scene.encounter);
+  assert.equal(completed.completed, true);
+  assert.equal(completed.value.encounter.status, "complete");
+  assert.equal(completed.value.encounter.winnerFaction, "ally");
+  // Two survivors, so there is no single winner to name.
+  assert.equal(completed.value.encounter.winnerTokenId, null);
+  assert.match(completed.value.encounter.log.at(-1), /The party wins the Battle\./);
+});
+
+test("a Battle keeps running while both sides still have someone standing", () => {
+  const hero = token("hero", 1, 1, { faction: "ally" });
+  const ally = token("ally", 2, 1, { faction: "ally", hp: 0 });
+  const monster = token("monster", 3, 1, { faction: "foe" });
+  const scene = battleScene({ tokens: [hero, ally, monster] });
+  assert.equal(completeEncounterIfNeeded(scene.tokens, scene.encounter).completed, false);
+});
+
+test("a one-sided brawl still ends on the last creature standing", () => {
+  // Nothing to decide between when everyone shares a side, so the old
+  // last-creature rule applies and a monster pit fight stays playable.
+  const first = token("first", 1, 1, { faction: "foe" });
+  const second = token("second", 2, 1, { faction: "foe" });
+  const scene = battleScene({ tokens: [first, second] });
+  assert.equal(completeEncounterIfNeeded(scene.tokens, scene.encounter).completed, false);
+
+  const felled = battleScene({ tokens: [first, token("second", 2, 1, { faction: "foe", hp: 0 })] });
+  const over = completeEncounterIfNeeded(felled.tokens, felled.encounter);
+  assert.equal(over.completed, true);
+  assert.equal(over.value.encounter.winnerTokenId, "first");
+  assert.match(over.value.encounter.log.at(-1), /first wins the Battle\./);
+});
+
+test("a lone survivor is still named rather than announced as a side", () => {
+  const hero = token("hero", 1, 1, { faction: "ally", name: "Wren" });
+  const monster = token("monster", 2, 1, { faction: "foe", hp: 0 });
+  const scene = battleScene({ tokens: [hero, monster] });
+  const over = completeEncounterIfNeeded(scene.tokens, scene.encounter);
+  assert.equal(over.value.encounter.winnerTokenId, "hero");
+  assert.equal(over.value.encounter.winnerFaction, "ally");
+  assert.match(over.value.encounter.log.at(-1), /Wren wins the Battle\./);
+});
+
+test("a mutual wipe still ends with no survivor and no winning side", () => {
+  const hero = token("hero", 1, 1, { faction: "ally", hp: 0 });
+  const monster = token("monster", 2, 1, { faction: "foe", hp: 0 });
+  const scene = battleScene({ tokens: [hero, monster] });
+  const over = completeEncounterIfNeeded(scene.tokens, scene.encounter);
+  assert.equal(over.completed, true);
+  assert.equal(over.value.encounter.winnerTokenId, null);
+  assert.equal(over.value.encounter.winnerFaction, null);
+  assert.match(over.value.encounter.log.at(-1), /no survivor/);
+});
+
+test("a fallen allied summon is not treasure", () => {
+  const hero = createHeroTokenSnapshot(
+    createHeroRecord({ id: "hero-1", name: "Wren" }, { id: "hero-1", now: NOW }),
+    { id: "wren", position: at(1, 1) },
+  );
+  const summon = token("summon", 2, 1, { faction: "ally", hp: 0, xp: 450 });
+  const monster = token("monster", 3, 1, { faction: "foe", hp: 0, xp: 200 });
+  const award = encounterExperienceAward([hero, summon, monster], { xpAwarded: false });
+  assert.equal(award.total, 200);
+  assert.equal(award.defeatedCount, 1);
+  assert.equal(award.perHero, 200);
+});
+
+/* --------------------------------------------------------------- the ruler */
+
+test("the ruler and the rules engine agree on a diagonal", () => {
+  // Three squares diagonally is three squares, not six: movement, attack range
+  // and the ruler all count a diagonal step as one.
+  const start = at(1, 1);
+  const end = at(4, 4);
+  assert.equal(rulerDistanceFeet(start, end, VIEWPORT), 15);
+  assert.equal(attackDistanceFeet(start, end, VIEWPORT), 15);
+  // And they still agree when the line is straight.
+  assert.equal(rulerDistanceFeet(at(1, 1), at(1, 5), VIEWPORT), 20);
+  assert.equal(attackDistanceFeet(at(1, 1), at(1, 5), VIEWPORT), 20);
+  // A knight's move is governed by its longer axis.
+  assert.equal(rulerDistanceFeet(at(1, 1), at(3, 6), VIEWPORT), 25);
+  assert.equal(attackDistanceFeet(at(1, 1), at(3, 6), VIEWPORT), 25);
+});
+
+/* ------------------------------------------- temporary hit points and resets */
+
+test("restarting a completed Battle clears temporary hit points", () => {
+  const first = token("first", 1, 1, { tempHp: 12 });
+  const second = token("second", 2, 1, { hp: 0, tempHp: 5 });
+  const scene = battleScene({ tokens: [first, second], status: "complete" });
+  const restarted = restartCompletedBattle(scene, { random: sequence(0.5) });
+  assert.equal(restarted.ok, true);
+  for (const entry of restarted.value.tokens) {
+    assert.equal(entry.tempHp, 0);
+    assert.equal(entry.hp, entry.maxHp);
+  }
+});
+
+test("abandoning a Battle clears temporary hit points", () => {
+  const buffed = token("buffed", 1, 1, { tempHp: 9 });
+  const other = token("other", 2, 1, { tempHp: 3, hp: 1 });
+  const restored = restoreSetupTokens([buffed, other], {});
+  for (const entry of restored) {
+    assert.equal(entry.tempHp, 0);
+    assert.equal(entry.hp, entry.maxHp);
+  }
+});
+
+/* -------------------------------------------------- portrait error reporting */
+
+test("a failed Hero portrait read blames portraits, not Scene artwork", () => {
+  const broken = {
+    get: () => Promise.reject(new Error("closed")),
+    put: () => Promise.reject(new Error("closed")),
+    remove: () => Promise.reject(new Error("closed")),
+    keys: () => Promise.reject(new Error("closed")),
+  };
+  const portraits = createArtworkRepository(broken, {
+    item: "a Hero portrait",
+    collection: "Hero portraits",
+    codePrefix: "portrait",
+  });
+  return portraits.get("portrait-1").then((failed) => {
+    assert.equal(failed.ok, false);
+    assert.equal(failed.code, "portrait-read-failed");
+    assert.match(failed.message, /Hero portrait/);
+    assert.doesNotMatch(failed.message, /Scene artwork/);
+  });
+});
+
+test("Scene artwork keeps the error codes the rest of the app branches on", () => {
+  const broken = { get: () => Promise.reject(new Error("closed")) };
+  return createArtworkRepository(broken).get("art-1").then((failed) => {
+    assert.equal(failed.code, "artwork-read-failed");
+    assert.match(failed.message, /Scene artwork/);
+  });
 });

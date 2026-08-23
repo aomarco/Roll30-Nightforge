@@ -6,7 +6,7 @@ import { CHECK_MODE_ADVANTAGE, CHECK_MODE_DISADVANTAGE, CHECK_MODE_NORMAL, MAX_C
 import { CONDITIONS } from "../domain/conditions.js";
 import { equippedWeapons } from "../domain/items.js";
 import { MAX_VITALITY_ADJUSTMENT } from "../domain/vitality.js";
-import { tokenSaveProfile, tokenSkillProfile } from "../domain/table.js";
+import { FACTION_LABELS, tokenSaveProfile, tokenSkillProfile } from "../domain/table.js";
 
 const SAVE_LABEL = Object.freeze({
   str: "STR", dex: "DEX", con: "CON", int: "INT", wis: "WIS", cha: "CHA",
@@ -87,6 +87,14 @@ export default function BattleTokenInspector({
           <ShieldHalf size={18} />
           <strong className="numeral">{token.ac}</strong>
           <span>Armour class</span>
+          {/* Read-only here: sides are set in Setup, but the fight ends when one
+              side is left standing, so it has to be legible mid-battle too. */}
+          <span
+            className={`tag tag-${token.faction}`}
+            title="Which side this creature fights on. Change it from the Setup inspector."
+          >
+            {FACTION_LABELS[token.faction]}
+          </span>
         </div>
       </section>
 

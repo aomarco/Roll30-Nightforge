@@ -2886,6 +2886,60 @@
 
 .nf-state-scene-stats strong { font-size: 15px; color: var(--ink); }
 
+/* Which side a token fights on. Faction colour is the design language's one
+   sanctioned use of ally/foe hues, and the selected button also carries a
+   pressed state and its own label, so the choice never rests on colour alone. */
+.nf-state-scene-faction {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.nf-state-scene-faction > small {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+
+.nf-state-scene-faction-switch { display: flex; gap: 3px; }
+
+.nf-state-scene-faction-switch > button {
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+
+/* The selected side is not a dead control — it is disabled because pressing it
+   again would be a no-op, so it keeps full contrast rather than dimming. */
+.nf-state-scene-faction-switch > button:disabled { cursor: default; }
+
+.nf-state-scene-faction-switch > button:hover:not(:disabled) {
+  color: var(--ink-1);
+  background: rgba(255, 255, 255, .08);
+}
+
+.nf-state-scene-faction-switch > .nf-state-faction-ally.on {
+  color: var(--ally);
+  background: var(--ally-tint);
+  border-color: rgba(95, 168, 245, .38);
+}
+
+.nf-state-scene-faction-switch > .nf-state-faction-foe.on {
+  color: var(--foe);
+  background: var(--foe-tint);
+  border-color: rgba(242, 97, 122, .38);
+}
+
 .nf-state-scene-kind {
   padding-top: 9px;
   border-top: 1px solid var(--line);
