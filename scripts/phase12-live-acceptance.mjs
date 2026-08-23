@@ -119,7 +119,7 @@ try {
   await page.getByRole("button", { name: "New hero", exact: true }).first().click();
   await expect(page.getByRole("heading", { name: "Unnamed hero", exact: true })).toBeVisible();
   await expect(page.getByText("Level 1 Fighter · Human", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Abilities", exact: true }).click();
+  // The Hero record is one continuous sheet now; skills are already on-page.
   await expect(page.getByRole("button", { name: /^Acrobatics DEX/ })).toBeVisible();
 
   await page.getByRole("navigation").getByRole("button", { name: "Library", exact: true }).click();

@@ -1,8 +1,16 @@
 import { combineAttackModes, rollDie } from "./attacks.js";
+import { performAbilityCheck } from "./checks.js";
+import {
+  activeTurnContext,
+  chebyshevFeet,
+  HELP_REACH_FEET,
+  tokenIsIncapacitated,
+} from "./combat.js";
 import { completeEncounterIfNeeded } from "./encounter.js";
 import {
   appendEncounterLog,
   DEATH_SAVES_REQUIRED,
+  isDying,
   isStable,
   normalizeTableTokens,
   revivedTokenPatch,
@@ -14,6 +22,7 @@ const failure = (code, message, recovery, retryable = false, metadata = {}) => (
 
 /** A death saving throw is always against 10. Nothing modifies the number. */
 export const DEATH_SAVE_DC = 10;
+export const STABILIZE_DC = 10;
 
 /**
  * One death saving throw.
@@ -56,6 +65,18 @@ export function rollDeathSave(scene, tokenId, { random = Math.random } = {}) {
     "DEATH_SAVE_STABLE",
     `${token.name} is stable and has stopped rolling.`,
     "A stable creature stays unconscious at zero hit points until it is healed.",
+  );
+  const turn = activeTurnContext(scene);
+  if (!turn.ok) return turn;
+  if (turn.value.token.id !== token.id) return failure(
+    "DEATH_SAVE_NOT_ACTIVE",
+    `${token.name} rolls a death saving throw only on their own turn.`,
+    "Wait until that token is active in initiative.",
+  );
+  if (turn.value.resources.deathSaveRolled) return failure(
+    "DEATH_SAVE_ALREADY_ROLLED",
+    `${token.name} has already rolled a death saving throw this turn.`,
+    "End the turn and wait for their next turn.",
   );
 
   // No source ever grants advantage on a death save today. The list is built
@@ -129,11 +150,96 @@ export function rollDeathSave(scene, tokenId, { random = Math.random } = {}) {
     updateToken(tokens, tokenId, patch),
     {
       ...scene.encounter,
+      resources: {
+        [token.id]: { ...turn.value.resources, deathSaveRolled: true },
+      },
       log: appendEncounterLog(scene.encounter.log, resultText),
     },
   );
   if (!completed.ok) return completed;
   return success(completed.value, {
     outcome: { ...outcome, completed: completed.completed, winnerFaction: completed.winnerFaction || null },
+  });
+}
+
+/**
+ * Who the active creature can stabilise with first aid right now.
+ *
+ * Stabilising follows the 2014 SRD action: spend the Action beside a dying
+ * creature and make a DC 10 Wisdom (Medicine) check. Only Heroes use death
+ * saving throws in Nightforge, so defeated monsters never appear as targets.
+ */
+export function stabilizeAvailability(scene, targetTokenId, viewport) {
+  const context = activeTurnContext(scene);
+  if (!context.ok) return context;
+  const { token, tokens, resources } = context.value;
+  if (token.hp <= 0 || tokenIsIncapacitated(token)) return failure(
+    "STABILIZE_INCAPACITATED",
+    `${token.name} cannot stabilise anyone while incapacitated or down.`,
+    "Use a standing creature's turn.",
+  );
+  if (resources.dashed) return failure("STABILIZE_AFTER_DASH", "Stabilise is unavailable after Dash.", "Use remaining movement or end the turn.");
+  if (resources.swapped) return failure("STABILIZE_AFTER_SWAP", "Stabilise is unavailable after a weapon swap.", "Use remaining movement or end the turn.");
+  if (resources.actionSpent) return failure(
+    "STABILIZE_ACTION_SPENT",
+    `Stabilise is unavailable because ${resources.actionType || "the Action"} was already used.`,
+    "Use remaining movement or end the turn.",
+  );
+  const targets = tokens.filter((entry) =>
+    entry.id !== token.id
+    && Boolean(entry.heroId)
+    && isDying(entry)
+    && !isStable(entry)
+    && chebyshevFeet(token.position, entry.position, viewport) <= HELP_REACH_FEET);
+  if (!targets.length) return failure(
+    "STABILIZE_NO_TARGET_ADJACENT",
+    `${token.name} has no dying Hero within ${HELP_REACH_FEET} feet to stabilise.`,
+    "Move beside a dying Hero first.",
+  );
+  if (!targetTokenId) return success({ ...context.value, targets });
+  const target = targets.find((entry) => entry.id === targetTokenId);
+  if (!target) return failure(
+    "STABILIZE_TARGET_UNAVAILABLE",
+    "That creature is not an adjacent dying Hero who needs stabilising.",
+    "Choose a dying Hero within five feet.",
+  );
+  return success({ ...context.value, targets, target });
+}
+
+export function stabilizeCreature(scene, targetTokenId, viewport, { random = Math.random } = {}) {
+  const available = stabilizeAvailability(scene, targetTokenId, viewport);
+  if (!available.ok) return available;
+  const { token, target, tokens, resources } = available.value;
+  const checked = performAbilityCheck(scene, {
+    tokenId: token.id,
+    skillId: "medicine",
+    dc: STABILIZE_DC,
+  }, { random });
+  if (!checked.ok) return checked;
+
+  const stabilised = checked.outcome.succeeded;
+  const nextTokens = stabilised
+    ? updateToken(tokens, target.id, {
+      deathSaveSuccesses: DEATH_SAVES_REQUIRED,
+      deathSaveFailures: 0,
+      dead: false,
+    })
+    : tokens;
+  const encounter = {
+    ...checked.value.encounter,
+    resources: {
+      [token.id]: { ...resources, actionSpent: true, actionType: "stabilize" },
+    },
+    log: stabilised
+      ? appendEncounterLog(checked.value.encounter.log, `${token.name} stabilises ${target.name}.`)
+      : checked.value.encounter.log,
+  };
+  return success({ tokens: nextTokens, encounter }, {
+    outcome: {
+      ...checked.outcome,
+      stabilised,
+      stabilizedTargetId: target.id,
+      stabilizedTargetName: target.name,
+    },
   });
 }

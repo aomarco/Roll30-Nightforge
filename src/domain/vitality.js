@@ -1,6 +1,6 @@
 import { applyDamageDefense, damageDefenseText } from "./damageTypes.js";
 import { completeEncounterIfNeeded } from "./encounter.js";
-import { appendEncounterLog, DEATH_SAVES_REQUIRED, normalizeTableTokens, updateToken } from "./table.js";
+import { appendEncounterLog, DEATH_SAVES_REQUIRED, isStable, normalizeTableTokens, updateToken } from "./table.js";
 
 const success = (value, metadata = {}) => ({ ok: true, value, ...metadata });
 const failure = (code, message, recovery, retryable = false, metadata = {}) => ({ ok: false, code, message, recovery, retryable, ...metadata });
@@ -55,7 +55,14 @@ export function resolveIncomingDamage(token, amount, { critical = false } = {}) 
   if (dying) {
     const failures = Math.min(DEATH_SAVES_REQUIRED, token.deathSaveFailures + (critical ? 2 : 1));
     return {
-      patch: { deathSaveFailures: failures, dead: failures >= DEATH_SAVES_REQUIRED },
+      // Damage restarts a stable creature's death-save clock before applying
+      // the failure. Otherwise its three stored successes would incorrectly
+      // leave it marked Stable while it was bleeding out again.
+      patch: {
+        deathSaveSuccesses: isStable(token) ? 0 : token.deathSaveSuccesses,
+        deathSaveFailures: failures,
+        dead: failures >= DEATH_SAVES_REQUIRED,
+      },
       absorbed: 0,
       previousHp: token.hp,
       nextHp: 0,

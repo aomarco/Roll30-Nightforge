@@ -314,6 +314,7 @@ export function attackTargetEligibility(scene, {
   attackId,
   targetId,
   reactorId,
+  targetPosition,
   viewport,
 } = {}) {
   const available = selectionAvailability(scene, kind, { reactorId });
@@ -340,7 +341,16 @@ export function attackTargetEligibility(scene, {
     "Choose a standing or dying target.",
     true,
   );
-  const distanceFeet = attackDistanceFeet(available.value.token.position, target.position, viewport);
+  // Opportunity attacks land immediately before the creature leaves reach.
+  // Movement is already saved when the queued reaction resolves, so use the
+  // recorded departure square for range while damaging the real moved token.
+  const targetingPosition = kind === ATTACK_KIND_REACTION && targetPosition
+    ? targetPosition
+    : target.position;
+  const targetingTarget = targetingPosition === target.position
+    ? target
+    : { ...target, position: targetingPosition };
+  const distanceFeet = attackDistanceFeet(available.value.token.position, targetingPosition, viewport);
   const range = option.authored
     ? authoredRangeAtDistance(option.attack, distanceFeet)
     : weaponRangeAtDistance(option.weapon, distanceFeet);
@@ -351,7 +361,7 @@ export function attackTargetEligibility(scene, {
     true,
     { distanceFeet },
   );
-  const lineOfSight = attackLineOfSight(scene, available.value.token, target, range.usage);
+  const lineOfSight = attackLineOfSight(scene, available.value.token, targetingTarget, range.usage);
   if (lineOfSight.state === "blocked") return failure(
     "ATTACK_LINE_BLOCKED",
     `A full wall blocks the shot to ${target.name}.`,
@@ -849,6 +859,7 @@ export function opportunityAttacksFor(scene, plan, viewport) {
         attackId: option.attackId,
         departureIndex: step,
         departurePosition: positions[step],
+        landingPosition: positions[landing],
         distanceFeet: before,
       });
       break;

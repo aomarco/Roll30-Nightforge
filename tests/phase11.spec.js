@@ -2,7 +2,15 @@ import { expect, test } from "@playwright/test";
 
 import { ITEM_CATALOG } from "../src/domain/catalog.js";
 import { createHeroRecord, createSceneRecord } from "../src/domain/records.js";
-import { createChest, createManualToken, createTurnResources } from "../src/domain/table.js";
+import {
+  createChest,
+  createManualToken,
+  createMonsterToken,
+  createTurnResources,
+  sceneViewport,
+  setupPositionForCell,
+} from "../src/domain/table.js";
+import { MONSTERS } from "../src/domain/monsters.generated.js";
 import { createEmptyEnvelope, sealEnvelope, serializeEnvelope } from "../src/storage/envelope.js";
 import { FORBIDDEN_LEGACY_STORAGE_IDENTIFIERS, STORAGE_KEYS } from "../src/storage/constants.js";
 
@@ -109,6 +117,64 @@ function durableAttackScene() {
       battleItems: [],
       ammoSpentByToken: {},
       ammunitionRecovered: false,
+      winnerTokenId: null,
+      log: [],
+    },
+    createdAt: NOW,
+    updatedAt: NOW,
+    lastOpenedAt: NOW,
+  }, { now: NOW });
+}
+
+function reactionRegressionScene({ dyingActive = false, dyingAlly = false } = {}) {
+  const viewport = sceneViewport(44);
+  const at = (column, row) => setupPositionForCell({ column, row }, viewport);
+  const active = createManualToken({
+    id: "reaction-hero",
+    name: dyingActive ? "Downed Hero" : "Reaction Hero",
+    heroId: "reaction-hero-record",
+    faction: "ally",
+    position: at(5, 5),
+    hp: dyingActive ? 0 : 24,
+    maxHp: 24,
+    dead: false,
+    conditions: dyingActive ? ["unconscious"] : [],
+  });
+  const ally = createManualToken({
+    id: "helped-ally",
+    name: "Helpful Ally",
+    heroId: "helped-ally-record",
+    faction: "ally",
+    position: at(5, 6),
+    hp: dyingAlly ? 0 : 18,
+    maxHp: 18,
+    dead: false,
+    conditions: dyingAlly ? ["unconscious"] : [],
+  });
+  const knightRecord = MONSTERS.find((monster) => monster.id === "knight");
+  const knight = createMonsterToken(knightRecord, {
+    id: "reaction-knight",
+    name: "Knight",
+    position: at(6, 5),
+  });
+  const tokens = [active, knight, ally];
+  return createSceneRecord({
+    id: dyingActive ? "scene-death-turn" : "scene-reaction-regression",
+    name: dyingActive ? "Death Turn Regression" : "Reaction Regression",
+    kind: "battle",
+    blankCanvas: true,
+    gridSize: 44,
+    tokens,
+    encounter: {
+      version: 1,
+      status: "active",
+      initiativeOrder: tokens.map(({ id }) => id),
+      initiatives: { [active.id]: 20, [knight.id]: 15, [ally.id]: 10 },
+      activeIndex: 0,
+      round: 1,
+      resources: { [active.id]: createTurnResources(active) },
+      battleItems: [],
+      ammoSpentByToken: {},
       winnerTokenId: null,
       log: [],
     },
@@ -374,6 +440,79 @@ test("focused Play, Setup, and active-Battle pieces move with arrow keys", async
     const envelope = JSON.parse(localStorage.getItem(stateKey));
     return envelope.scenes[0].encounter.resources["token-0"].movementSpent;
   }, STORAGE_KEYS.state)).toBe(5);
+});
+
+test("Help targeting survives board pointer capture and saves the named enemy", async ({ page }) => {
+  const scene = reactionRegressionScene();
+  await open(page, { scenes: [scene] });
+  await page.getByRole("main").getByRole("button", { name: "Enter the table", exact: true }).click();
+  await page.getByRole("button", { name: "Tactics", exact: true }).click();
+  await page.getByRole("button", { name: /^Help Helpful Ally\b/ }).click();
+  await expect(page.getByText(/Helping Helpful Ally/)).toBeVisible();
+  await page.getByRole("button", { name: "Help Helpful Ally against Knight", exact: true }).click();
+  await expect(page.getByText(/Helping Helpful Ally/)).toHaveCount(0);
+  await expect.poll(() => page.evaluate((stateKey) => {
+    const envelope = JSON.parse(localStorage.getItem(stateKey));
+    const saved = envelope.scenes.find(({ id }) => id === "scene-reaction-regression");
+    const ally = saved.tokens.find(({ id }) => id === "helped-ally");
+    return {
+      target: ally.helpedAgainstTokenId,
+      helper: ally.helpedById,
+      actionType: saved.encounter.resources["reaction-hero"].actionType,
+    };
+  }, STORAGE_KEYS.state)).toEqual({
+    target: "reaction-knight",
+    helper: "reaction-hero",
+    actionType: "help",
+  });
+});
+
+test("walking away from a Knight resolves an opportunity attack from the departure square", async ({ page }) => {
+  const scene = reactionRegressionScene();
+  await open(page, { scenes: [scene] });
+  await page.getByRole("main").getByRole("button", { name: "Enter the table", exact: true }).click();
+  const hero = page.getByRole("button", { name: /Reaction Hero, use arrow keys to move/ });
+  await hero.focus();
+  await page.keyboard.press("ArrowLeft");
+  await expect(page.getByRole("status", { name: "Attack result" })).toBeVisible();
+  await expect.poll(() => page.evaluate((stateKey) => {
+    const envelope = JSON.parse(localStorage.getItem(stateKey));
+    const saved = envelope.scenes.find(({ id }) => id === "scene-reaction-regression");
+    return {
+      reactionSpent: saved.tokens.find(({ id }) => id === "reaction-knight").reactionSpent,
+      movementSpent: saved.encounter.resources["reaction-hero"].movementSpent,
+      logged: saved.encounter.log.some((entry) => /opportunity attack/i.test(entry)),
+    };
+  }, STORAGE_KEYS.state)).toEqual({ reactionSpent: true, movementSpent: 5, logged: true });
+});
+
+test("Tactics offers adjacent first aid and a dying turn cannot skip or repeat its save", async ({ page }) => {
+  const rescue = reactionRegressionScene({ dyingAlly: true });
+  await open(page, { scenes: [rescue] });
+  await page.getByRole("main").getByRole("button", { name: "Enter the table", exact: true }).click();
+  await page.getByRole("button", { name: "Tactics", exact: true }).click();
+  const firstAid = page.getByRole("button", { name: /^Stabilise Helpful Ally\b/ });
+  await expect(firstAid).toBeVisible();
+  await expect(firstAid).toHaveAttribute("title", /DC 10 Medicine/);
+
+  const deathTurn = reactionRegressionScene({ dyingActive: true });
+  await open(page, { scenes: [deathTurn] });
+  await page.getByRole("main").getByRole("button", { name: "Enter the table", exact: true }).click();
+  const endTurn = page.getByRole("button", { name: "End Turn", exact: true });
+  await expect(endTurn).toBeDisabled();
+  await expect(endTurn).toHaveAttribute("title", /must roll a death saving throw/i);
+  const deathSave = page.getByRole("button", { name: "Roll death save", exact: true });
+  await deathSave.click();
+  const result = page.getByRole("status", { name: "Check result" });
+  await expect(result).toBeVisible();
+  await result.click();
+  await expect.poll(() => page.evaluate((stateKey) => {
+    const envelope = JSON.parse(localStorage.getItem(stateKey));
+    const saved = envelope.scenes.find(({ id }) => id === "scene-death-turn");
+    return saved.encounter.resources["reaction-hero"].deathSaveRolled;
+  }, STORAGE_KEYS.state)).toBe(true);
+  await expect(deathSave).toBeDisabled();
+  await expect(endTurn).toBeEnabled();
 });
 
 test("a rolled attack is durably saved before its cinematic can be interrupted", async ({ page }) => {

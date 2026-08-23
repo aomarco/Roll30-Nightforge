@@ -15,6 +15,7 @@ import {
   activateHelp,
   endTurn,
   helpAvailability,
+  moveActiveToken,
   planActiveMovement,
 } from "./domain/combat.js";
 import {
@@ -23,7 +24,11 @@ import {
   normalizeDamageType,
   normalizeDamageTypeList,
 } from "./domain/damageTypes.js";
-import { rollDeathSave } from "./domain/death.js";
+import {
+  rollDeathSave,
+  stabilizeAvailability,
+  stabilizeCreature,
+} from "./domain/death.js";
 import { completeEncounterIfNeeded, encounterExperienceAward } from "./domain/encounter.js";
 import { createSceneRecord } from "./domain/records.js";
 import {
@@ -233,6 +238,56 @@ test("a hit on a dying creature is a failed death save, and a critical is two", 
   assert.equal(resolveIncomingDamage(dying, 7).nextHp, 0);
 });
 
+test("damage knocks a stable Hero back into dying before adding a failure", () => {
+  const stable = token("stable", 1, 1, {
+    heroId: "wren",
+    faction: "ally",
+    hp: 0,
+    dead: false,
+    deathSaveSuccesses: DEATH_SAVES_REQUIRED,
+    conditions: ["unconscious"],
+  });
+  const struck = resolveIncomingDamage(stable, 1);
+  assert.equal(struck.patch.deathSaveSuccesses, 0);
+  assert.equal(struck.patch.deathSaveFailures, 1);
+  assert.equal(isStable({ ...stable, ...struck.patch }), false);
+});
+
+test("an adjacent ally can spend an Action on a DC 10 Medicine check to stabilise", () => {
+  const medic = token("medic", 1, 1, { heroId: "medic", faction: "ally", dead: false, wisdom: 10 });
+  const dying = token("dying", 2, 1, {
+    heroId: "wren",
+    faction: "ally",
+    hp: 0,
+    dead: false,
+    deathSaveFailures: 2,
+    conditions: ["unconscious"],
+  });
+  const foe = token("foe", 5, 5, { faction: "foe", dead: false });
+  const scene = battleScene({ tokens: [medic, dying, foe] });
+  assert.deepEqual(stabilizeAvailability(scene, null, VIEWPORT).value.targets.map(({ id }) => id), ["dying"]);
+  const treated = stabilizeCreature(scene, "dying", VIEWPORT, { random: d20(10) });
+  const after = treated.value.tokens.find((entry) => entry.id === "dying");
+  assert.equal(treated.outcome.stabilised, true);
+  assert.equal(isStable(after), true);
+  assert.equal(after.deathSaveFailures, 0);
+  assert.equal(treated.value.encounter.resources.medic.actionSpent, true);
+  assert.equal(treated.value.encounter.resources.medic.actionType, "stabilize");
+});
+
+test("failed first aid still spends the Action and distance is enforced", () => {
+  const medic = token("medic", 1, 1, { heroId: "medic", faction: "ally", dead: false, wisdom: 10 });
+  const dying = token("dying", 2, 1, { heroId: "wren", faction: "ally", hp: 0, dead: false, conditions: ["unconscious"] });
+  const foe = token("foe", 5, 5, { faction: "foe", dead: false });
+  const scene = battleScene({ tokens: [medic, dying, foe] });
+  const failed = stabilizeCreature(scene, "dying", VIEWPORT, { random: d20(9) });
+  assert.equal(failed.outcome.stabilised, false);
+  assert.equal(isStable(failed.value.tokens.find((entry) => entry.id === "dying")), false);
+  assert.equal(failed.value.encounter.resources.medic.actionSpent, true);
+  const distant = { ...scene, tokens: updateToken(scene.tokens, "dying", { position: at(8, 8) }) };
+  assert.equal(stabilizeAvailability(distant, "dying", VIEWPORT).code, "STABILIZE_NO_TARGET_ADJACENT");
+});
+
 test("damage overflowing the whole hit point maximum kills outright", () => {
   const hero = token("hero", 1, 1, { heroId: "wren", faction: "ally", maxHp: 20, hp: 5, dead: false });
   assert.equal(resolveIncomingDamage(hero, 26).instantDeath, true);
@@ -292,8 +347,12 @@ test("a dying creature still takes its turn, and a stable or dead one is skipped
   const scene = battleScene({ tokens: [first, dying, stable] });
   assert.equal(endTurn(scene).activeTokenId, "dying");
   const past = battleScene({ tokens: [first, dying, stable], activeIndex: 1 });
+  assert.equal(endTurn(past).code, "DEATH_SAVE_REQUIRED");
+  const rolled = rollDeathSave(past, "dying", { random: d20(11) });
+  assert.equal(rolled.value.encounter.resources.dying.deathSaveRolled, true);
+  assert.equal(rollDeathSave({ ...past, ...rolled.value }, "dying", { random: d20(11) }).code, "DEATH_SAVE_ALREADY_ROLLED");
   // Past the dying creature the order skips the stable one and wraps around.
-  assert.equal(endTurn(past).activeTokenId, "first");
+  assert.equal(endTurn({ ...past, ...rolled.value }).activeTokenId, "first");
 });
 
 /* ----------------------------------------------------- opportunity attacks */
@@ -373,6 +432,36 @@ test("an opportunity attack spends the reactor's reaction and leaves the mover's
   assert.equal(resolved.value.encounter.resources.hero.actionSpent, false);
   assert.equal(resolved.value.encounter.resources.hero.movementSpent, 0);
   assert.match(resolved.value.encounter.log.at(-1), /opportunity attack/i);
+});
+
+test("a Knight resolves its opportunity attack from the departure square after movement is saved", () => {
+  const hero = token("hero", 5, 5, { heroId: "wren", faction: "ally", dead: false, maxHp: 30, hp: 30 });
+  const knightRecord = MONSTERS.find((entry) => entry.id === "knight");
+  const knight = { ...createMonsterToken(knightRecord, { id: "knight", position: at(6, 5) }), faction: "foe" };
+  const scene = battleScene({ tokens: [hero, knight] });
+  const moved = moveActiveToken(scene, "hero", at(10, 5), VIEWPORT);
+  const [drawn] = opportunityAttacksFor(scene, moved.plan, VIEWPORT);
+  assert.equal(drawn.weaponName, "Greatsword");
+  const afterMove = { ...scene, ...moved.value };
+  // Without the departure square this is out of range from the saved landing.
+  assert.equal(performWeaponAttack(afterMove, {
+    kind: ATTACK_KIND_REACTION,
+    reactorId: drawn.reactorId,
+    targetId: drawn.targetId,
+    attackId: drawn.attackId,
+    viewport: VIEWPORT,
+  }, { random: d20(18) }).code, "ATTACK_OUT_OF_RANGE");
+  const resolved = performWeaponAttack(afterMove, {
+    kind: ATTACK_KIND_REACTION,
+    reactorId: drawn.reactorId,
+    targetId: drawn.targetId,
+    attackId: drawn.attackId,
+    targetPosition: drawn.departurePosition,
+    viewport: VIEWPORT,
+  }, { random: d20(18) });
+  assert.equal(resolved.ok, true);
+  assert.deepEqual(resolved.value.tokens.find((entry) => entry.id === "hero").position, drawn.landingPosition);
+  assert.equal(resolved.value.tokens.find((entry) => entry.id === "knight").reactionSpent, true);
 });
 
 /* --------------------------------------------------- Dodge, Help, and expiry */

@@ -32,11 +32,11 @@ anything you decide against to the bottom **with the reason**.
 | 15 | Conditions | All 15 | Yes, but never expire. Exhaustion is tracked, not laddered — decided against |
 | 16 | Attack rolls | Yes | Advantage, crits, multiattack, two-weapon, thrown, ammo |
 | 17 | Damage | Yes | Typed. Resistance, immunity and vulnerability all apply |
-| 18 | Healing, temp HP, death saves | Yes | Heroes roll death saves; healing raises the dying |
+| 18 | Healing, temp HP, death saves | Yes | Heroes must roll once on their dying turn; healing raises them; adjacent allies can stabilise with Medicine |
 | 19 | Initiative and turns | Yes | Yes |
 | 20 | Movement | Yes | Walking only. No fly/swim/climb, difficult terrain, forced movement |
-| 21 | Reactions | Yes | Opportunity attacks. No Ready. The swing does not interrupt the move |
-| 22 | Other actions | Partly | Unarmed strikes, Dodge, Disengage, Help. No Hide, Grapple, Shove |
+| 21 | Reactions | Yes | Opportunity attacks resolve from the departure square. No Ready. The swing does not interrupt the move |
+| 22 | Other actions | Partly | Unarmed strikes, Dodge, Disengage, Help, Stabilise. No Hide, Grapple, Shove |
 | 23 | Vision | Partly | Walls block sight. No cover, light levels, or darkvision |
 | 24 | Concentration | No | — |
 | 25 | Rests | No | No short/long rest, no hit dice |
@@ -48,8 +48,9 @@ anything you decide against to the bottom **with the reason**.
 | 31 | Languages, alignment, CR | Yes | Reference only — correct as is |
 | 32 | Sides | Yes | Ally or foe per token; a Battle ends when one side stands |
 
-A turn currently offers four buttons: Attack, Bonus, Swap, Dash — plus move and
-End Turn.
+A standing turn offers Attack, Dash, Swap, Tactics and Bonus Action — plus move
+and End Turn. Tactics contains Dodge, Disengage, Help and adjacent Stabilise
+options. A dying turn shows only its required death save and End Turn.
 
 ---
 
@@ -59,9 +60,24 @@ Things that are built but wrong, as opposed to things that aren't built. These
 come before new features — a broken rule is worse than a missing one, because
 you can plan around a missing one.
 
-**The page is currently clear.** The five bugs below were fixed on
-`feat/core-rules`; they are kept here, crossed off, because knowing a rule was
-once wrong is worth more than a tidy list.
+**The page is currently clear.** Fixed bugs stay crossed off here because knowing
+a rule was once wrong is worth more than a tidy list.
+
+- [x] **Knight opportunity attacks were detected and then silently refused.**
+      Movement was saved before the reaction resolved, so the attack engine
+      measured Greatsword range to the destination instead of the square the
+      Hero had just left. Reactions now resolve range from that departure square
+      without undoing the saved movement.
+- [x] **Help targeting was swallowed by the map's pointer capture.** The board
+      treated the enemy click as the start of a camera drag before the token
+      could confirm the target. Help mode now owns token clicks just like Attack
+      targeting mode does.
+- [x] **A dying Hero could skip or repeat their death save.** End Turn is now
+      blocked until the active Hero rolls once, and the roll is then spent for
+      that turn.
+- [x] **There was no ally stabilization action.** An adjacent standing creature
+      can now spend its Action on a DC 10 Medicine check from Tactics. Success
+      stabilises the dying Hero; failure still spends the Action.
 
 - [x] **A battle can't end while two heroes are alive.** Completion fired when
       one creature was left standing, not one side. Fixed by adding a `faction`
@@ -137,7 +153,8 @@ once wrong is worth more than a tidy list.
       falls. Three successes stabilise, three failures kill, a natural one costs
       two and a natural twenty stands the creature up at 1 hit point. A dying
       creature keeps its side in the fight, so allies have time to reach it, and
-      healing raises it.
+      healing raises it. The active Hero must roll once before End Turn; an
+      adjacent ally can spend an Action on DC 10 Medicine to stabilise them.
 - [ ] **Difficult terrain** — paint cells, double movement cost
 - [ ] **Money and shopping** — prices exist; needs a purse and a shop
 - [ ] **Potions** — now unblocked; healing exists and they can call it
@@ -152,8 +169,9 @@ once wrong is worth more than a tidy list.
 
 - [x] **Reactions and opportunity attacks** — leaving an enemy's reach draws one
       swing, and Disengage prevents it. The reaction is a flag on the token
-      because the creature spending it is never the active one. Movement now has
-      a consequence. **Not done:** the swing does not interrupt the move, and
+      because the creature spending it is never the active one. Range is checked
+      from the departure square after movement persists. Movement now has a
+      consequence. **Not done:** the swing does not interrupt the move, and
       Ready still does not exist — see the two entries below.
 - [ ] **Hide** — needs Stealth, plus per-token visibility
 - [ ] **Attunement and charges** — a new system touching every item

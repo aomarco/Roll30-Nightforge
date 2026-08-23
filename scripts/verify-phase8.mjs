@@ -93,7 +93,11 @@ for (const control of [
   "End Turn",
   "validateSwapLoadout",
 ]) if (!drawer.includes(control)) failures.push(`Combat Commands drawer is missing ${control}.`);
-if (!/onClick=\{end\}\s+disabled=\{busy\}/.test(drawer)) failures.push("End Turn is not independently reachable after Action is spent.");
+// End Turn remains independent of Action economy. The only added gate is the
+// mandatory death save on a dying creature's own turn.
+if (!/onClick=\{end\}\s+disabled=\{busy \|\| \(dying && !stable && !resources\.deathSaveRolled\)\}/.test(drawer)) {
+  failures.push("End Turn is not independently reachable after Action is spent, apart from the required death save.");
+}
 if (!drawer.includes("togglePanel(\"attack\")")) failures.push("The Attack command is not connected through the command bar.");
 
 const functionalCss = (await read("src/styles/functional-states.css")).replace(/\/\*[\s\S]*?\*\//g, "");

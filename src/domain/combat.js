@@ -589,8 +589,16 @@ export function performWeaponSwap(scene, loadout) {
 export function endTurn(scene) {
   const context = activeTurnContext(scene);
   if (!context.ok) return context;
-  const { tokens, order, activeIndex, token } = context.value;
+  const { tokens, order, activeIndex, token, resources } = context.value;
   if (!order.length) return failure("INITIATIVE_EMPTY", "The initiative order is empty.", "Return to Setup and restart Battle.");
+  // A death saving throw is the dying Hero's turn, not an optional command the
+  // player can skip. Keep the rule here as well as disabling the UI button so
+  // every caller, present and future, gets the same protection.
+  if (isDying(token) && !isStable(token) && !resources.deathSaveRolled) return failure(
+    "DEATH_SAVE_REQUIRED",
+    `${token.name} must roll a death saving throw before ending the turn.`,
+    "Roll the death save, then end the turn.",
+  );
   let nextIndex = null;
   let wrapped = false;
   for (let offset = 1; offset <= order.length; offset += 1) {
