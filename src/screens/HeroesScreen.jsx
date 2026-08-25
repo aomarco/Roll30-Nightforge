@@ -37,6 +37,7 @@ import {
 } from "../domain/heroes.js";
 import { useDialogA11y } from "../ui/useDialogA11y.js";
 import GearChapter from "./GearChapter.jsx";
+import CoinEditor from "./CoinEditor.jsx";
 
 const okay = () => ({ ok: true });
 const CLASS_ICONS = { fighter: Sword, wizard: Wand2 };
@@ -664,6 +665,7 @@ export default function HeroesScreen({
                 </div>
             </section>
 
+            <CoinEditor coins={activeHero.coins} onChange={(coins) => apply({ coins })} busy={busy} title="Coin purse" />
             <GearChapter key={activeHero.id} hero={activeHero} apply={apply} busy={busy} />
           </>
         )}

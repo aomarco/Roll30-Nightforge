@@ -2,6 +2,7 @@ import { ITEM_BY_ID } from "./catalog.js";
 import { activeTurnContext } from "./combat.js";
 import { isIncapacitated } from "./conditions.js";
 import { abilityModifier } from "./heroes.js";
+import { coinsAreEmpty, transferCoins } from "./money.js";
 import {
   inventoryQuantity,
   normalizeInventoryEntries,
@@ -47,6 +48,79 @@ const cellKey = (cell) => `${cell.column}:${cell.row}`;
 const sameOrAdjacent = (left, right) =>
   Math.max(Math.abs(left.column - right.column), Math.abs(left.row - right.row)) <= 1;
 const randomUnit = (random) => Math.max(0, Math.min(0.999999999999, Number(random?.()) || 0));
+
+function editableInitiativeContext(scene) {
+  if (!scene?.encounter || scene.encounter.status !== "active") return failure(
+    "ACTIVE_BATTLE_REQUIRED",
+    "Initiative can be edited only during an active Battle.",
+    "Start Battle before changing initiative.",
+  );
+  const tokens = normalizeTableTokens(scene.tokens);
+  const order = scene.encounter.initiativeOrder?.filter((tokenId) => tokens.some((token) => token.id === tokenId)) || [];
+  const activeTokenId = order[scene.encounter.activeIndex] || null;
+  return success({ tokens, order, activeTokenId });
+}
+
+const sortedInitiativeOrder = (order, initiatives) => {
+  const priorIndex = new Map(order.map((tokenId, index) => [tokenId, index]));
+  return [...order].sort((left, right) =>
+    initiatives[right] - initiatives[left] || priorIndex.get(left) - priorIndex.get(right));
+};
+
+function initiativeEncounter(scene, order, initiatives, activeTokenId, logEntry) {
+  return {
+    ...scene.encounter,
+    initiativeOrder: order,
+    initiatives,
+    activeIndex: Math.max(0, order.indexOf(activeTokenId)),
+    log: appendEncounterLog(scene.encounter.log, logEntry),
+  };
+}
+
+export function setEncounterInitiative(scene, tokenId, score) {
+  const context = editableInitiativeContext(scene);
+  if (!context.ok) return context;
+  const token = context.value.tokens.find((entry) => entry.id === tokenId);
+  if (!token) return failure("INITIATIVE_TOKEN_MISSING", "That token is no longer in initiative.", "Choose a token in the current turn order.");
+  const parsed = Number(score);
+  if (!Number.isFinite(parsed)) return failure("INITIATIVE_SCORE_INVALID", "Initiative needs a number.", "Enter a score from -99 to 99.");
+  const initiative = Math.max(-99, Math.min(99, Math.floor(parsed)));
+  const initiatives = { ...scene.encounter.initiatives, [token.id]: initiative };
+  const order = sortedInitiativeOrder(context.value.order, initiatives);
+  return success({ encounter: initiativeEncounter(scene, order, initiatives, context.value.activeTokenId, `${token.name}'s initiative changes to ${initiative}.`) }, { tokenId, initiative });
+}
+
+export function rerollEncounterInitiatives(scene, { random = Math.random } = {}) {
+  const context = editableInitiativeContext(scene);
+  if (!context.ok) return context;
+  const initiatives = Object.fromEntries(context.value.tokens
+    .filter((token) => context.value.order.includes(token.id))
+    .map((token) => [token.id, Math.floor(randomUnit(random) * 20) + 1 + token.initiativeBonus]));
+  const order = sortedInitiativeOrder(context.value.order, initiatives);
+  return success({ encounter: initiativeEncounter(scene, order, initiatives, context.value.activeTokenId, "Initiative is rerolled for every creature; the active turn is preserved.") }, { initiatives });
+}
+
+export function moveTiedInitiative(scene, tokenId, direction) {
+  const context = editableInitiativeContext(scene);
+  if (!context.ok) return context;
+  const from = context.value.order.indexOf(tokenId);
+  const to = from + (direction === "up" ? -1 : direction === "down" ? 1 : 0);
+  if (from < 0 || to < 0 || to >= context.value.order.length) return failure(
+    "INITIATIVE_MOVE_UNAVAILABLE",
+    "That token cannot move farther in the turn order.",
+    "Choose the other direction or edit its initiative score.",
+  );
+  const otherId = context.value.order[to];
+  if (scene.encounter.initiatives?.[tokenId] !== scene.encounter.initiatives?.[otherId]) return failure(
+    "INITIATIVE_NOT_TIED",
+    "Manual ordering is reserved for creatures with the same initiative score.",
+    "Edit the score first or choose a tied neighbour.",
+  );
+  const order = [...context.value.order];
+  [order[from], order[to]] = [order[to], order[from]];
+  const token = context.value.tokens.find((entry) => entry.id === tokenId);
+  return success({ encounter: initiativeEncounter(scene, order, scene.encounter.initiatives, context.value.activeTokenId, `${token.name}'s initiative tie is resolved manually.`) }, { tokenId, direction });
+}
 
 export const AMMUNITION_BY_WEAPON = Object.freeze({
   "crossbow-light": "crossbow-bolt",
@@ -523,6 +597,30 @@ export function takeOneFromOpenChest(scene, chestId, itemId, viewport) {
   }, { chestId, item, quantityRemaining: inventoryQuantity(chestInventory, itemId) });
 }
 
+export function takeCoinFromOpenChest(scene, chestId, denominationId, viewport, amount = 1) {
+  const available = openChestAvailability(scene, chestId, viewport);
+  if (!available.ok) return available;
+  const { token, resources } = available.value;
+  if (!available.value.alreadyOpen) return failure(
+    "CHEST_NOT_OPEN",
+    "This chest was not opened by the active token this turn.",
+    "Open an adjacent chest with the Bonus Action first.",
+  );
+  const chests = normalizeChests(scene?.chests);
+  const chest = chests.find((entry) => entry.id === chestId);
+  const transfer = transferCoins(chest?.coins, token.coins, denominationId, amount);
+  if (!transfer.ok) return failure(transfer.code, transfer.message, "Choose a coin denomination that is still in the chest.", true);
+  return success({
+    tokens: updateToken(available.value.tokens, token.id, { coins: transfer.destination }),
+    chests: updateChest(chests, chest.id, { coins: transfer.source }),
+    encounter: {
+      ...scene.encounter,
+      resources: { [token.id]: resources },
+      log: appendEncounterLog(scene.encounter.log, `${token.name} takes ${transfer.amount} ${transfer.denomination.name.toLowerCase()} coin${transfer.amount === 1 ? "" : "s"} from the chest.`),
+    },
+  }, { chestId, denomination: transfer.denomination, amount: transfer.amount, quantityRemaining: transfer.source[denominationId] });
+}
+
 /**
  * Looting a defeated token works exactly like looting a chest: stand next to
  * it, spend the Bonus Action to open it, then take one unit at a time. A body
@@ -563,7 +661,7 @@ export function lootTokenAvailability(scene, lootTokenId, viewport) {
 }
 
 export const lootCommandOptions = (scene, viewport) => normalizeTableTokens(scene?.tokens)
-  .filter((token) => token.hp <= 0 && token.inventory.length)
+  .filter((token) => token.hp <= 0 && (token.inventory.length || !coinsAreEmpty(token.coins)))
   .map((token) => ({
     token,
     availability: lootTokenAvailability(scene, token.id, viewport),
@@ -622,6 +720,32 @@ export function takeOneFromDefeatedToken(scene, lootTokenId, itemId, viewport) {
       log: appendEncounterLog(scene.encounter.log, `${token.name} takes 1 ${item.name} from ${quarry.name}.`),
     },
   }, { lootTokenId, item, quantityRemaining: inventoryQuantity(quarryInventory, itemId) });
+}
+
+export function takeCoinFromDefeatedToken(scene, lootTokenId, denominationId, viewport, amount = 1) {
+  const available = lootTokenAvailability(scene, lootTokenId, viewport);
+  if (!available.ok) return available;
+  const { token, resources, quarry } = available.value;
+  if (!available.value.alreadyOpen) return failure(
+    "LOOT_TOKEN_NOT_OPEN",
+    "This body was not searched by the active token this turn.",
+    "Search an adjacent defeated token with the Bonus Action first.",
+  );
+  const transfer = transferCoins(quarry.coins, token.coins, denominationId, amount);
+  if (!transfer.ok) return failure(transfer.code, transfer.message, `Choose a coin denomination still carried by ${quarry.name}.`, true);
+  const tokens = updateToken(
+    updateToken(available.value.tokens, quarry.id, { coins: transfer.source }),
+    token.id,
+    { coins: transfer.destination },
+  );
+  return success({
+    tokens,
+    encounter: {
+      ...scene.encounter,
+      resources: { [token.id]: resources },
+      log: appendEncounterLog(scene.encounter.log, `${token.name} takes ${transfer.amount} ${transfer.denomination.name.toLowerCase()} coin${transfer.amount === 1 ? "" : "s"} from ${quarry.name}.`),
+    },
+  }, { lootTokenId, denomination: transfer.denomination, amount: transfer.amount, quantityRemaining: transfer.source[denominationId] });
 }
 
 export function retrievalAvailability(scene, battleItemId, viewport) {

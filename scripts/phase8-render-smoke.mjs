@@ -133,7 +133,7 @@ try {
   }));
   // Battle's top-right is now the Scene settings glyph alone, matching setup.
   assert.match(branchMarkup, /aria-label="Scene settings"/);
-  assert.doesNotMatch(branchMarkup, /5 ft/);
+  assert.doesNotMatch(branchMarkup, /nf-state-table-tools-trigger/);
   assert.match(branchMarkup, /Attack is unavailable after moving in the weapon-swap branch/);
   assert.match(branchMarkup, /Dash is unavailable after a weapon swap/);
   assert.match(branchMarkup, /Weapons were already swapped this turn/);

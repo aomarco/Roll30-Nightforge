@@ -11,6 +11,7 @@ import {
   SKILLS,
   subraceById,
 } from "./heroes.js";
+import { normalizeCoins } from "./money.js";
 import { ITEM_BY_ID } from "./catalog.js";
 import { normalizeEquipment, normalizeInventoryEntries } from "./items.js";
 import {
@@ -140,6 +141,7 @@ export function createHeroRecord(
     ),
     toolProficiencies: cleanIdList(input.toolProficiencies),
     inventory: inventoryResult.inventory,
+    coins: normalizeCoins(input.coins),
     loadout: cleanLoadout(input.loadout),
     armorId: nullableId(input.armorId),
     shieldId: nullableId(input.shieldId),

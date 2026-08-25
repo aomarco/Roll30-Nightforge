@@ -73,7 +73,8 @@ above the map.
 down chests, adjust the map artwork, set the grid size. Nothing is committed;
 there's no turn order and no dice.
 
-**Battle.** You fight. Initiative is rolled, turn order is fixed, and the rules
+**Battle.** You fight. Initiative is rolled, the order can be corrected by the
+GM, and the rules
 apply. Movement costs, actions get spent, attacks resolve. You can abandon back
 to Setup at any point, which throws away the fight but keeps everything you
 arranged.
@@ -180,10 +181,10 @@ to do instead.
 
 ## Walls and line of sight
 
-- **Draw walls** as line segments on the map. Two kinds:
-  - **Full walls** block both movement and line of sight completely.
-  - **Half walls** don't block, but grant cover — attacks crossing them suffer
-    disadvantage.
+- **Draw walls** as line segments on the map. Three kinds:
+  - **Half-cover walls** block movement and grant +2 AC against crossing shots.
+  - **Three-quarters-cover walls** block movement and grant +5 AC.
+  - **Full walls** provide total cover and block the shot entirely.
 - **Hide walls** with a toggle. The wall still works; you just can't see it.
   This is for the person running the game who wants the players to discover
   where the walls are by walking into them.
@@ -214,8 +215,8 @@ to do instead.
   [`TODO.md`](./TODO.md).
 - **13 mechanical backgrounds, 9 alignments, 16 languages, 18 skills.** Each
   background grants its two skills, tool proficiencies, and the catalog-backed
-  part of a fixed starting-equipment choice. Money and narrative keepsakes wait
-  for their own systems. Changing background removes the previous grants
+  part of a fixed starting-equipment choice. Narrative keepsakes wait for their
+  own system. Changing background removes the previous grants
   without erasing choices or gear that came from somewhere else.
 - **Point buy** with the standard 27-point budget. Scores run 8–15 before racial
   bonuses, costing 0/1/2/3/4/5/7/9 respectively. Overspending is refused with a
@@ -271,7 +272,7 @@ to do instead.
 - **Every token carries** a name, colour, side, position, HP and max HP, AC,
   walking/flying/swimming/climbing speeds, all six ability scores, save
   proficiencies, level, size, conditions and their immunities/expiry rounds,
-  an inventory, a list of attacks, its damage defences, its death-save tally,
+  an inventory, a five-denomination coin purse, a list of attacks, its damage defences, its death-save tally,
   and the turn-scoped states — whether it is Dodging, whether it has Disengaged,
   whether its reaction is still available, and any Help an ally gave it.
 - **Those last four live on the token rather than on turn resources**, because
@@ -328,9 +329,10 @@ to do instead.
   identical on the sheet while behaving completely differently at the dice.
 - **141 monsters have Multiattack**, imported as a number of attacks per Action
   (see the attack rules below).
-- **Monster inventories import empty.** The SRD does not publish loot tables —
-  only 34 of 334 monsters mention armour at all. Rather than invent loot, they
-  arrive empty for you to fill in.
+- **Monster inventories contain only weapons already named by their attacks.**
+  A Goblin arrives carrying its Scimitar and Shortbow; a Wolf's Bite creates no
+  item. Natural attacks, armour, coins, and treasure are never inferred or
+  generated.
 - **The monster catalogue is lazy-loaded.** At 599KB it would outweigh
   everything else, so it is fetched as a separate chunk the first time the
   monster browser is opened. The initial download is 369KB of application code
@@ -385,8 +387,8 @@ split is the single most important design decision in the combat code.
   out of reach.
 - **Range tiers are honoured** — melee reach, extended Reach, normal range,
   long range, and thrown range each behave differently.
-- **Full walls refuse the attack outright** with a line-of-sight message. Half
-  walls allow it at disadvantage.
+- **Cover modifies the target, not the dice.** Half cover adds +2 AC,
+  three-quarters adds +5 AC, and a full wall refuses the attack as total cover.
 - **Illegal attacks cost nothing.** An attempt that is blocked or out of range
   does not spend your Action. You get the refusal and you're still standing
   where you were with everything intact.
@@ -425,8 +427,9 @@ split is the single most important design decision in the combat code.
 
 ## Turns and actions
 
-- **Initiative is rolled at battle start** and fixes the turn order for the
-  fight.
+- **Initiative is rolled at battle start and remains editable.** Change any
+  score, reroll everyone while preserving the active turn, or move equal scores
+  up and down to settle a tie by hand.
 - **Surprise is chosen in Setup.** A surprised creature loses its turn in round
   one and cannot react before that place in the order has passed. It returns to
   the ordinary order in round two without any manual cleanup.
@@ -467,21 +470,20 @@ split is the single most important design decision in the combat code.
   or released freely, and dragging costs double movement unless the target is
   two sizes smaller. Shove can apply Prone or push five feet, but never through
   a wall, occupied square, or board edge.
+- **Forced movement has a shared push, pull, and slide engine.** The active
+  creature can be used as the source for push/pull, while eight directional
+  slide controls cover spells, traps, and GM-authored effects. Distance is
+  selectable, obstacles stop the movement early, no speed is spent, and forced
+  movement never provokes an opportunity attack. Shove uses this same engine.
 - **Opportunity attacks.** Leaving a square an enemy can reach draws one melee
   swing from them. Moving while staying inside their reach draws nothing, and a
   creature only gets one, because a reaction refreshes at the start of its own
-  turn rather than per victim. The swing checks range from the square the mover
-  left, even though the completed movement is already visible on the board.
+  turn rather than per victim. Movement pauses on the departure square before
+  the creature steps out of reach, then continues only after the reaction queue
+  finishes and only if the mover is still able to move.
 - **A reaction lives on the creature, not on the turn.** It has to: the creature
   spending one is by definition not the active one. It is spent when the swing
   is taken and comes back at the start of that creature's own turn.
-- **The swing does not interrupt the move.** By the rules an opportunity attack
-  happens mid-step; here the mover finishes their route and the attack resolves
-  after, one at a time through the ordinary attack cinematic. Making movement
-  interruptible would mean rewriting the plan-and-commit split, and by the time
-  the route is clicked the player has already committed to the destination — so
-  the interruption would change nothing they could act on. It is recorded in
-  `docs/TODO.md` as a real deviation rather than glossed as done.
 - **Swap** changes your equipped weapons mid-fight, with legality checks and
   ordering rules about what you can still do afterwards.
 - **Turns never end automatically.** The app will not advance for you, even when
@@ -505,6 +507,9 @@ split is the single most important design decision in the combat code.
 - **Advantage and disadvantage** are chosen from a three-way control and combine
   with condition-derived ones using the same cancellation rule as attacks. A
   requested advantage and a Restrained disadvantage produce a normal roll.
+- **Cover applies to sourced Dexterity saves.** The active creature is treated
+  as the effect source: half cover adds +2, three-quarters adds +5, and total
+  cover refuses the generic save because the source has no line through.
 - **Skill proficiency is copied onto the token** when it joins the battle, for
   the same reason save proficiency is: a check has to be answerable from the
   token alone, without reaching back into a Hero record that may have changed.
@@ -629,11 +634,11 @@ split is the single most important design decision in the combat code.
 ## Chests and loot
 
 - **Place chests** on a Battle map during Setup and fill them from the full item
-  catalogue.
+  catalogue plus CP, SP, EP, GP, and PP.
 - **Opening a chest costs a Bonus Action** and requires being in an adjacent
   square.
 - **You take one unit at a time.** Each take is a separate transfer, and the
-  chest depletes item by item until it's empty.
+  chest depletes item or coin at a time until it's empty.
 - **Depleted chests stay depleted through a restart.** Restarting a battle
   resets HP, initiative, rounds, resources, conditions, and thrown weapons —
   but not chests you already emptied. Looting is progress, not part of the
@@ -647,6 +652,9 @@ split is the single most important design decision in the combat code.
   trying to loot yourself.
 - **This is the reason monsters have inventories at all** — so the party can
   take what they were carrying.
+- **Money is inventory, not a shop.** Heroes, tokens, chests, and defeated
+  creatures persist five coin counts. Coin values are known and displayed, but
+  buying and selling are intentionally not implemented yet.
 
 ## Thrown weapons and ammunition
 
@@ -830,12 +838,12 @@ split is the single most important design decision in the combat code.
 - **`npm run verify` is the whole gate** and is exactly what CI runs: every unit
   test, every render smoke suite, every phase verifier, the browser journeys,
   a dependency audit, and a production build.
-- **353 unit tests** covering domain rules, repositories, and integration.
+- **360 unit tests** covering domain rules, repositories, and integration.
 - **30 pinned-Chromium browser journeys** driving the real app.
 - **21 deterministic visual baselines** per platform.
 - **Three kinds of check, by design:**
   - **Unit tests** (`phaseN.test.js`, `rules.test.js`, `reactions.test.js`,
-    `expansion.test.js`) prove
+    `expansion.test.js`, `workflow-features.test.js`) prove
     the rules are right
   - **Render smoke** (`phaseN-render-smoke.mjs`, `rules-render-smoke.mjs`,
     `reactions-render-smoke.mjs`, `expansion-render-smoke.mjs`)
@@ -892,6 +900,6 @@ one, change it here too:
 | Skills | 18 | |
 | Experience thresholds | 20 | `src/domain/heroes.js` |
 | Error codes | 70+ | across `src/domain/` |
-| Unit tests | 353 | `src/*.test.js` |
+| Unit tests | 360 | `src/*.test.js` |
 | Browser journeys | 30 | Playwright |
 | Acceptance journeys | 47 | `PARITY_REGISTER.md` |

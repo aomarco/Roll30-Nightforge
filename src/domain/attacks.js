@@ -322,21 +322,27 @@ const weaponRangeAtDistance = (weapon, distanceFeet) => {
 const percentPoint = (point) => ({ x: Number(point?.xPercent) || 0, y: Number(point?.yPercent) || 0 });
 
 export function attackLineOfSight(scene, attacker, target, usage) {
-  if (usage === "melee") return { state: "clear", blockingWallIds: [], halfWallIds: [] };
+  if (usage === "melee") return { state: "clear", coverLevel: "none", coverBonus: 0, blockingWallIds: [], halfWallIds: [], threeQuarterWallIds: [] };
   const start = percentPoint(attacker.position);
   const end = percentPoint(target.position);
   const blockingWallIds = [];
   const halfWallIds = [];
+  const threeQuarterWallIds = [];
   for (const wall of normalizeWalls(scene?.walls)) {
     for (let index = 1; index < wall.points.length; index += 1) {
       if (!segmentsIntersect(start, end, percentPoint(wall.points[index - 1]), percentPoint(wall.points[index]))) continue;
-      const list = wall.type === "half" ? halfWallIds : blockingWallIds;
+      const list = wall.type === "half"
+        ? halfWallIds
+        : wall.type === "three-quarters"
+          ? threeQuarterWallIds
+          : blockingWallIds;
       if (!list.includes(wall.id)) list.push(wall.id);
     }
   }
-  if (blockingWallIds.length) return { state: "blocked", blockingWallIds, halfWallIds };
-  if (halfWallIds.length) return { state: "half-cover", blockingWallIds, halfWallIds };
-  return { state: "clear", blockingWallIds, halfWallIds };
+  if (blockingWallIds.length) return { state: "blocked", coverLevel: "total", coverBonus: null, blockingWallIds, halfWallIds, threeQuarterWallIds };
+  if (threeQuarterWallIds.length) return { state: "three-quarters-cover", coverLevel: "three-quarters", coverBonus: 5, blockingWallIds, halfWallIds, threeQuarterWallIds };
+  if (halfWallIds.length) return { state: "half-cover", coverLevel: "half", coverBonus: 2, blockingWallIds, halfWallIds, threeQuarterWallIds };
+  return { state: "clear", coverLevel: "none", coverBonus: 0, blockingWallIds, halfWallIds, threeQuarterWallIds };
 }
 
 export function attackTargetEligibility(scene, {
@@ -374,8 +380,8 @@ export function attackTargetEligibility(scene, {
     true,
   );
   // Opportunity attacks land immediately before the creature leaves reach.
-  // Movement is already saved when the queued reaction resolves, so use the
-  // recorded departure square for range while damaging the real moved token.
+  // Use the recorded departure square for range while damaging the real token;
+  // the UI may have saved a partial route to that boundary or paused at origin.
   const targetingPosition = kind === ATTACK_KIND_REACTION && targetPosition
     ? targetPosition
     : target.position;
@@ -426,7 +432,6 @@ export function attackRollSources({ attacker, target, weapon, range, lineOfSight
   if (attacker.size === "small" && hasProperty(weapon, "heavy")) sources.push({ mode: "disadvantage", code: "small-heavy", label: "Small creature with Heavy weapon" });
   if (weapon.id === "lance" && range.distanceFeet === 5) sources.push({ mode: "disadvantage", code: "lance-close", label: "Lance at 5 feet" });
   if (kind === ATTACK_KIND_ACTION && resources.swapped) sources.push({ mode: "disadvantage", code: "attack-after-swap", label: "Attack after weapon Swap" });
-  if (lineOfSight.state === "half-cover") sources.push({ mode: "disadvantage", code: "half-wall", label: "Half-wall shot" });
   // A Dodging creature is harder to hit with everything. The exception is a
   // creature that cannot actually dodge: the Action does nothing for someone
   // incapacitated or pinned in place, and the flag can outlive the condition
@@ -544,7 +549,8 @@ export function performWeaponAttack(scene, specification = {}, {
     ? option.attack.toHit
     : ability.modifier + proficiency + magic.attack;
   const attackTotal = naturalRoll + attackBonus;
-  const hit = naturalRoll === 20 || (naturalRoll !== 1 && attackTotal >= target.ac);
+  const targetAc = target.ac + (lineOfSight.coverBonus || 0);
+  const hit = naturalRoll === 20 || (naturalRoll !== 1 && attackTotal >= targetAc);
   const autoCritical = hit && targetAutoCritical(target.conditions, range.usage === "melee" ? "melee" : "ranged");
   const critical = hit && (naturalRoll === 20 || autoCritical);
   const damage = hit ? rollWeaponDamage({
@@ -687,7 +693,10 @@ export function performWeaponAttack(scene, specification = {}, {
     magicAttackBonus: magic.attack,
     attackBonus,
     attackTotal,
-    targetAc: target.ac,
+    targetAc,
+    baseTargetAc: target.ac,
+    coverBonus: lineOfSight.coverBonus || 0,
+    coverLevel: lineOfSight.coverLevel,
     hit,
     critical,
     autoCritical,

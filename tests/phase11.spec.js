@@ -474,7 +474,16 @@ test("walking away from a Knight resolves an opportunity attack from the departu
   const hero = page.getByRole("button", { name: /Reaction Hero, use arrow keys to move/ });
   await hero.focus();
   await page.keyboard.press("ArrowLeft");
-  await expect(page.getByRole("status", { name: "Attack result" })).toBeVisible();
+  const attackResult = page.getByRole("status", { name: "Attack result" });
+  await expect(attackResult).toBeVisible();
+  // The move has not landed yet: the opportunity swing owns the departure
+  // boundary, and the saved movement resumes only after its cinematic closes.
+  await expect.poll(() => page.evaluate((stateKey) => {
+    const envelope = JSON.parse(localStorage.getItem(stateKey));
+    const saved = envelope.scenes.find(({ id }) => id === "scene-reaction-regression");
+    return saved.encounter.resources["reaction-hero"].movementSpent;
+  }, STORAGE_KEYS.state)).toBe(0);
+  await attackResult.click();
   await expect.poll(() => page.evaluate((stateKey) => {
     const envelope = JSON.parse(localStorage.getItem(stateKey));
     const saved = envelope.scenes.find(({ id }) => id === "scene-reaction-regression");

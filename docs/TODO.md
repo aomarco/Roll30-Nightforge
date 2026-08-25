@@ -22,7 +22,7 @@ anything you decide against to the bottom **with the reason**.
 | 5 | Feats | No | — |
 | 6 | Character creation | Yes | Point buy, skills, saves, languages |
 | 7 | Skills and ability checks | All 18 | Rollable, with advantage and a DC |
-| 8 | Saving throws | Yes | Rollable; four conditions auto-fail STR and DEX |
+| 8 | Saving throws | Yes | Rollable; four conditions auto-fail STR and DEX; cover applies to sourced DEX saves |
 | 9 | Spells | No | Save DC and attack bonus computed, nothing uses them |
 | 10 | Weapons | All 36 | Yes, incl. properties except Special and Monk |
 | 11 | Armor and shields | All 13 | Yes |
@@ -33,15 +33,15 @@ anything you decide against to the bottom **with the reason**.
 | 16 | Attack rolls | Yes | Advantage, crits, multiattack, two-weapon, thrown, ammo |
 | 17 | Damage | Yes | Typed. Resistance, immunity and vulnerability all apply |
 | 18 | Healing, temp HP, death saves | Yes | Heroes must roll once on their dying turn; healing raises them; adjacent allies can stabilise with Medicine |
-| 19 | Initiative and turns | Yes | Yes |
-| 20 | Movement | Yes | Walking, flying, swimming, climbing, and difficult terrain. No general forced movement |
-| 21 | Reactions | Yes | Opportunity attacks and Ready. An opportunity swing still does not interrupt the move |
+| 19 | Initiative and turns | Yes | Editable scores, reroll-all, and manual tie ordering |
+| 20 | Movement | Yes | Walking, flying, swimming, climbing, difficult terrain, and manual forced movement |
+| 21 | Reactions | Yes | Opportunity attacks interrupt movement; Ready uses the same reaction resource |
 | 22 | Other actions | Partly | Unarmed strikes, Dodge, Disengage, Help, Stabilise, Grapple, and Shove. No Hide |
-| 23 | Vision | Partly | Walls block sight. No cover, light levels, or darkvision |
+| 23 | Vision | Partly | Half, three-quarters, and total cover. No light levels or darkvision |
 | 24 | Concentration | No | — |
 | 25 | Rests | No | No short/long rest, no hit dice |
 | 26 | Loot and chests | Yes | Yes |
-| 27 | Money | Prices exist | Can't buy anything |
+| 27 | Money | Yes | Five coin purses and loot transfers; no shopping |
 | 28 | XP | Yes | Awarded at battle end by hand. Only defeated foes count |
 | 29 | Falling and hazards | No | Decided against — applied by hand with the damage control |
 | 30 | Surprise | Yes | Setup can mark creatures that lose their first turn and cannot react beforehand |
@@ -137,11 +137,9 @@ a rule was once wrong is worth more than a tidy list.
       an enemy, and choose whether its movement, attack, or end of turn releases
       the reaction. The intent expires at the creature's next turn if it never
       fires, and resolving it spends the ordinary reaction resource.
-- [ ] **Interrupting movement with an opportunity attack** — the swing currently
-      resolves after the mover finishes their route. Making it interrupt means
-      making `moveActiveToken` resumable, which is a bigger change than the
-      reaction itself was. Only matters when the swing would down the mover
-      mid-route.
+- [x] **Interrupting movement with an opportunity attack** — movement pauses on
+      the departure square, reactions at that boundary resolve one at a time,
+      and the route resumes only if the mover can still move.
 - [x] **Condition immunity** — monster data is enforced and every Setup token
       has the same editor, so an immune condition cannot be applied.
 - [x] **Condition durations** — apply a condition permanently or for 1, 2, 3,
@@ -162,7 +160,9 @@ a rule was once wrong is worth more than a tidy list.
       adjacent ally can spend an Action on DC 10 Medicine to stabilise them.
 - [x] **Difficult terrain** — paint or erase cells from the Setup rail. Entering
       one costs twice as much movement; flying ignores it.
-- [ ] **Money and shopping** — prices exist; needs a purse and a shop
+- [x] **Money (without shopping)** — Heroes, tokens, and chests carry CP, SP,
+      EP, GP, and PP. Coins transfer through the existing chest/body loot flow.
+      A shop is deliberately not part of this feature.
 - [x] **Potions** — all four SRD healing potions roll their formula, heal the
       active creature or an adjacent living creature, consume one item, and
       spend the Action.
@@ -170,8 +170,11 @@ a rule was once wrong is worth more than a tidy list.
       and catalog-backed starting equipment. Changing background swaps
       only the previous background's grants.
 - [ ] **Racial traits** — 38 individual rules
-- [ ] **Forced movement** — push and pull, needs collision handling
-- [ ] **Cover** — wall geometry exists, but half vs. three-quarters is fiddly
+- [x] **Forced movement** — shared collision-aware push, pull, and directional
+      slide engine. Shove uses the same engine; forced movement spends no speed
+      and draws no opportunity attack.
+- [x] **Cover** — half cover grants +2 AC and Dexterity saves, three-quarters
+      grants +5, and a full wall provides total cover.
 - [x] **Grapple and shove** — contested Athletics versus the defender's better
       Athletics or Acrobatics. Grapple immobilises, supports escape, release,
       and half-speed dragging; Shove either knocks prone or pushes five feet
@@ -180,12 +183,9 @@ a rule was once wrong is worth more than a tidy list.
 ### Months
 
 - [x] **Reactions and opportunity attacks** — leaving an enemy's reach draws one
-      swing, and Disengage prevents it. The reaction is a flag on the token
-      because the creature spending it is never the active one. Range is checked
-      from the departure square after movement persists. Movement now has a
-      consequence. **Not done:** the swing does not interrupt the move, and
-      Ready now uses the same reaction resource; only movement interruption is
-      still outstanding.
+      swing, and Disengage prevents it. Movement pauses at the departure square,
+      the reaction resolves, and a surviving mobile creature resumes its route.
+      Ready uses the same reaction resource.
 - [ ] **Hide** — needs Stealth, plus per-token visibility
 - [ ] **Attunement and charges** — a new system touching every item
 - [ ] **Feats** — each one is bespoke
@@ -203,9 +203,9 @@ a rule was once wrong is worth more than a tidy list.
 
 Condition immunity and durations, surprise, all four movement modes, difficult
 terrain, Ready, healing potions, backgrounds, Grapple and Shove have landed.
-The next smallest combat gap is **interrupting movement with an opportunity
-attack**. After that, **money and shopping** can turn the existing prices into a
-usable economy, followed by the broader **forced movement** system.
+The next smallest combat gap is **Hide**. Shopping remains separate from the
+implemented coin purses because it needs a merchant and transaction workflow,
+not just item prices.
 
 ---
 
@@ -216,7 +216,7 @@ usable economy, followed by the broader **forced movement** system.
       nothing now. New work is named by feature instead — `test:rules`,
       `verify:rules` — so the migration has somewhere to go.
 - [ ] **`README.md` overlaps `FEATURES.md`.** The test count is correct again
-      (353 in both), but the README still duplicates the design language and the
+      (360 in both), but the README still duplicates the design language and the
       screen-by-screen table that now live in `FEATURES.md`. Cut it back to how
       to run it and how to deploy it, and let `FEATURES.md` be the one
       description of the app.
@@ -245,10 +245,12 @@ usable economy, followed by the broader **forced movement** system.
       (56KB), `Phase Completion.txt` (136KB) and
       `NIGHTFORGE_FULL_FUNCTIONALITY_PORT_PLAN.txt` (45KB) sit in the repository
       root and are replaced by `docs/`.
-- [ ] **Monster inventories import empty.** The SRD publishes no loot tables.
-      Needs hand-authoring or a generator.
-- [ ] **Initiative can't be edited** — it's rolled automatically at battle start
-      and can't be re-rolled or tie-broken by hand.
+- [x] **Monster inventories contain their named weapons only.** Exact catalog
+      weapons named by authored attacks are added once. Natural attacks, armour,
+      money, and generated treasure are never inferred.
+- [x] **Initiative is editable.** Scores can be changed, the whole order can be
+      rerolled without losing the active turn, and equal scores can be ordered
+      manually.
 
 ---
 

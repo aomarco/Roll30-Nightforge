@@ -7,6 +7,7 @@ import { CONDITIONS } from "../domain/conditions.js";
 import { DAMAGE_TYPES, damageTypeName } from "../domain/damageTypes.js";
 import { equippedWeapons } from "../domain/items.js";
 import { MAX_VITALITY_ADJUSTMENT } from "../domain/vitality.js";
+import CoinEditor from "./CoinEditor.jsx";
 import {
   DEATH_SAVES_REQUIRED,
   FACTION_LABELS,
@@ -76,6 +77,9 @@ export default function BattleTokenInspector({
   setTempHp,
   rollSave,
   rollCheck,
+  activeToken = null,
+  forceMove,
+  changeCoins,
   round = 1,
 }) {
   const [amount, setAmount] = useState(5);
@@ -84,6 +88,7 @@ export default function BattleTokenInspector({
   const [dc, setDc] = useState(15);
   const [mode, setMode] = useState(CHECK_MODE_NORMAL);
   const [conditionDuration, setConditionDuration] = useState("");
+  const [forcedDistance, setForcedDistance] = useState(5);
   const weapons = equippedWeapons(token);
   const armour = getItem(token.armorId);
   const shield = getItem(token.shieldId);
@@ -268,6 +273,37 @@ export default function BattleTokenInspector({
             </strong>
           </span>
         </div>
+      </section>
+
+      <CoinEditor coins={token.coins} onChange={(coins) => changeCoins(token.id, coins)} busy={disabled} compact title="Coin purse" />
+
+      <section className="nf-state-forced-movement">
+        <div className="unit-top">
+          <span className="unit-label">Forced movement</span>
+          <span className="tag">No movement or reaction spent</span>
+        </div>
+        <label className="field">
+          <span className="label">Distance</span>
+          <select className="sel" value={forcedDistance} onChange={(event) => setForcedDistance(Number(event.target.value))} disabled={disabled}>
+            {[5, 10, 15, 20, 30, 60].map((feet) => <option value={feet} key={feet}>{feet} ft</option>)}
+          </select>
+        </label>
+        {activeToken && activeToken.id !== token.id && (
+          <div className="nf-state-forced-actions">
+            <button type="button" className="btn btn-line" disabled={disabled} onClick={() => forceMove(token.id, { mode: "push", sourceTokenId: activeToken.id, distanceFeet: forcedDistance })}>Push from {activeToken.name}</button>
+            <button type="button" className="btn btn-line" disabled={disabled} onClick={() => forceMove(token.id, { mode: "pull", sourceTokenId: activeToken.id, distanceFeet: forcedDistance })}>Pull toward {activeToken.name}</button>
+          </div>
+        )}
+        <div className="nf-state-forced-directions" role="group" aria-label={`Slide ${token.name}`}>
+          {[
+            ["↖", -1, -1, "north-west"], ["↑", 0, -1, "north"], ["↗", 1, -1, "north-east"],
+            ["←", -1, 0, "west"], ["·", 0, 0, "centre"], ["→", 1, 0, "east"],
+            ["↙", -1, 1, "south-west"], ["↓", 0, 1, "south"], ["↘", 1, 1, "south-east"],
+          ].map(([label, column, row, name]) => column || row ? (
+            <button type="button" className="glyph" key={name} disabled={disabled} aria-label={`Slide ${name}`} title={`Slide ${forcedDistance} feet ${name}`} onClick={() => forceMove(token.id, { mode: "slide", direction: { column, row }, distanceFeet: forcedDistance })}>{label}</button>
+          ) : <span key={name} aria-hidden="true">·</span>)}
+        </div>
+        <p className="note">Push and pull use the active token as the source. Slide gives the GM an exact direction for spells, hazards, and authored abilities. Obstacles stop the move early.</p>
       </section>
 
       <section className="nf-state-battle-rolls">

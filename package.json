@@ -43,9 +43,10 @@
     "verify:reactions": "node scripts/verify-reactions.mjs",
     "test:expansion": "node --test src/expansion.test.js",
     "test:expansion:render": "node scripts/expansion-render-smoke.mjs",
+    "test:workflow-features:render": "node scripts/workflow-features-render-smoke.mjs",
     "acceptance:phase12": "node scripts/phase12-live-acceptance.mjs",
     "verify:dependencies": "npm audit --audit-level=high",
-    "verify": "npm test && npm run test:phase2:render && npm run test:phase3:render && npm run test:phase4:render && npm run test:phase5:render && npm run test:phase6:render && npm run test:phase7:render && npm run test:phase8:render && npm run test:phase9:render && npm run test:phase10:render && npm run test:phase11:render && npm run test:rules:render && npm run test:reactions:render && npm run test:expansion:render && npm run verify:phase1 && npm run verify:phase2 && npm run verify:phase3 && npm run verify:phase4 && npm run verify:phase5 && npm run verify:phase6 && npm run verify:phase7 && npm run verify:phase8 && npm run verify:phase9 && npm run verify:phase10 && npm run test:phase11:browser && npm run verify:phase11 && npm run verify:phase12 && npm run verify:rules && npm run verify:reactions && npm run verify:dependencies && npm run build"
+    "verify": "npm test && npm run test:phase2:render && npm run test:phase3:render && npm run test:phase4:render && npm run test:phase5:render && npm run test:phase6:render && npm run test:phase7:render && npm run test:phase8:render && npm run test:phase9:render && npm run test:phase10:render && npm run test:phase11:render && npm run test:rules:render && npm run test:reactions:render && npm run test:expansion:render && npm run test:workflow-features:render && npm run verify:phase1 && npm run verify:phase2 && npm run verify:phase3 && npm run verify:phase4 && npm run verify:phase5 && npm run verify:phase6 && npm run verify:phase7 && npm run verify:phase8 && npm run verify:phase9 && npm run verify:phase10 && npm run test:phase11:browser && npm run verify:phase11 && npm run verify:phase12 && npm run verify:rules && npm run verify:reactions && npm run verify:dependencies && npm run build"
   },
   "dependencies": {
     "lucide-react": "1.31.0",

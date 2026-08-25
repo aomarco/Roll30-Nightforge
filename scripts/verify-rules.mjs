@@ -190,7 +190,7 @@ for (const integration of [
   "CheckCinematic",
   "checkCinematic",
   "onAwardExperience",
-  "combatLocked = Boolean(cinematic || checkCinematic || retrievalCinematic)",
+  "combatLocked = Boolean(cinematic || checkCinematic || retrievalCinematic || reactionQueue.length || pendingMovement)",
 ]) if (!table.includes(integration)) failures.push(`Table screen is missing ${integration}.`);
 // Persistence must precede presentation, as it does for attacks.
 const present = table.slice(table.indexOf("const presentCheck"), table.indexOf("const rollTokenSave"));

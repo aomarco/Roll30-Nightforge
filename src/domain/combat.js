@@ -339,6 +339,7 @@ export function planActiveMovement(scene, tokenId, destination, viewport, option
     reachableIndex: landingIndex,
     landingIndex,
     landing: positions[landingIndex],
+    stepCosts: route.stepCosts,
     costFeet,
     requestedFeet: route.stepCosts.reduce((total, step) => total + step, 0) * MOVEMENT_FEET_PER_CELL,
     overBudget: landingIndex < route.cells.length - 1,
@@ -351,30 +352,37 @@ export function planActiveMovement(scene, tokenId, destination, viewport, option
 export function moveActiveToken(scene, tokenId, destination, viewport, options = {}) {
   const plan = planActiveMovement(scene, tokenId, destination, viewport, options);
   if (!plan.ok) return plan;
-  if (plan.value.landingIndex <= 0) return failure(
+  const requestedLandingIndex = options.landingIndex === undefined
+    ? plan.value.landingIndex
+    : Math.max(0, Math.min(plan.value.landingIndex, Math.floor(finite(options.landingIndex))));
+  if (requestedLandingIndex <= 0) return failure(
     "NO_LEGAL_MOVEMENT",
     "That destination does not provide a legal movement step.",
     "Choose a reachable empty cell at least 5 feet away.",
     true,
     { plan: plan.value },
   );
+  const landing = plan.value.route[requestedLandingIndex];
+  const costFeet = plan.value.stepCosts
+    .slice(0, requestedLandingIndex)
+    .reduce((total, step) => total + step, 0) * MOVEMENT_FEET_PER_CELL;
   const context = activeTurnContext(scene).value;
   const resources = {
     ...context.resources,
-    movementSpent: context.resources.movementSpent + plan.value.costFeet,
+    movementSpent: context.resources.movementSpent + costFeet,
     swapChoice: context.resources.swapped ? "movement" : context.resources.swapChoice,
   };
-  let tokens = updateToken(context.tokens, tokenId, { position: plan.value.landing });
+  let tokens = updateToken(context.tokens, tokenId, { position: landing });
   if (plan.value.grappledTargetId) {
-    const followPosition = plan.value.route[Math.max(0, plan.value.landingIndex - 1)];
+    const followPosition = plan.value.route[Math.max(0, requestedLandingIndex - 1)];
     tokens = updateToken(tokens, plan.value.grappledTargetId, { position: followPosition });
   }
   const encounter = {
     ...scene.encounter,
     resources: { [tokenId]: resources },
-    log: appendEncounterLog(scene.encounter.log, `${context.token.name} moves ${plan.value.costFeet} feet using ${context.resources.movementMode}${plan.value.grappledTargetId ? " while dragging a grappled creature" : ""}.`),
+    log: appendEncounterLog(scene.encounter.log, `${context.token.name} moves ${costFeet} feet using ${context.resources.movementMode}${plan.value.grappledTargetId ? " while dragging a grappled creature" : ""}.`),
   };
-  return success({ tokens, encounter }, { plan: plan.value });
+  return success({ tokens, encounter }, { plan: { ...plan.value, landingIndex: requestedLandingIndex, landing, costFeet } });
 }
 
 export function selectMovementMode(scene, mode) {
@@ -673,6 +681,123 @@ export function releaseGrapple(scene, targetTokenId) {
   }, { target });
 }
 
+const forcedMovementVector = (sourceCell, targetCell, specification) => {
+  if (specification.mode === "slide") {
+    return {
+      column: Math.sign(finite(specification.direction?.column)),
+      row: Math.sign(finite(specification.direction?.row)),
+    };
+  }
+  const away = {
+    column: Math.sign(targetCell.column - sourceCell.column),
+    row: Math.sign(targetCell.row - sourceCell.row),
+  };
+  return specification.mode === "pull"
+    ? { column: -away.column, row: -away.row }
+    : away;
+};
+
+function resolveForcedMovement(scene, tokens, target, specification, viewport) {
+  const source = specification.sourceTokenId
+    ? tokens.find((entry) => entry.id === specification.sourceTokenId)
+    : null;
+  if (!["push", "pull", "slide"].includes(specification.mode)) return failure(
+    "FORCED_MOVEMENT_MODE_INVALID",
+    "Forced movement must push, pull, or slide the target.",
+    "Choose a listed movement mode.",
+  );
+  if (specification.mode !== "slide" && (!source || source.id === target.id)) return failure(
+    "FORCED_MOVEMENT_SOURCE_INVALID",
+    "Push and pull need another token as their source.",
+    "Choose a different source token.",
+  );
+  const distanceFeet = Math.max(
+    MOVEMENT_FEET_PER_CELL,
+    Math.min(60, Math.floor(finite(specification.distanceFeet, MOVEMENT_FEET_PER_CELL) / MOVEMENT_FEET_PER_CELL) * MOVEMENT_FEET_PER_CELL),
+  );
+  const targetCell = setupCellForPosition(target.position, viewport);
+  const sourceCell = setupCellForPosition(source?.position || target.position, viewport);
+  const vector = forcedMovementVector(sourceCell, targetCell, specification);
+  if (!vector.column && !vector.row) return failure(
+    "FORCED_MOVEMENT_DIRECTION_INVALID",
+    "The target and source do not define a movement direction.",
+    "Choose a slide direction or move the source to another square.",
+  );
+  const metrics = setupGridMetrics(viewport);
+  const occupied = occupiedCellSet({ tokens, chests: scene.chests, movingTokenId: target.id, viewport });
+  let current = targetCell;
+  let movedCells = 0;
+  const requestedCells = distanceFeet / MOVEMENT_FEET_PER_CELL;
+  for (let index = 0; index < requestedCells; index += 1) {
+    const next = { column: current.column + vector.column, row: current.row + vector.row };
+    const blocked = next.column < 0 || next.column >= metrics.columns
+      || next.row < 0 || next.row >= metrics.rows
+      || occupied.has(cellKey(next))
+      || movementEdgeBlocked(current, next, scene.walls, viewport);
+    if (blocked) break;
+    current = next;
+    movedCells += 1;
+  }
+  if (!movedCells) return failure(
+    "FORCED_MOVEMENT_BLOCKED",
+    `${target.name} cannot be moved in that direction.`,
+    "Choose another direction or clear the blocked square.",
+  );
+  const position = setupPositionForCell(current, viewport);
+  let nextTokens = updateToken(tokens, target.id, { position });
+  nextTokens = nextTokens.map((entry) => {
+    const grapplerId = entry.id === target.id ? entry.grappledById : entry.grappledById === target.id ? target.id : null;
+    const grappler = grapplerId ? nextTokens.find((candidate) => candidate.id === grapplerId) : null;
+    if (!grappler || !entry.conditions.includes("grappled") || chebyshevFeet(grappler.position, entry.id === target.id ? position : entry.position, viewport) <= SPECIAL_ATTACK_REACH_FEET) return entry;
+    const { grappled: removed, ...conditionExpiries } = entry.conditionExpiries || {};
+    return { ...entry, conditions: entry.conditions.filter((condition) => condition !== "grappled"), conditionExpiries, grappledById: null };
+  });
+  return success({ tokens: nextTokens }, {
+    target: nextTokens.find((entry) => entry.id === target.id),
+    source,
+    requestedFeet: distanceFeet,
+    movedFeet: movedCells * MOVEMENT_FEET_PER_CELL,
+    stoppedEarly: movedCells < requestedCells,
+  });
+}
+
+/**
+ * Moves a creature without spending its movement or provoking reactions. This
+ * is the common engine for authored push/pull effects and the GM's manual
+ * Battle control; Shove delegates to it as well.
+ */
+export function forceMoveToken(scene, targetTokenId, specification = {}, viewport) {
+  if (!scene?.encounter || scene.encounter.status !== "active") return failure(
+    "ACTIVE_BATTLE_REQUIRED",
+    "Forced movement is available only during an active Battle.",
+    "Start Battle before moving a creature this way.",
+  );
+  const tokens = normalizeTableTokens(scene.tokens);
+  const target = tokens.find((entry) => entry.id === targetTokenId);
+  if (!target || target.dead) return failure(
+    "FORCED_MOVEMENT_TARGET_INVALID",
+    "Choose a living token to move.",
+    "Select a standing or dying creature on the Table.",
+  );
+  const moved = resolveForcedMovement(scene, tokens, target, specification, viewport);
+  if (!moved.ok) return moved;
+  const verb = specification.mode === "pull" ? "pulls" : specification.mode === "slide" ? "slides" : "pushes";
+  const subject = moved.source?.name || "The effect";
+  return success({
+    tokens: moved.value.tokens,
+    encounter: {
+      ...scene.encounter,
+      log: appendEncounterLog(scene.encounter.log, `${subject} ${verb} ${target.name} ${moved.movedFeet} feet${moved.stoppedEarly ? " before an obstacle stops the movement" : ""}.`),
+    },
+  }, {
+    target: moved.target,
+    source: moved.source,
+    requestedFeet: moved.requestedFeet,
+    movedFeet: moved.movedFeet,
+    stoppedEarly: moved.stoppedEarly,
+  });
+}
+
 export function performShove(scene, targetTokenId, mode, viewport, { random = Math.random } = {}) {
   const available = specialAttackAvailability(scene, targetTokenId, viewport, "Shove");
   if (!available.ok) return available;
@@ -695,34 +820,16 @@ export function performShove(scene, targetTokenId, mode, viewport, { random = Ma
     }
   }
   if (won && mode === "push") {
-    const attackerCell = setupCellForPosition(token.position, viewport);
-    const targetCell = setupCellForPosition(target.position, viewport);
-    const destinationCell = {
-      column: targetCell.column + Math.sign(targetCell.column - attackerCell.column),
-      row: targetCell.row + Math.sign(targetCell.row - attackerCell.row),
-    };
-    const metrics = setupGridMetrics(viewport);
-    const occupied = occupiedCellSet({ tokens, chests: scene.chests, movingTokenId: target.id, viewport });
-    const blocked = destinationCell.column < 0 || destinationCell.column >= metrics.columns
-      || destinationCell.row < 0 || destinationCell.row >= metrics.rows
-      || occupied.has(cellKey(destinationCell))
-      || movementEdgeBlocked(targetCell, destinationCell, scene.walls, viewport);
-    if (blocked) {
+    const forced = resolveForcedMovement(scene, tokens, target, {
+      mode: "push",
+      sourceTokenId: token.id,
+      distanceFeet: MOVEMENT_FEET_PER_CELL,
+    }, viewport);
+    if (!forced.ok) {
       successState = false;
       reason = " but there is no open square behind the target";
     } else {
-      const position = setupPositionForCell(destinationCell, viewport);
-      const grappler = target.grappledById ? tokens.find((entry) => entry.id === target.grappledById) : null;
-      const breaksGrapple = grappler && chebyshevFeet(grappler.position, position, viewport) > SPECIAL_ATTACK_REACH_FEET;
-      const { grappled: removed, ...conditionExpiries } = target.conditionExpiries || {};
-      nextTokens = updateToken(tokens, target.id, {
-        position,
-        ...(breaksGrapple ? {
-          conditions: target.conditions.filter((condition) => condition !== "grappled"),
-          conditionExpiries,
-          grappledById: null,
-        } : {}),
-      });
+      nextTokens = forced.value.tokens;
     }
   }
   return success(spendSpecialAttack(

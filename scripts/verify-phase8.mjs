@@ -56,7 +56,10 @@ for (const behavior of [
 ]) if (!combat.includes(behavior)) failures.push(`Phase 8 combat domain is missing ${behavior}.`);
 if (combat.includes("wallsVisible")) failures.push("Movement incorrectly ignores hidden persisted walls.");
 if (!combat.includes("wall.type") || !combat.includes("normalizeWalls")) failures.push("Movement does not preserve both full- and half-wall geometry.");
-if (!combat.includes("movementSpent: context.resources.movementSpent + plan.value.costFeet")) failures.push("Movement does not charge the complete accepted route.");
+const chargesAcceptedRoute = combat.includes("movementSpent: context.resources.movementSpent + costFeet")
+  && combat.includes("plan.value.stepCosts")
+  && combat.includes("slice(0, requestedLandingIndex)");
+if (!chargesAcceptedRoute) failures.push("Movement does not charge the accepted full or interrupted route segment.");
 const addsWalkSpeed = combat.includes("resources.movementBase + token.baseSpeed");
 const addsSelectedModeSpeed = combat.includes("resources.movementBase + modeSpeed")
   && combat.includes("token.speeds?.[resources.movementMode]");

@@ -9,6 +9,7 @@ import { FACTION_LABELS, MAX_ATTACKS_PER_ACTION, TOKEN_FACTIONS, TOKEN_SIZES } f
 import { formatChallengeRating } from "../domain/monsters.js";
 import { useDialogA11y } from "../ui/useDialogA11y.js";
 import GearChapter from "./GearChapter.jsx";
+import CoinEditor from "./CoinEditor.jsx";
 
 const numericFields = [
   ["hp", "HP", 0, null],
@@ -501,6 +502,7 @@ export default function BattleSetupInspector({
   applyTokenEquipment,
   removeToken,
   changeChestItem,
+  changeChestCoins,
   removeChest,
   initialDrawer = null,
 }) {
@@ -538,6 +540,7 @@ export default function BattleSetupInspector({
         </section>
         {drawer === "chest" && (
           <Drawer kicker="Battle cache" title="Fill chest" id="chest-inventory-title" close={close}>
+            <CoinEditor coins={chest.coins} onChange={changeChestCoins} busy={busy} title="Chest coins" />
             <ChestCatalog chest={chest} busy={busy} changeItem={changeChestItem} />
           </Drawer>
         )}
@@ -655,6 +658,7 @@ export default function BattleSetupInspector({
       {drawer === "gear" && (
         <Drawer kicker={token.name} title="Gear & inventory" id="token-gear-title" close={close}>
           <div className="nf-state-table-setup-gear">
+            <CoinEditor coins={token.coins} onChange={(coins) => saveToken({ coins })} busy={busy} title="Coin purse" />
             <GearChapter key={token.id} hero={token} apply={applyTokenEquipment} busy={busy} />
           </div>
         </Drawer>

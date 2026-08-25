@@ -225,7 +225,7 @@ test("full walls block ranged and thrown attacks while half-walls impose cover",
   assert.equal(attackLineOfSight(fullScene, active, targetToken, "melee").state, "clear");
 });
 
-test("full-wall refusal spends nothing while a half-wall attack resolves at disadvantage", () => {
+test("full-wall refusal spends nothing while a half-wall attack resolves against +2 AC", () => {
   const active = token("active", 1, 1, { inventory: [item("shortbow"), item("arrow", 20)], loadout: { mainHand: "shortbow", offHand: null } });
   const targetToken = token("target", 4, 1, { ac: 1, hp: 30, maxHp: 30 });
   const points = [{ xPercent: 30, yPercent: 0 }, { xPercent: 30, yPercent: 30 }];
@@ -238,8 +238,9 @@ test("full-wall refusal spends nothing while a half-wall attack resolves at disa
   const half = battleScene({ tokens: [active, targetToken], walls: [createWall({ id: "half", type: "half", points })] });
   const resolved = performWeaponAttack(half, { weaponId: "shortbow", hand: "mainHand", targetId: "target", viewport: VIEWPORT }, { random: sequence(0.8, 0.5, 0.4) });
   assert.equal(resolved.ok, true);
-  assert.equal(resolved.outcome.mode, "disadvantage");
-  assert.ok(resolved.outcome.sources.some(({ code }) => code === "half-wall"));
+  assert.equal(resolved.outcome.mode, "normal");
+  assert.equal(resolved.outcome.coverBonus, 2);
+  assert.equal(resolved.outcome.targetAc, targetToken.ac + 2);
 });
 
 test("blocked and out-of-range targeting do not mutate or spend Action", () => {
@@ -258,7 +259,7 @@ test("roll modes use one die, keep high, keep low, and cancel opposing sources",
   assert.equal(combineAttackModes([{ mode: "advantage" }, { mode: "disadvantage" }]), ATTACK_MODE_NORMAL);
 });
 
-test("long range, Heavy size, Lance proximity, Swap, and half-wall are disadvantage sources", () => {
+test("long range, Heavy size, Lance proximity, and Swap are disadvantage sources while cover modifies AC", () => {
   const base = { attacker: { size: "small", conditions: [] }, target: { conditions: [] }, resources: { swapped: true }, kind: "action" };
   const sources = attackRollSources({
     ...base,
@@ -266,7 +267,7 @@ test("long range, Heavy size, Lance proximity, Swap, and half-wall are disadvant
     range: { tier: "ranged-long", distanceFeet: 5, disadvantage: true, usage: "ranged" },
     lineOfSight: { state: "half-cover" },
   });
-  assert.deepEqual(sources.map(({ code }) => code), ["ranged-long", "small-heavy", "lance-close", "attack-after-swap", "half-wall"]);
+  assert.deepEqual(sources.map(({ code }) => code), ["ranged-long", "small-heavy", "lance-close", "attack-after-swap"]);
 });
 
 test("normal Attack uses ability, proficiency, and magic bonuses and preserves movement", () => {

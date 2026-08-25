@@ -9,6 +9,7 @@ import {
   Package,
   PenLine,
   RotateCcw,
+  ShieldHalf,
   Skull,
   Ruler,
   Trash2,
@@ -112,9 +113,16 @@ export default function SetupRail({
         <RailButton
           icon={MoreHorizontal}
           label="Half wall"
-          title="Half wall — blocks movement, not sight"
+          title="Half wall — blocks movement and grants +2 AC against shots"
           active={activeTool === "wall-half"}
           onClick={() => chooseTool("wall-half")}
+        />
+        <RailButton
+          icon={ShieldHalf}
+          label="High cover"
+          title="High cover — blocks movement and grants +5 AC against shots"
+          active={activeTool === "wall-three-quarters"}
+          onClick={() => chooseTool("wall-three-quarters")}
         />
         <RailButton
           icon={Ruler}

@@ -13,6 +13,7 @@ import {
   tokenSaveModifier,
   tokenSkillModifier,
 } from "./table.js";
+import { attackLineOfSight } from "./attacks.js";
 
 const success = (value, metadata = {}) => ({ ok: true, value, ...metadata });
 const failure = (code, message, recovery, retryable = false, metadata = {}) => ({ ok: false, code, message, recovery, retryable, ...metadata });
@@ -127,7 +128,7 @@ const verdictText = (outcome) => {
 export function performSavingThrow(scene, specification = {}, { random = Math.random } = {}) {
   const context = rollableToken(scene, specification.tokenId);
   if (!context.ok) return context;
-  const { token } = context.value;
+  const { token, tokens } = context.value;
   const ability = specification.ability;
   if (!ABILITY_KEYS.includes(ability)) return failure(
     "UNKNOWN_SAVE_ABILITY",
@@ -138,9 +139,21 @@ export function performSavingThrow(scene, specification = {}, { random = Math.ra
   const autoFailConditions = conditionAutoFailsSave(token.conditions, ability)
     ? autoFailingSaveConditions(token.conditions, ability)
     : null;
+  const sourceToken = specification.sourceTokenId
+    ? tokens.find((entry) => entry.id === specification.sourceTokenId && entry.id !== token.id)
+    : null;
+  const cover = ability === "dex" && sourceToken && specification.viewport
+    ? attackLineOfSight(scene, sourceToken, token, "ranged")
+    : { state: "clear", coverLevel: "none", coverBonus: 0 };
+  if (cover.state === "blocked") return failure(
+    "SAVE_TOTAL_COVER",
+    `${token.name} has total cover from ${sourceToken.name}.`,
+    "Move the effect source or resolve a save that ignores cover.",
+  );
   const sources = [
     ...requestedModeSource(specification.mode),
     ...conditionSaveModes(token.conditions, ability),
+    ...(cover.coverBonus ? [{ mode: CHECK_MODE_NORMAL, code: `${cover.coverLevel}-cover`, label: `${cover.coverLevel === "half" ? "Half" : "Three-quarters"} cover (+${cover.coverBonus})` }] : []),
   ];
   const outcome = resolveD20({
     token,
@@ -148,11 +161,14 @@ export function performSavingThrow(scene, specification = {}, { random = Math.ra
     ability,
     skill: null,
     dc,
-    modifier: tokenSaveModifier(token, ability),
+    modifier: tokenSaveModifier(token, ability) + (cover.coverBonus || 0),
     sources,
     autoFail: autoFailConditions,
     random,
   });
+  outcome.baseModifier = tokenSaveModifier(token, ability);
+  outcome.coverBonus = cover.coverBonus || 0;
+  outcome.coverLevel = cover.coverLevel;
   const dcText = dc === null ? "" : ` against DC ${dc}`;
   return success({
     encounter: {

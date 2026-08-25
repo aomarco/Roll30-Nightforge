@@ -1795,6 +1795,11 @@
   stroke-dasharray: 7 5;
 }
 
+.nf-state-table-wall-three-quarters {
+  stroke: var(--jade-hi);
+  stroke-dasharray: 12 4 3 4;
+}
+
 .nf-state-table-wall-draft {
   opacity: .72;
 }
@@ -3397,3 +3402,34 @@
 }
 
 .nf-state-table-help-status > .tag { white-space: normal; }
+
+/* Editable initiative keeps selection as the wide target and puts the compact
+   score/tie controls on a second line, so the dock remains usable on narrow
+   maps without nesting interactive controls. */
+.nf-state-initiative-entry { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px; }
+.nf-state-initiative-edit { display: inline-flex; align-items: center; gap: 2px; }
+.nf-state-initiative-edit input {
+  width: 42px;
+  padding: 4px;
+  color: var(--brass);
+  background: rgba(0,0,0,.24);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-xs);
+  font: 700 11px var(--mono);
+  text-align: center;
+}
+.nf-state-initiative-edit .glyph { width: 23px; height: 23px; font-size: 12px; }
+
+.nf-state-coins { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--line-2); border-radius: var(--r-sm); background: rgba(255,255,255,.018); }
+.nf-state-coins .unit-label { display: inline-flex; align-items: center; gap: 6px; }
+.nf-state-coin-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.nf-state-coin { display: grid; grid-template-columns: 1fr; justify-items: center; gap: 3px; min-width: 0; }
+.nf-state-coin > span { font-size: 9px; font-weight: 800; color: var(--brass); }
+.nf-state-coin input { width: 100%; min-width: 0; padding: 5px 2px; color: var(--ink); background: rgba(0,0,0,.24); border: 1px solid var(--line-2); border-radius: var(--r-xs); text-align: center; }
+.nf-state-coin .glyph { width: 23px; height: 23px; }
+.nf-state-coins-compact { padding: 10px; }
+
+.nf-state-forced-movement { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line-2); }
+.nf-state-forced-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.nf-state-forced-directions { display: grid; grid-template-columns: repeat(3, 32px); justify-content: center; gap: 4px; }
+.nf-state-forced-directions > span { display: grid; place-items: center; color: var(--ink-4); }

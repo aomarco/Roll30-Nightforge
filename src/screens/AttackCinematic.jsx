@@ -96,7 +96,7 @@ export default function AttackCinematic({ cinematic, skip }) {
                   <strong className="numeral">{outcome.attackTotal}</strong>
                 </li>
                 <li className="nf-state-cinematic-target" style={{ animationDelay: `${(modifierRows.length + 1) * MODIFIER_STAGGER}ms` }}>
-                  <span><Shield size={12} /> Target AC</span>
+                  <span><Shield size={12} /> Target AC{outcome.coverBonus ? ` (${outcome.coverLevel} cover +${outcome.coverBonus})` : ""}</span>
                   <strong className="numeral">{outcome.targetAc}</strong>
                 </li>
               </ul>

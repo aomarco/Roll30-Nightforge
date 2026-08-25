@@ -1,4 +1,4 @@
-import { ITEM_BY_ID } from "./catalog.js";
+import { ITEM_BY_ID, WEAPONS } from "./catalog.js";
 import {
   isIncapacitated,
   normalizeConditionExpiries,
@@ -20,6 +20,7 @@ import {
   normalizeInventoryEntries,
   wornMagicBonuses,
 } from "./items.js";
+import { normalizeCoins } from "./money.js";
 
 const SKILL_BY_ID = Object.freeze(Object.fromEntries(SKILLS.map((skill) => [skill.id, skill])));
 
@@ -522,6 +523,7 @@ export function normalizeTableToken(input = {}, { id, ordinal = 0 } = {}) {
       : Number(input.challengeRating),
     statBlockNotes: normalizeStatBlockNotes(input.statBlockNotes),
     inventory: inventoryResult.inventory,
+    coins: normalizeCoins(input.coins),
     loadout: input.loadout || { mainHand: null, offHand: null },
     armorId: typeof input.armorId === "string" ? input.armorId : null,
     shieldId: typeof input.shieldId === "string" ? input.shieldId : null,
@@ -663,6 +665,12 @@ export function createMonsterToken(monster, { id, ordinal = 0, position, name } 
   const resistances = normalizeDamageTypeList(monster.damageResistances);
   const immunities = normalizeDamageTypeList(monster.damageImmunities);
   const vulnerabilities = normalizeDamageTypeList(monster.damageVulnerabilities);
+  const catalogWeaponsByName = new Map(WEAPONS.map((weapon) => [weapon.name.toLowerCase(), weapon.id]));
+  const inventory = [...new Set((monster.attacks || [])
+    .map((attack) => String(attack.name || "").trim().replace(/\s*\([^)]*\)\s*$/, "").toLowerCase())
+    .map((attackName) => catalogWeaponsByName.get(attackName))
+    .filter(Boolean))]
+    .map((itemId) => ({ itemId, quantity: 1 }));
   return normalizeTableToken({
     id,
     name: name || monster.name,
@@ -687,6 +695,10 @@ export function createMonsterToken(monster, { id, ordinal = 0, position, name } 
     initiativeBonus: abilityModifier(monster.dexterity),
     attacks: monster.attacks,
     attacksPerAction: monster.attacksPerAction,
+    // Generated stat blocks do not publish treasure. Only weapons explicitly
+    // named by an authored attack become loot; natural attacks and inferred
+    // armour never invent inventory the source did not actually name.
+    inventory,
     // The plain single types the engine can run, split away from the qualified
     // prose it cannot. Both halves are kept: the ids drive the damage rules
     // below, and whatever could not be reduced to an id stays in the notes so
@@ -738,6 +750,7 @@ export function createHeroTokenSnapshot(hero, { id, ordinal = 0, position } = {}
     initiativeBonus: derived.initiative,
     size: derived.size,
     inventory: hero.inventory,
+    coins: hero.coins,
     loadout: hero.loadout,
     armorId: hero.armorId,
     shieldId: hero.shieldId,
@@ -838,6 +851,7 @@ export function normalizeChest(input = {}, { id } = {}) {
     id: chestId,
     position: normalizePosition(input.position || input),
     inventory: normalizeInventoryEntries(input.inventory).inventory,
+    coins: normalizeCoins(input.coins),
   };
 }
 
@@ -845,8 +859,8 @@ export const normalizeChests = (chests) =>
   uniqueNormalizedRecords(chests, (chest) =>
     normalizeChest(chest, { id: chest?.id }));
 
-export const createChest = ({ id, position, inventory = [] } = {}) =>
-  normalizeChest({ id, position, inventory }, { id });
+export const createChest = ({ id, position, inventory = [], coins } = {}) =>
+  normalizeChest({ id, position, inventory, coins }, { id });
 
 export const updateChest = (chests, chestId, patch) =>
   normalizeChests(chests).map((chest) =>
@@ -1319,7 +1333,8 @@ export function normalizeWall(wall) {
   if (!wall || typeof wall.id !== "string" || !wall.id.trim()) return null;
   const points = Array.isArray(wall.points) ? wall.points.map(normalizeWallPoint) : [];
   if (points.length < 2) return null;
-  return { id: wall.id.trim(), type: wall.type === "half" ? "half" : "full", points };
+  const type = ["half", "three-quarters"].includes(wall.type) ? wall.type : "full";
+  return { id: wall.id.trim(), type, points };
 }
 
 export const normalizeWalls = (walls) =>
