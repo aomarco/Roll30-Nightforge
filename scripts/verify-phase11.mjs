@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 
 import { PATH_SEARCH_LIMIT } from "../src/domain/combat.js";
 import { FORBIDDEN_LEGACY_STORAGE_IDENTIFIERS } from "../src/storage/constants.js";
+import { readStyles } from "./style-manifest.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const read = (file) => readFile(resolve(root, file), "utf8");
@@ -18,6 +19,7 @@ const requiredFiles = [
   "src/phase11.test.js",
   "src/ui/ApplicationErrorBoundary.jsx",
   "src/ui/useDialogA11y.js",
+  "src/screens/useTableController.js",
   "tests/error-boundary-harness.html",
   "tests/error-boundary-harness.jsx",
   "tests/phase11.spec.js",
@@ -62,7 +64,7 @@ for (const file of jsxFiles) {
   }
 }
 
-const functionalCss = (await read("src/styles/functional-states.css")).replace(/\/\*[\s\S]*?\*\//g, "");
+const functionalCss = (await readStyles(read)).replace(/\/\*[\s\S]*?\*\//g, "");
 for (const required of [
   ".nf-state-responsive-shell",
   ".nf-state-screen-root",
@@ -103,7 +105,7 @@ for (const file of jsxFiles.filter((entry) => entry.includes(`${resolve(root, "s
 }
 if (dialogCount !== 9) failures.push(`Expected 9 managed dialogs, found ${dialogCount}.`);
 
-const table = await read("src/screens/TableScreen.jsx");
+const table = `${await read("src/screens/TableScreen.jsx")}\n${await read("src/screens/useTableController.js")}`;
 if ((table.match(/document\.addEventListener\("keydown"/g) || []).length !== 1 || !table.includes("document.removeEventListener(\"keydown\"")) failures.push("Table transient keyboard listener is not bounded by cleanup.");
 if (/document\.addEventListener\("pointer/.test(table)) failures.push("Table contains an uncontrolled document-level pointer listener.");
 const pointerMove = table.slice(table.indexOf("const onMapPointerMove"), table.indexOf("const onMapPointerUp"));
@@ -151,12 +153,13 @@ for (const contract of ["getDerivedStateFromError", "componentDidCatch", "Reload
 
 const viteConfig = await read("vite.config.js");
 const indexHtml = await read("index.html");
-for (const contract of ["nightforge-local-fonts", "frozenRemoteFontImport", "codeSplitting", "node_modules"]) {
+for (const contract of ["codeSplitting", "node_modules"]) {
   if (!viteConfig.includes(contract)) failures.push(`Local font build hardening is missing ${contract}.`);
 }
 if (/fonts\.(?:googleapis|gstatic)\.com/.test(indexHtml)) failures.push("index.html still connects to a remote font origin.");
+const coreCss = await read("src/styles/core.css");
 for (const family of ["Nightforge Fraunces", "Nightforge Plus Jakarta Sans", "Nightforge IBM Plex Mono"]) {
-  if (!functionalCss.includes(family)) failures.push(`Bundled font family is missing: ${family}.`);
+  if (!coreCss.includes(family)) failures.push(`Bundled font family is missing: ${family}.`);
 }
 
 const library = await read("src/screens/LibraryScreen.jsx");
@@ -221,10 +224,10 @@ for (const contract of [
 
 const packageJson = JSON.parse(await read("package.json"));
 if (packageJson.devDependencies?.["@playwright/test"] !== "1.62.1") failures.push("Playwright must be pinned exactly to 1.62.1.");
-for (const script of ["test:phase11:render", "test:phase11:browser", "verify:phase11"]) {
+for (const script of ["test:hardening:render", "test:browser", "verify:hardening"]) {
   if (!packageJson.scripts?.[script]) failures.push(`Missing npm script ${script}.`);
 }
-for (const gate of ["test:phase11:render", "test:phase11:browser", "verify:phase11", "build"]) {
+for (const gate of ["test:hardening:render", "test:browser", "verify:hardening", "build"]) {
   if (!packageJson.scripts?.verify?.includes(gate)) failures.push(`Full verification command omits ${gate}.`);
 }
 

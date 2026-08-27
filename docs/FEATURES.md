@@ -785,11 +785,9 @@ split is the single most important design decision in the combat code.
 - **Local fonts in production.** Fraunces for display, Plus Jakarta Sans for
   interface, IBM Plex Mono for numerals, all self-hosted and bundled. The shipped
   site fetches nothing from a font CDN.
-- **The development server still does.** `core.css` keeps a Google Fonts
-  `@import`, and a Vite plugin strips it with a regular expression at build
-  time. So `npm run dev` renders with CDN fonts and the build renders with local
-  ones. It works, but it is one reformat of that line away from silently
-  shipping remote fonts — see [`TODO.md`](./TODO.md).
+- **Local fonts in every environment.** `core.css` owns the bundled Fraunces,
+  Plus Jakarta Sans, and IBM Plex Mono `@font-face` rules. Development and
+  production use the same local font pipeline, with no Google Fonts request.
 
 ## The design language
 
@@ -805,9 +803,11 @@ split is the single most important design decision in the combat code.
   plastic.
 - **`core.css` owns every token and shared primitive.** Screen stylesheets only
   describe what is unique to that screen. No primitive is defined twice.
-- **`functional-states.css` is behaviour-only.** Responsive and state hardening
-  live there, scoped under `.nf-state-` so they never collide with visual
-  styling.
+- **State styles are behavior-only.** Cross-screen hardening lives in
+  `functional-states.css`; screen-specific state rules live in
+  `library-states.css`, `heroes-states.css`, and `table-states.css`. Every
+  selector is scoped under `.nf-state-` so state styling cannot collide with
+  the visual sheets.
 
 ## Building and shipping
 

@@ -1,0 +1,2716 @@
+/* Table, encounter, combat, setup, and monster state rules. */
+
+/* Rules expansion: difficult-terrain cells sit above artwork and below pieces. */
+.nf-state-table-terrain {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.nf-state-table-terrain > i {
+  position: absolute;
+  box-sizing: border-box;
+  background:
+    repeating-linear-gradient(135deg, rgba(224, 176, 85, .22) 0 5px, rgba(224, 176, 85, .08) 5px 10px);
+  border: 1px dashed rgba(224, 176, 85, .72);
+  box-shadow: inset 0 0 12px rgba(224, 176, 85, .12);
+}
+
+.nf-state-command-movement-mode {
+  max-width: 88px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 10px;
+  text-transform: capitalize;
+}
+
+/* Phase 10 conditional encounter states. Permanent Nightforge composition stays frozen. */
+.nf-state-bonus-command-group {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.nf-state-bonus-command-group > .label {
+  margin-bottom: 0;
+}
+
+.nf-state-table-chest-eligible {
+  box-shadow: 0 0 0 2px rgba(224, 176, 85, 0.5), 0 0 24px rgba(224, 176, 85, 0.32);
+}
+
+.nf-state-table-chest-eligible::after {
+  content: "OPEN";
+  position: absolute;
+  left: 50%;
+  bottom: -18px;
+  transform: translateX(-50%);
+  color: var(--brass);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-shadow: 0 1px 4px #000;
+}
+
+.nf-state-table-chest-empty {
+  opacity: 0.72;
+}
+
+.nf-state-loot-list {
+  display: grid;
+  gap: 8px;
+}
+
+.nf-state-loot-list .btn {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  text-align: left;
+}
+
+.nf-state-loot-list .btn > span {
+  display: grid;
+  min-width: 0;
+}
+
+.nf-state-loot-list .btn small {
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nf-state-loot-list .btn em {
+  color: var(--brass);
+  font-style: normal;
+}
+
+.nf-state-loot-empty {
+  min-height: 190px;
+}
+
+.nf-state-battle-item {
+  position: absolute;
+  z-index: 14;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  padding: 4px 7px;
+  border: 1px solid rgba(224, 176, 85, 0.62);
+  border-radius: 999px;
+  background: rgba(18, 18, 24, 0.92);
+  color: var(--brass);
+  font: 700 8px/1 var(--sans);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.42);
+}
+
+.nf-state-battle-item:disabled {
+  cursor: default;
+}
+
+.nf-state-battle-item-ground {
+  border-style: solid;
+}
+
+.nf-state-battle-item-embedded {
+  margin: -24px 0 0 25px;
+  border-color: rgba(242, 97, 122, 0.66);
+  color: var(--foe);
+}
+
+.nf-state-battle-item-eligible {
+  cursor: pointer;
+  box-shadow: 0 0 0 2px rgba(71, 216, 162, 0.42), 0 0 22px rgba(71, 216, 162, 0.3);
+}
+
+.nf-state-battle-item-eligible:focus-visible {
+  outline: 2px solid var(--jade);
+  outline-offset: 3px;
+}
+
+.nf-state-table-embedded-count {
+  position: absolute;
+  right: -7px;
+  bottom: 2px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 20px;
+  height: 17px;
+  padding: 0 4px;
+  border: 1px solid rgba(242, 97, 122, 0.72);
+  border-radius: 999px;
+  background: rgba(37, 12, 20, 0.94);
+  color: var(--foe);
+  font: 800 9px/1 var(--sans);
+}
+
+.nf-state-embedded-inspector .btn {
+  justify-content: flex-start;
+  margin-top: 7px;
+}
+
+.nf-state-battle-inventory .nf-state-table-chest-owned {
+  max-height: 184px;
+  overflow: auto;
+}
+
+.nf-state-battle-complete {
+  position: fixed;
+  z-index: 44;
+  left: 50%;
+  bottom: 28px;
+  display: grid;
+  /* Icon, result copy, the experience readout when there is one, then the
+     actions. The experience column collapses to nothing when it is absent. */
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 16px;
+  width: min(860px, calc(100vw - 72px));
+  padding: 15px 17px;
+  transform: translateX(-50%);
+}
+
+.nf-state-battle-xp {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 12px;
+  border: 1px solid rgba(224, 176, 85, 0.34);
+  border-radius: var(--r-xs);
+  background: rgba(224, 176, 85, 0.09);
+  text-align: right;
+}
+
+.nf-state-battle-xp strong { color: var(--brass); font-size: 16px; }
+.nf-state-battle-xp p { margin: 0; color: var(--muted); font-size: 10.5px; }
+
+.nf-state-battle-complete-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.nf-state-battle-complete-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid rgba(224, 176, 85, 0.48);
+  border-radius: 50%;
+  background: rgba(224, 176, 85, 0.12);
+  color: var(--brass);
+}
+
+.nf-state-battle-complete h2 {
+  margin: 2px 0 3px;
+  color: var(--text);
+  font-size: 17px;
+}
+
+.nf-state-battle-complete p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.nf-state-battle-complete-root .nf-state-table-targetable,
+.nf-state-battle-complete-root .nf-state-table-chest-eligible,
+.nf-state-battle-complete-root .nf-state-battle-item-eligible {
+  box-shadow: none;
+}
+
+.nf-state-retrieval-cinematic {
+  width: min(520px, calc(100vw - 44px));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nf-state-table-chest-eligible,
+  .nf-state-battle-item-eligible,
+  .nf-state-battle-complete,
+  .nf-state-retrieval-cinematic {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ------------------------------------------------------- initiative dock */
+/* Deliberately narrow and short. A fight with four combatants should leave
+   the board alone, so the dock is sized by its contents rather than stretched
+   from the top of the window to the bottom. */
+.nf-state-dock-initiative {
+  width: 268px;
+  bottom: auto;
+  max-height: calc(100% - 106px);
+}
+
+.nf-state-dock-initiative .dock-head { padding: 16px 16px 13px; }
+.nf-state-dock-initiative .dock-head h2 { margin-top: 2px; font-size: 17px; }
+
+.nf-state-initiative {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+}
+
+/* Now a chip in the dock header rather than a block of its own. */
+.nf-state-initiative-round {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  flex: none;
+  margin-left: auto;
+  padding: 3px 8px;
+  border-radius: var(--r-full);
+  background: var(--brass-tint);
+  border: 1px solid rgba(224,176,85,.3);
+}
+
+.nf-state-initiative-round em {
+  font-style: normal;
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.nf-state-initiative-round strong { font-size: 13px; color: var(--brass); }
+
+.nf-state-initiative-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nf-state-initiative-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 12px;
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  text-align: left;
+  transition: background var(--swift), border-color var(--swift);
+}
+
+.nf-state-initiative-row:hover { background: rgba(255,255,255,.045); }
+.nf-state-initiative-row.on { border-color: var(--line-3); background: rgba(255,255,255,.05); }
+
+.nf-state-initiative-now {
+  background: linear-gradient(90deg, var(--jade-tint), transparent);
+  border-color: var(--jade-edge);
+  box-shadow: inset 2px 0 0 var(--jade);
+}
+
+.nf-state-initiative-order {
+  min-width: 23px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--brass);
+  text-align: center;
+}
+
+.nf-state-initiative-face {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: var(--r-full);
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0,0,0,.7);
+}
+
+/* Name and hit points share one line, which is what halves the row height. */
+.nf-state-initiative-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+
+.nf-state-initiative-meta strong {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nf-state-initiative-meta small { flex: none; font-size: 12px; color: var(--ink-3); }
+.nf-state-initiative-x { flex: none; color: var(--foe); }
+
+/* --------------------------------------------------------- battle card */
+.nf-state-battle-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.nf-state-battle-vitals {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.nf-state-battle-hp {
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  background: rgba(3,9,10,.5);
+  border: 1px solid var(--line-2);
+}
+
+.nf-state-battle-hp-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 9px;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+.nf-state-battle-hp-top strong { font-size: 22px; color: var(--ink); }
+.nf-state-battle-hp-top em { font-size: 13px; font-style: normal; color: var(--ink-3); }
+.nf-state-battle-hp-meter { height: 8px; }
+.nf-state-battle-down {
+  display: inline-block;
+  margin-top: 9px;
+  padding: 2px 9px;
+  border-radius: var(--r-full);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--foe);
+  background: var(--foe-tint);
+}
+
+.nf-state-battle-ac {
+  display: grid;
+  place-items: center;
+  gap: 2px;
+  min-width: 96px;
+  padding: 12px;
+  border-radius: var(--r-md);
+  color: var(--ally);
+  background: linear-gradient(180deg, rgba(95,168,245,.14), rgba(6,11,12,.5));
+  border: 1px solid rgba(95,168,245,.3);
+}
+
+.nf-state-battle-ac strong { font-size: 26px; line-height: 1; color: var(--ink); }
+.nf-state-battle-ac span { font-size: 9.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); }
+
+.nf-state-battle-kit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nf-state-battle-kit-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  background: rgba(3,9,10,.45);
+  border: 1px solid var(--line-2);
+}
+
+.nf-state-battle-kit-ico {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: var(--r-xs);
+  color: var(--jade);
+  background: var(--jade-tint);
+}
+
+.nf-state-battle-kit-body { display: flex; flex-direction: column; min-width: 0; }
+.nf-state-battle-kit-body small { font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.nf-state-battle-kit-body strong { font-size: 12.5px; color: var(--ink); overflow-wrap: anywhere; }
+
+.nf-state-battle-save-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 11px;
+}
+
+.nf-state-battle-save {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 8px 4px;
+  border-radius: var(--r-xs);
+  background: rgba(255,255,255,.035);
+  border: 1px solid var(--line);
+}
+
+.nf-state-battle-save small { font-size: 9.5px; letter-spacing: .1em; color: var(--ink-3); }
+.nf-state-battle-save strong { font-size: 15px; color: var(--ink); }
+
+.nf-state-battle-save-proficient {
+  background: var(--jade-tint);
+  border-color: var(--jade-edge);
+}
+.nf-state-battle-save-proficient small { color: var(--jade); }
+.nf-state-battle-save-proficient strong { color: var(--jade-hi); }
+
+/* Saves and skills are buttons now, so they need the affordances of one. */
+.nf-state-battle-save,
+.nf-state-battle-skill {
+  cursor: pointer;
+  transition: border-color .16s ease, background .16s ease, transform .16s ease;
+}
+
+.nf-state-battle-save:hover:not(:disabled),
+.nf-state-battle-skill:hover:not(:disabled) {
+  border-color: var(--jade-edge);
+  background: rgba(255,255,255,.07);
+  transform: translateY(-1px);
+}
+
+.nf-state-battle-save:disabled,
+.nf-state-battle-skill:disabled { cursor: default; opacity: .55; }
+
+.nf-state-battle-skills { margin-top: 2px; }
+
+.nf-state-battle-skill-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 11px;
+}
+
+.nf-state-battle-skill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 9px;
+  border-radius: var(--r-xs);
+  background: rgba(255,255,255,.035);
+  border: 1px solid var(--line);
+  text-align: left;
+}
+
+.nf-state-battle-skill small { font-size: 10px; color: var(--ink-3); }
+.nf-state-battle-skill strong { font-size: 13px; color: var(--ink); }
+.nf-state-battle-skill-proficient { background: var(--jade-tint); border-color: var(--jade-edge); }
+.nf-state-battle-skill-proficient small { color: var(--jade); }
+.nf-state-battle-skill-proficient strong { color: var(--jade-hi); }
+
+/* --------------------------------------- hit point adjustment and rolling */
+.nf-state-battle-vitality,
+.nf-state-battle-rolls { margin-top: 2px; }
+
+.nf-state-battle-vitality-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin-top: 9px;
+}
+
+.nf-state-battle-vitality-amount { flex: 1 1 auto; min-width: 0; }
+.nf-state-battle-vitality-row .btn { flex: 0 0 auto; }
+
+.nf-state-battle-temp {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+  padding: 2px 8px;
+  border: 1px solid rgba(95, 168, 245, 0.42);
+  border-radius: 999px;
+  background: rgba(95, 168, 245, 0.12);
+  color: var(--ally, #5fa8f5);
+  font-size: 10.5px;
+}
+
+.nf-state-battle-roll-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  margin-top: 9px;
+}
+
+.nf-state-battle-dc { flex: 0 0 118px; }
+
+.nf-state-battle-roll-modes {
+  display: flex;
+  flex: 1 1 auto;
+  gap: 5px;
+}
+
+.nf-state-battle-roll-mode { flex: 1 1 0; justify-content: center; }
+
+.nf-state-battle-conditions { margin-top: 2px; }
+
+/* ------------------------------------------------------- check cinematic */
+.nf-state-check-die-void {
+  display: grid;
+  place-items: center;
+  gap: 2px;
+  color: var(--foe, #f2617a);
+}
+
+.nf-state-check-verdict-success { color: var(--jade-hi); }
+.nf-state-check-verdict-failure { color: var(--foe, #f2617a); }
+.nf-state-check-verdict-neutral { color: var(--ink); }
+
+.nf-state-cinematic-absorbed { color: var(--ally, #5fa8f5); font-style: normal; }
+
+.nf-state-hero-xp-ready { color: var(--brass); }
+
+/* --------------------------------------------------------- command bar */
+.nf-state-command-bar {
+  position: absolute;
+  z-index: 22;
+  left: 50%;
+  bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: min(520px, calc(100vw - 320px));
+  transform: translateX(-50%);
+  /* The root is only a positioner. Its children carry the glass, so the empty
+     space between them must not swallow clicks meant for the board. */
+  pointer-events: none;
+}
+
+.nf-state-command-bar > * { pointer-events: auto; }
+
+.nf-state-command-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  max-height: 42vh;
+  margin-bottom: 12px;
+  padding: 14px 16px;
+  overflow-y: auto;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line-2);
+  animation: nf-command-grow 220ms cubic-bezier(.22,.61,.36,1) both;
+}
+
+.nf-state-command-panel-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.nf-state-command-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.nf-state-command-group {
+  margin-top: 4px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.nf-state-command-option {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 12px;
+  border-radius: var(--r-sm);
+  text-align: left;
+  color: var(--ink-2);
+  background: rgba(255,255,255,.04);
+  border: 1px solid var(--line-2);
+  transition: all var(--swift);
+}
+
+.nf-state-command-option:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: var(--jade-edge);
+  background: var(--jade-tint);
+}
+
+.nf-state-command-option:disabled { opacity: .45; cursor: not-allowed; }
+.nf-state-command-option span { display: flex; flex-direction: column; min-width: 0; }
+.nf-state-command-option strong { font-size: 12.5px; color: var(--ink); }
+.nf-state-command-option small { font-size: 10.5px; color: var(--ink-3); overflow-wrap: anywhere; }
+
+.nf-state-command-swap { display: flex; flex-direction: column; gap: 10px; }
+
+.nf-state-command-deck {
+  display: flex;
+  /* Centred on the command row alone. The Speed meter is lifted out of the
+     flow below so its height cannot drag the alignment off. */
+  align-items: center;
+  justify-content: center;
+}
+
+.nf-state-command-console {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* ----- HP and Speed meters, tucked into the top edge of the deck ----- */
+.nf-state-command-gauges {
+  position: absolute;
+  z-index: 1;
+  bottom: calc(100% - 14px);
+  left: 20px;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: calc(100% - 40px);
+  white-space: nowrap;
+}
+
+.nf-state-command-speed,
+.nf-state-command-health {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  white-space: nowrap;
+  padding: 6px 14px 18px;
+  border-radius: var(--r-md) var(--r-md) 0 0;
+  border: 1px solid var(--jade-edge);
+  border-bottom: none;
+  font-size: 11px;
+  cursor: help;
+}
+
+.nf-state-command-health { border-color: rgba(242,97,122,.42); }
+.nf-state-command-health strong {
+  font-size: 12px;
+  color: var(--danger);
+  white-space: nowrap;
+  flex: none;
+  letter-spacing: .02em;
+}
+
+/* ----- Continuous Pixel HP Bar ----- */
+.nf-state-command-health-track {
+  position: relative;
+  display: block;
+  width: 80px;
+  height: 13px;
+  flex: none;
+  border-radius: 3px;
+  background: rgba(242,97,122,.14);
+  border: 1px solid rgba(242,97,122,.38);
+  overflow: hidden;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,.45);
+}
+
+.nf-state-command-health-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #f2617a, #ff8ea1);
+  box-shadow: 0 0 10px rgba(242,97,122,.65);
+  transition: width var(--swift);
+}
+
+.nf-state-command-health-empty .nf-state-command-health-fill { opacity: 0; }
+.nf-state-command-health-empty strong { color: var(--ink-3); }
+
+.nf-state-command-speed em,
+.nf-state-command-health em {
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: .04em;
+  color: var(--ink-2);
+  flex: none;
+  white-space: nowrap;
+}
+
+.nf-state-command-speed strong {
+  font-size: 12px;
+  color: var(--jade);
+  white-space: nowrap;
+  flex: none;
+  letter-spacing: .02em;
+}
+
+.nf-state-command-speed-track {
+  display: inline-flex;
+  gap: 3px;
+  flex: none;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.nf-state-command-speed-cell {
+  width: 11px;
+  height: 13px;
+  flex: none;
+  border-radius: 2px;
+  background: rgba(47,211,180,.10);
+  border: 1px solid var(--jade-edge);
+  transition: background var(--swift), box-shadow var(--swift);
+}
+
+.nf-state-command-speed-dashed .nf-state-command-speed-cell {
+  width: 4px;
+  border-radius: 1px;
+}
+
+.nf-state-command-speed-cell-on {
+  background: linear-gradient(180deg, var(--jade-hi), var(--jade));
+  border-color: var(--jade-hi);
+  box-shadow: 0 0 8px var(--jade-glow);
+}
+
+.nf-state-command-speed-empty { border-color: rgba(242,97,122,.42); }
+.nf-state-command-speed-empty strong { color: var(--danger); }
+
+/* ----- the four command sections ----- */
+.nf-state-command-actions {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  border-radius: var(--r-xl);
+  border: 1px solid var(--line-2);
+  overflow: hidden;
+  transition: border-color var(--swift);
+}
+
+.nf-state-command-bar-open .nf-state-command-actions { border-color: var(--jade-edge); }
+
+.nf-state-command-slot {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  border-left: 1px solid var(--line-2);
+}
+
+.nf-state-command-slot:first-child { border-left: none; }
+
+.nf-state-command-key {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 16px 12px;
+  font-size: 13.5px;
+  font-weight: 600;
+  background: transparent;
+  transition: background var(--swift), color var(--swift), box-shadow var(--swift);
+}
+
+.nf-state-command-key em { font-style: normal; white-space: nowrap; }
+.nf-state-command-key svg {
+  flex: none;
+  display: block;
+  margin: auto;
+}
+
+/* Optical centering compensations for outer pill corner radii */
+.nf-state-command-key-attack svg {
+  transform: translateX(5px);
+}
+
+.nf-state-command-key-bonus svg {
+  transform: translateX(-10px);
+}
+
+.nf-state-command-key-ready { color: var(--jade); }
+.nf-state-command-key-ready svg { filter: drop-shadow(0 0 6px var(--jade-glow)); }
+
+.nf-state-command-key-ready:hover:not(:disabled) {
+  color: var(--jade-hi);
+  background: var(--jade-tint);
+  box-shadow: inset 0 0 24px var(--jade-glow);
+}
+
+/* Dash asks twice; the armed press turns into a tick and changes color */
+.nf-state-command-key-armed {
+  color: #ffe685 !important;
+  background: rgba(229, 181, 103, 0.22) !important;
+  box-shadow: inset 0 0 18px rgba(229, 181, 103, 0.35), inset 0 -3px 0 #ffe685 !important;
+}
+
+.nf-state-command-key-armed svg {
+  filter: drop-shadow(0 0 8px rgba(255, 230, 133, 0.75)) !important;
+  transform: scale(1.15);
+}
+
+.nf-state-command-key-armed:hover:not(:disabled) {
+  color: #ffffff !important;
+  background: rgba(229, 181, 103, 0.32) !important;
+  box-shadow: inset 0 0 24px rgba(229, 181, 103, 0.5), inset 0 -3px 0 #ffffff !important;
+}
+
+.nf-state-command-key-open {
+  color: var(--jade-hi);
+  background: var(--jade-tint);
+  box-shadow: inset 0 -3px 0 var(--jade);
+}
+
+/* Red and inert: the command itself says it cannot be used, so no chip has to
+   spell it out. The reason still arrives on hover, from the wrapping span. */
+.nf-state-command-key-blocked {
+  color: var(--danger);
+  cursor: not-allowed;
+}
+
+.nf-state-command-key-blocked svg { filter: drop-shadow(0 0 6px rgba(242,97,122,.3)); }
+
+.nf-state-command-key-blocked:hover {
+  background: transparent;
+  box-shadow: none;
+  color: var(--danger);
+}
+
+/* ----- End Turn, a ring overlapping the right edge of the deck ----- */
+.nf-state-command-end {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  flex: none;
+  width: 104px;
+  height: 104px;
+  margin-left: -28px;
+  border-radius: var(--r-full);
+  border: 2px solid var(--jade);
+  background: linear-gradient(180deg, #17282d, #0a1114);
+  color: var(--jade);
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 0 26px var(--jade-glow), inset 0 0 22px rgba(47,211,180,.14);
+  transition: color var(--swift), border-color var(--swift), box-shadow var(--swift), background var(--swift);
+}
+
+.nf-state-command-end em { font-style: normal; }
+.nf-state-command-end svg { filter: drop-shadow(0 0 8px var(--jade-glow)); }
+
+.nf-state-command-end:hover:not(:disabled) {
+  color: var(--jade-hi);
+  border-color: var(--jade-hi);
+  background: linear-gradient(180deg, #1f363c, #0a1114);
+  box-shadow: 0 0 40px var(--jade-glow), inset 0 0 30px rgba(47,211,180,.22);
+}
+
+.nf-state-command-end:disabled { opacity: .5; cursor: wait; }
+
+/* Messages sit at the top of the table, clear of the command bar entirely. */
+.nf-state-table-refusal {
+  position: absolute;
+  z-index: 25;
+  left: 50%;
+  top: 72px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 8px 14px;
+  border-radius: var(--r-full);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+  border: 1px solid var(--foe-edge, rgba(242,97,122,.4));
+  transform: translateX(-50%);
+  animation: nf-refusal-in 200ms cubic-bezier(.22,.61,.36,1) both;
+}
+
+@media (max-width: 1180px) {
+  .nf-state-command-bar { width: calc(100vw - 560px); }
+  .nf-state-command-key { gap: 8px; padding: 15px 6px; font-size: 12.5px; }
+  .nf-state-command-end { width: 92px; height: 92px; margin-left: -24px; }
+}
+
+@media (max-width: 1024px) {
+  .nf-state-command-bar {
+    width: calc(100vw - 24px);
+    max-width: none;
+  }
+  .nf-state-command-key { gap: 6px; padding: 13px 4px; font-size: 11.5px; }
+  .nf-state-command-speed { left: 16px; gap: 8px; padding: 6px 12px 16px; }
+  .nf-state-command-speed-cell { width: 9px; height: 13px; }
+  .nf-state-command-speed-dashed .nf-state-command-speed-cell { width: 3px; }
+  .nf-state-command-end { width: 82px; height: 82px; margin-left: -20px; font-size: 11px; }
+}
+
+.nf-state-table-map {
+  touch-action: none;
+  cursor: grab;
+}
+
+.nf-state-table-map:active {
+  cursor: grabbing;
+}
+
+.nf-state-table-world {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+/*
+ * The board is a real object with its own size, centred in the map area. The
+ * backdrop, grid and every token live inside it, so resizing the browser moves
+ * the whole board instead of silently changing which cell a stored position
+ * falls in — and the artwork finally has a shape of its own to fill.
+ */
+.nf-state-table-plane {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  --nf-token-size: calc(var(--nf-grid-size) * .82);
+  --token-move: 320ms cubic-bezier(.22,.61,.36,1);
+  transform: translate(-50%, -50%);
+  border-radius: var(--r-md);
+  background: linear-gradient(160deg, #16242a, #070d0f);
+  box-shadow: 0 0 0 1px var(--line-2), 0 30px 90px rgba(0,0,0,.55);
+}
+
+/* A token at zero HP is struck through so it reads as down at a glance. */
+.nf-state-token-down .piece-disc {
+  filter: grayscale(.72) brightness(.62);
+}
+
+.nf-state-token-down-mark {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  color: var(--foe);
+  pointer-events: none;
+  filter: drop-shadow(0 1px 3px rgba(0,0,0,.85));
+}
+
+.nf-state-initiative-down .nf-state-initiative-face {
+  filter: grayscale(.72) brightness(.62);
+}
+
+.nf-state-table-artwork {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+.nf-state-table-artwork img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* Cell lines start at the board's own origin, so drawn squares line up with
+   the cell centres the domain calculates. */
+.nf-state-table-scene-grid {
+  inset: 0;
+  border-radius: inherit;
+  background-position: 0 0;
+  background-size: var(--nf-grid-size) var(--nf-grid-size);
+  pointer-events: none;
+}
+
+.nf-state-table-scene-grid::after {
+  background-position: 0 0;
+  background-size: var(--nf-grid-major) var(--nf-grid-major);
+}
+
+.nf-state-table-geometry {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.nf-state-table-wall {
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,.7));
+}
+
+.nf-state-table-wall-full {
+  stroke: var(--foe);
+}
+
+.nf-state-table-wall-half {
+  stroke: var(--brass);
+  stroke-dasharray: 7 5;
+}
+
+.nf-state-table-wall-three-quarters {
+  stroke: var(--jade-hi);
+  stroke-dasharray: 12 4 3 4;
+}
+
+.nf-state-table-wall-draft {
+  opacity: .72;
+}
+
+.nf-state-table-ruler-line {
+  stroke: var(--brass-hi);
+  stroke-width: 2;
+  stroke-dasharray: 6 5;
+  filter: drop-shadow(0 0 5px var(--brass-glow));
+}
+
+.nf-state-table-ruler-label {
+  position: absolute;
+  z-index: 7;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.nf-state-table-tools-trigger {
+  font: inherit;
+  cursor: pointer;
+}
+
+.nf-state-table-tools-trigger:hover {
+  border-color: var(--brass);
+  color: var(--brass-hi);
+}
+
+.nf-state-table-tools-drawer {
+  width: min(500px, calc(100vw - 24px));
+}
+
+.nf-state-table-tools-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.nf-state-table-tools-wide {
+  grid-column: 1 / -1;
+}
+
+/* Sits below the message row so a refusal and a tool hint never collide. */
+.nf-state-table-tool-status {
+  position: absolute;
+  z-index: 19;
+  left: 50%;
+  top: 122px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  transform: translateX(-50%);
+  padding: 6px 7px 6px 9px;
+  border-radius: var(--r-full);
+}
+
+.nf-state-table-error {
+  position: absolute;
+  z-index: 24;
+  left: 50%;
+  top: 72px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  width: min(420px, calc(100vw - 40px));
+  padding: 11px 14px;
+  transform: translateX(-50%);
+  color: var(--foe);
+  font-size: 11px;
+  border: 1px solid rgba(242,97,122,.32);
+  border-radius: var(--r-md);
+  animation: nf-refusal-in 200ms cubic-bezier(.22,.61,.36,1) both;
+}
+
+.nf-state-table-error > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.nf-state-table-error span {
+  color: var(--ink-2);
+}
+
+.nf-state-table-position {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.nf-state-table-position > span {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 12px;
+  color: var(--ink-4);
+  font-size: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: rgba(0,0,0,.24);
+}
+
+.nf-state-table-position strong {
+  color: var(--ink);
+}
+
+.nf-state-table-tool-artwork {
+  cursor: move;
+}
+
+.nf-state-table-tool-wall-full {
+  cursor: crosshair;
+}
+
+.nf-state-table-tool-wall-half {
+  cursor: crosshair;
+}
+
+.nf-state-table-tool-ruler {
+  cursor: crosshair;
+}
+
+.nf-state-table-chest {
+  position: absolute;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  color: var(--brass-hi);
+  background: linear-gradient(145deg, rgba(126,82,33,.96), rgba(52,31,16,.98));
+  border: 1px solid rgba(224,176,85,.55);
+  border-radius: 9px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.2), 0 8px 20px -6px rgba(0,0,0,.8);
+  transform: translate(-50%, -50%);
+  transition: transform var(--bounce), box-shadow var(--ease), filter var(--ease);
+}
+
+.nf-state-table-chest:hover {
+  z-index: 7;
+  transform: translate(-50%, -50%) scale(1.06);
+}
+
+.nf-state-table-chest.on {
+  z-index: 8;
+  box-shadow: 0 0 0 3px rgba(224,176,85,.24), 0 0 22px rgba(224,176,85,.28), 0 8px 20px -6px rgba(0,0,0,.8);
+}
+
+.nf-state-table-chest.blocked {
+  filter: saturate(1.5) drop-shadow(0 0 8px var(--foe));
+}
+
+.nf-state-table-map .piece.blocked {
+  filter: saturate(1.5) drop-shadow(0 0 8px var(--foe));
+}
+
+.nf-state-table-chest-count {
+  position: absolute;
+  right: -7px;
+  bottom: -7px;
+  display: grid;
+  place-items: center;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 4px;
+  color: var(--void);
+  font-size: 9px;
+  background: var(--brass);
+  border: 2px solid var(--void-2);
+  border-radius: var(--r-full);
+}
+
+.nf-state-table-chest-sigil {
+  color: var(--brass-hi);
+  background: linear-gradient(145deg, rgba(126,82,33,.9), rgba(52,31,16,.95));
+  border: 1px solid rgba(224,176,85,.38);
+}
+
+.nf-state-table-snapshot-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.nf-state-table-snapshot-grid > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px 8px;
+  text-align: center;
+  background: rgba(0,0,0,.22);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+
+.nf-state-table-snapshot-grid small {
+  overflow: hidden;
+  color: var(--ink-4);
+  font-size: 8.5px;
+  letter-spacing: .08em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.nf-state-table-snapshot-grid strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  text-transform: capitalize;
+}
+
+.nf-state-table-setup-gear > .sheet {
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.nf-state-table-setup-gear .sheet-head {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 12px;
+  margin-bottom: 14px;
+}
+
+.nf-state-table-setup-gear .sheet-head h3 {
+  font-size: 18px;
+}
+
+.nf-state-table-setup-gear .sheet-head > .row {
+  width: 100%;
+  align-items: stretch;
+  flex-direction: column;
+}
+
+.nf-state-table-setup-gear .loot {
+  align-items: flex-start;
+  flex-wrap: wrap;
+  padding: 9px;
+}
+
+.nf-state-table-setup-gear .loot-acts {
+  width: 100%;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.nf-state-table-setup-gear .nf-state-gear-fields {
+  grid-template-columns: 1fr;
+}
+
+.nf-state-table-setup-gear .nf-state-gear-bonuses {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.nf-state-table-chest-owned {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.nf-state-table-chest-owned > span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 10px;
+  font-size: 12px;
+  background: rgba(0,0,0,.2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+
+.nf-state-table-chest-owned em {
+  color: var(--brass);
+  font-style: normal;
+}
+
+.nf-state-table-chest-drawer {
+  width: min(660px, calc(100vw - 24px));
+}
+
+.nf-state-table-chest-catalog {
+  padding-bottom: 12px;
+}
+
+.nf-state-table-chest-catalog .loot {
+  min-height: 62px;
+}
+
+.nf-state-table-movement-route {
+  position: absolute;
+  z-index: 6;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.nf-state-table-movement-reachable {
+  stroke: var(--jade);
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 5px rgba(71, 216, 162, .78));
+}
+
+.nf-state-table-movement-over {
+  stroke: var(--foe);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 6 5;
+  opacity: .92;
+  filter: drop-shadow(0 0 4px rgba(242, 97, 122, .72));
+}
+
+/* Drawn in board pixels rather than the stretched percentage space, so the
+   start dot stays round and the arrowhead keeps its shape at any window size. */
+.nf-state-table-movement-marks {
+  position: absolute;
+  z-index: 7;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.nf-state-table-movement-start {
+  fill: #fff;
+  stroke: rgba(3, 6, 7, .88);
+  stroke-width: 2;
+  filter: drop-shadow(0 0 5px rgba(255, 255, 255, .9));
+}
+
+.nf-state-table-movement-stop {
+  fill: var(--jade);
+  stroke: rgba(3, 6, 7, .88);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 6px rgba(71, 216, 162, .9));
+}
+
+.nf-state-table-movement-label {
+  position: absolute;
+  z-index: 9;
+  transform: translate(-50%, calc(-100% - 14px));
+  color: var(--jade);
+  border-color: var(--jade-edge);
+  background: rgba(3, 9, 10, .9);
+  pointer-events: none;
+}
+
+.nf-state-table-movement-label-over {
+  color: var(--foe);
+  border-color: var(--foe-edge);
+}
+
+.nf-state-table-map .piece.nf-state-table-arriving .piece-disc {
+  transform: scale(1.14);
+  filter: brightness(1.18);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.42),
+    inset 0 -3px 10px rgba(0,0,0,.4),
+    0 0 0 3px var(--jade),
+    0 0 24px rgba(71, 216, 162, .68),
+    0 12px 30px -6px rgba(0,0,0,.8);
+}
+
+.nf-state-command-pip {
+  appearance: none;
+  font: inherit;
+  cursor: pointer;
+  transition: color var(--ease), background var(--ease), border-color var(--ease), transform var(--ease);
+}
+
+.nf-state-command-pip:hover:not([disabled]),
+.nf-state-command-pip:focus-visible {
+  color: var(--brass-hi);
+  background: var(--brass-tint);
+  border-color: var(--brass);
+  transform: translateY(-1px);
+  outline: none;
+}
+
+.nf-state-command-pip.spent {
+  color: var(--ink-3);
+  background: rgba(255, 255, 255, .025);
+  border-color: var(--line);
+}
+
+.nf-state-command-pip[disabled] {
+  cursor: not-allowed;
+  opacity: .42;
+}
+
+.nf-state-combat-drawer {
+  width: min(520px, calc(100vw - 24px));
+}
+
+.nf-state-combat-resource-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.nf-state-combat-resource-grid > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+  padding: 11px 12px;
+  background: rgba(0, 0, 0, .22);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+
+.nf-state-combat-resource-grid small {
+  color: var(--ink-4);
+  font-size: 9px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.nf-state-combat-resource-grid strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.nf-state-command-reason {
+  min-width: 0;
+  margin-left: auto;
+  overflow: hidden;
+  color: var(--ink-4);
+  font-size: 10px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nf-state-combat-swap-draft {
+  padding: 14px;
+  background: rgba(0, 0, 0, .18);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+
+.nf-state-combat-attack-draft {
+  padding: 14px;
+  background: rgba(0, 0, 0, .18);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+
+.nf-state-combat-weapon-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nf-state-combat-weapon-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  text-align: left;
+}
+
+.nf-state-combat-weapon-copy strong,
+.nf-state-combat-weapon-copy small {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nf-state-combat-weapon-copy small {
+  color: var(--ink-4);
+  font-size: 9px;
+  font-weight: 500;
+}
+
+.nf-state-table-attack-range {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.nf-state-table-attack-grid-line {
+  stroke: rgba(236, 242, 237, .16);
+  stroke-width: 1;
+}
+
+.nf-state-table-attack-band {
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.nf-state-table-attack-green {
+  stroke: var(--jade);
+}
+
+.nf-state-table-attack-yellow {
+  stroke: var(--brass);
+}
+
+.nf-state-table-attack-red {
+  stroke: var(--foe);
+  stroke-dasharray: 6 4;
+}
+
+.nf-state-table-attack-mode {
+  cursor: crosshair;
+}
+
+.nf-state-table-map .piece.nf-state-table-targetable {
+  z-index: 8;
+  cursor: crosshair;
+}
+
+.nf-state-table-map .piece.nf-state-table-targetable .piece-disc {
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.42),
+    inset 0 -3px 10px rgba(0,0,0,.4),
+    0 0 0 3px var(--jade),
+    0 0 22px rgba(71,216,162,.55),
+    0 12px 30px -6px rgba(0,0,0,.8);
+}
+
+.nf-state-table-attack-status {
+  max-width: min(760px, calc(100vw - 80px));
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.nf-state-table-range-key {
+  background: rgba(3, 9, 10, .78);
+}
+
+.nf-state-table-range-key-green {
+  color: var(--jade);
+  border-color: var(--jade-edge);
+}
+
+.nf-state-table-range-key-yellow {
+  color: var(--brass-hi);
+  border-color: var(--brass-edge);
+}
+
+.nf-state-table-range-key-red {
+  color: var(--foe);
+  border-color: var(--foe-edge);
+}
+
+.nf-state-table-condition-badges {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 13px);
+  display: flex;
+  max-width: 132px;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 3px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.nf-state-table-condition-badges i {
+  display: grid;
+  place-items: center;
+  min-width: 22px;
+  height: 17px;
+  padding: 0 4px;
+  color: #fff;
+  font-family: var(--mono);
+  font-size: 7px;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: .04em;
+  background: var(--nf-condition);
+  border: 1px solid rgba(255,255,255,.3);
+  border-radius: var(--r-full);
+  box-shadow: 0 3px 9px rgba(0,0,0,.52);
+}
+
+.nf-state-condition-chip.on {
+  color: #fff;
+  background: color-mix(in srgb, var(--nf-condition) 72%, var(--deep));
+  border-color: var(--nf-condition);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--nf-condition) 32%, transparent);
+}
+
+.nf-state-table-map .piece.nf-state-table-hit .piece-disc {
+  transform: scale(1.13) rotate(-4deg);
+  filter: brightness(1.28) saturate(1.2);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.42),
+    inset 0 -3px 10px rgba(0,0,0,.4),
+    0 0 0 3px var(--foe),
+    0 0 28px rgba(242,97,122,.7),
+    0 12px 30px -6px rgba(0,0,0,.8);
+}
+
+.nf-state-table-map .piece.nf-state-table-critical .piece-disc {
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.42),
+    inset 0 -3px 10px rgba(0,0,0,.4),
+    0 0 0 3px var(--brass-hi),
+    0 0 34px var(--brass-glow),
+    0 12px 30px -6px rgba(0,0,0,.8);
+}
+
+.nf-state-table-damage-float {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 42px);
+  transform: translateX(-50%);
+  color: var(--foe);
+  font-family: var(--serif);
+  font-size: 21px;
+  font-weight: 700;
+  text-shadow: 0 2px 8px rgba(0,0,0,.9), 0 0 14px rgba(242,97,122,.65);
+  white-space: nowrap;
+  pointer-events: none;
+  animation: rise var(--bounce) both;
+}
+
+.nf-state-cinematic-veil {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  background: radial-gradient(circle at center, rgba(6, 15, 17, .36), rgba(2, 5, 6, .9));
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: fade var(--ease) both;
+}
+
+.nf-state-cinematic {
+  position: fixed;
+  z-index: 101;
+  left: 50%;
+  top: 50%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: min(520px, calc(100vw - 40px));
+  min-height: 470px;
+  padding: 26px 28px 20px;
+  border-radius: var(--r-xl);
+  background: linear-gradient(180deg, rgba(31, 54, 60, .96), rgba(6, 11, 12, .98));
+  border: 1px solid var(--line-3);
+  box-shadow: 0 40px 120px rgba(0, 0, 0, .7);
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+  /* Must be a keyframe that carries the -50%/-50% through to its final frame.
+     The shared nf-slide-up ends on `transform: none`, and because an animated
+     value outranks the rule's own declaration for as long as fill-mode holds
+     it, that silently cancelled the centring and parked the panel's top-left
+     corner in the middle of the screen. */
+  animation: nf-cinematic-in var(--bounce) both;
+}
+
+.nf-state-cinematic-head { text-align: center; }
+.nf-state-cinematic-head h2 {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  margin-top: 4px;
+  font-size: 19px;
+  color: var(--ink);
+}
+.nf-state-cinematic-head p { margin-top: 4px; font-size: 11.5px; color: var(--ink-3); }
+
+.nf-state-cinematic-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  align-items: center;
+}
+
+.nf-state-cinematic-dice { display: flex; gap: 14px; }
+
+.nf-state-cinematic-die {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 76px;
+  height: 76px;
+  border-radius: var(--r-md);
+  font-family: var(--mono);
+  font-size: 30px;
+  font-weight: 700;
+  color: var(--ink);
+  background: linear-gradient(160deg, rgba(47, 211, 180, .12), rgba(3, 9, 10, .9));
+  border: 1px solid var(--line-3);
+}
+
+.nf-state-cinematic-die small {
+  position: absolute;
+  bottom: 6px;
+  font-family: var(--ui);
+  font-size: 8.5px;
+  letter-spacing: .12em;
+  color: var(--ink-4);
+}
+
+.nf-state-cinematic-spin .nf-state-cinematic-die {
+  animation: nf-die-tumble 620ms linear infinite;
+}
+
+.nf-state-cinematic-die.selected {
+  animation: nf-die-settle 520ms cubic-bezier(.16, 1.02, .3, 1) both;
+  border-color: var(--jade);
+  box-shadow: 0 0 26px var(--jade-glow);
+}
+
+.nf-state-cinematic-die.rejected {
+  opacity: .28;
+  filter: grayscale(.85);
+  transform: scale(.86);
+  transition: all var(--ease);
+}
+
+.nf-state-cinematic-readout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.nf-state-cinematic-rolling,
+.nf-state-cinematic-natural {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.nf-state-cinematic-natural strong { font-size: 17px; color: var(--jade); }
+
+.nf-state-cinematic-modifiers {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nf-state-cinematic-modifiers li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 11px;
+  border-radius: var(--r-xs);
+  font-size: 12px;
+  color: var(--ink-3);
+  background: rgba(255, 255, 255, .03);
+  animation: nf-slide-up 320ms cubic-bezier(.16, 1.02, .3, 1) both;
+}
+
+.nf-state-cinematic-modifiers li span { display: flex; align-items: center; gap: 5px; }
+.nf-state-cinematic-modifiers strong { color: var(--ink); }
+
+.nf-state-cinematic-total {
+  color: var(--ink) !important;
+  background: var(--jade-tint) !important;
+  border: 1px solid var(--jade-edge);
+}
+.nf-state-cinematic-total strong { font-size: 15px; color: var(--jade-hi) !important; }
+
+.nf-state-cinematic-target {
+  background: var(--brass-tint) !important;
+}
+.nf-state-cinematic-target strong { color: var(--brass) !important; }
+
+.nf-state-cinematic-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  min-height: 128px;
+}
+
+.nf-state-cinematic-verdict {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  text-align: center;
+  animation: nf-stamp 460ms cubic-bezier(.16, 1.02, .3, 1) both;
+}
+
+.nf-state-cinematic-verdict strong {
+  font-family: var(--display);
+  font-size: 30px;
+  letter-spacing: .01em;
+}
+.nf-state-cinematic-verdict span { font-size: 11.5px; color: var(--ink-3); }
+
+.nf-state-cinematic-verdict-hit strong { color: var(--jade); }
+.nf-state-cinematic-verdict-critical strong { color: var(--brass); text-shadow: 0 0 22px var(--brass-glow); }
+.nf-state-cinematic-verdict-miss strong { color: var(--ink-3); }
+
+.nf-state-cinematic-damage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+
+.nf-state-cinematic-damage-dice { display: flex; gap: 6px; }
+
+.nf-state-cinematic-damage-dice span {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--r-xs);
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  background: var(--foe-tint);
+  border: 1px solid rgba(242, 97, 122, .34);
+  animation: nf-damage-pop 380ms cubic-bezier(.16, 1.02, .3, 1) both;
+}
+
+.nf-state-cinematic-damage > strong {
+  font-size: 40px;
+  line-height: 1;
+  color: var(--foe);
+  animation: nf-damage-pop 460ms cubic-bezier(.16, 1.02, .3, 1) both;
+  animation-delay: 260ms;
+}
+
+.nf-state-cinematic-damage small { font-size: 10.5px; color: var(--ink-3); }
+
+.nf-state-cinematic-impact { animation: nf-shake 340ms ease-in-out both; }
+
+.nf-state-cinematic-impact-copy {
+  font-size: 12px;
+  color: var(--ink-2);
+  animation: nf-slide-up 300ms cubic-bezier(.16, 1.02, .3, 1) both;
+}
+
+.nf-state-cinematic-sources {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+
+.nf-state-cinematic-skip {
+  font-size: 10px;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--ink-4);
+}
+
+
+@media (max-width: 720px) {
+  .nf-state-table-tools-grid { grid-template-columns: 1fr; }
+  .nf-state-table-tools-wide { grid-column: auto; }
+  .nf-state-table-snapshot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .nf-state-combat-resource-grid { grid-template-columns: 1fr; }
+  .nf-state-cinematic { padding: 22px 16px; }
+  .nf-state-cinematic-readout { grid-template-columns: 1fr; }
+  .nf-state-cinematic-readout p { grid-column: auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nf-state-cinematic,
+  .nf-state-cinematic-die,
+  .nf-state-table-damage-float,
+  .nf-state-table-map .piece.nf-state-table-hit .piece-disc {
+    animation: none;
+    transition-duration: .01ms;
+  }
+}
+
+/* ==========================================================================
+   SETUP MODE — tools left, board in the middle, properties right.
+   ========================================================================== */
+
+/* The board stops being wallpaper and becomes the thing you are editing. */
+.nf-state-table-map-inset {
+  top: 78px;
+  right: 376px;
+  bottom: 16px;
+  left: 124px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line-2);
+  overflow: hidden;
+}
+
+.nf-state-table-start {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 18px;
+  border-radius: var(--r-md);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: .01em;
+  color: #031b14 !important;
+  background: linear-gradient(180deg, #6cf2da, #2fd3b4 60%, #179c85) !important;
+  box-shadow: 0 0 22px var(--jade-glow), inset 0 1px 0 rgba(255,255,255,.6) !important;
+  transition: box-shadow var(--swift), filter var(--swift), transform var(--swift);
+}
+
+.nf-state-table-start:hover:not(:disabled) {
+  color: #000 !important;
+  background: linear-gradient(180deg, #8dfbe6, #6cf2da 60%, #2fd3b4) !important;
+  box-shadow: 0 0 32px var(--jade-glow), inset 0 1px 0 rgba(255,255,255,.8) !important;
+  filter: brightness(1.08);
+}
+.nf-state-table-start:disabled { opacity: .6; cursor: wait; }
+
+/* ------------------------------------------------------------- tool rail */
+.nf-state-rail {
+  position: absolute;
+  z-index: 18;
+  top: 86px;
+  left: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  width: 92px;
+  max-height: calc(100% - 106px);
+  padding: 8px 6px;
+  border-radius: var(--r-lg);
+}
+
+.nf-state-rail-group { display: flex; flex-direction: column; gap: 2px; }
+.nf-state-rail-div { height: 1px; flex: none; margin: 6px 8px; background: var(--line-2); }
+
+.nf-state-rail-key {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 9px 4px;
+  border-radius: var(--r-sm);
+  color: var(--ink-3);
+  border: 1px solid transparent;
+  transition: color var(--swift), background var(--swift), border-color var(--swift);
+}
+
+.nf-state-rail-key:hover:not(:disabled) { color: var(--ink); background: rgba(255,255,255,.05); }
+.nf-state-rail-key:disabled { opacity: .38; cursor: not-allowed; }
+.nf-state-rail-label { font-size: 10px; font-weight: 600; line-height: 1.2; text-align: center; }
+
+.nf-state-rail-key-on {
+  color: var(--jade-hi);
+  background: var(--jade-tint);
+  border-color: var(--jade-edge);
+  box-shadow: inset 0 0 18px var(--jade-glow);
+}
+
+.nf-state-rail-key-hazard:hover:not(:disabled) { color: var(--danger-hi); background: var(--danger-tint); }
+
+.nf-state-rail-key-hazard.nf-state-rail-key-on {
+  color: var(--danger-hi);
+  background: var(--danger-tint);
+  border-color: rgba(242,97,122,.42);
+  box-shadow: inset 0 0 18px rgba(242,97,122,.25);
+}
+
+.nf-state-rail-collapse {
+  display: grid;
+  place-items: center;
+  margin-top: 6px;
+  padding: 4px;
+  color: var(--ink-4);
+  border-top: 1px solid var(--line);
+}
+
+.nf-state-rail-collapse:hover { color: var(--ink-2); }
+.nf-state-rail-collapsed { width: 56px; }
+.nf-state-rail-collapsed .nf-state-rail-label { display: none; }
+.nf-state-rail-collapsed .nf-state-rail-collapse svg { transform: rotate(180deg); }
+
+.nf-state-rail-veil { position: fixed; inset: 0; z-index: 30; }
+
+.nf-state-rail-picker {
+  position: absolute;
+  z-index: 31;
+  top: 8px;
+  left: calc(100% + 8px);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 210px;
+  max-height: 330px;
+  overflow-y: auto;
+  padding: 6px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line-2);
+  box-shadow: var(--lift-3);
+}
+
+.nf-state-rail-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  border-radius: var(--r-sm);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-2);
+  text-align: left;
+}
+
+.nf-state-rail-picker-item:hover { color: var(--ink); background: var(--jade-tint); }
+
+.nf-state-rail-picker-face {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border-radius: var(--r-full);
+  font-size: 9.5px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--raised-2);
+}
+
+.nf-state-rail-picker-blank {
+  color: var(--jade);
+  background: transparent;
+  border: 1px dashed var(--jade-edge);
+  font-size: 14px;
+}
+
+/* -------------------------------------------------- properties + objects */
+.nf-state-scene-column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: visible;
+  background: none;
+  border: none;
+  box-shadow: none;
+}
+
+.nf-state-scene-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: none;
+  padding: 14px;
+  border-radius: var(--r-lg);
+  background: linear-gradient(180deg, rgba(18,32,36,.94), rgba(8,13,15,.95));
+  border: 1px solid var(--line-2);
+  box-shadow: var(--lift-2);
+}
+
+.nf-state-scene-objects { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+
+.nf-state-scene-panel-head { display: flex; align-items: center; gap: 10px; }
+
+.nf-state-scene-panel-head h3 {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--serif);
+  font-size: 16px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nf-state-scene-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px 8px;
+}
+
+.nf-state-scene-stats span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+
+.nf-state-scene-stats small {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+
+.nf-state-scene-stats strong { font-size: 15px; color: var(--ink); }
+
+/* Which side a token fights on. Faction colour is the design language's one
+   sanctioned use of ally/foe hues, and the selected button also carries a
+   pressed state and its own label, so the choice never rests on colour alone. */
+.nf-state-scene-faction {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.nf-state-scene-faction > small {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+
+.nf-state-scene-faction-switch { display: flex; gap: 3px; }
+
+.nf-state-scene-faction-switch > button {
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+
+/* The selected side is not a dead control — it is disabled because pressing it
+   again would be a no-op, so it keeps full contrast rather than dimming. */
+.nf-state-scene-faction-switch > button:disabled { cursor: default; }
+
+.nf-state-scene-faction-switch > button:hover:not(:disabled) {
+  color: var(--ink-1);
+  background: rgba(255, 255, 255, .08);
+}
+
+.nf-state-scene-faction-switch > .nf-state-faction-ally.on {
+  color: var(--ally);
+  background: var(--ally-tint);
+  border-color: rgba(95, 168, 245, .38);
+}
+
+.nf-state-scene-faction-switch > .nf-state-faction-foe.on {
+  color: var(--foe);
+  background: var(--foe-tint);
+  border-color: rgba(242, 97, 122, .38);
+}
+
+.nf-state-scene-kind {
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+.nf-state-scene-empty { align-items: center; text-align: center; padding: 26px 14px; }
+.nf-state-scene-empty h3 { font-family: var(--serif); font-size: 15px; color: var(--ink-2); }
+.nf-state-scene-empty p { font-size: 11px; color: var(--ink-3); }
+
+.nf-state-scene-search { margin-bottom: 2px; }
+
+.nf-state-scene-group { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+
+.nf-state-scene-group-label {
+  flex: 1;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.nf-state-scene-rows { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.nf-state-scene-rows > li { display: flex; align-items: center; gap: 2px; }
+
+.nf-state-scene-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  text-align: left;
+  transition: background var(--swift), border-color var(--swift);
+}
+
+.nf-state-scene-row:hover { background: rgba(255,255,255,.045); }
+.nf-state-scene-row.on { border-color: var(--jade-edge); background: var(--jade-tint); }
+
+.nf-state-scene-row strong {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nf-state-scene-row-face {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border-radius: var(--r-full);
+  font-size: 9px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0,0,0,.7);
+}
+
+.nf-state-scene-pip {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: var(--r-full);
+  background: var(--hp-full);
+  box-shadow: 0 0 8px rgba(63,207,154,.55);
+}
+
+.nf-state-scene-pip-down { background: var(--danger); box-shadow: 0 0 8px var(--danger-glow, rgba(242,97,122,.5)); }
+.nf-state-scene-pip-empty { background: var(--ink-4); box-shadow: none; }
+.nf-state-scene-empty-row { padding: 3px 8px; }
+
+/* --------------------------------------------------------- overflow menu */
+.nf-state-scene-menu-wrap { position: relative; flex: none; }
+.nf-state-scene-menu-veil { position: fixed; inset: 0; z-index: 40; }
+
+.nf-state-scene-menu {
+  position: absolute;
+  z-index: 41;
+  top: calc(100% + 6px);
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 192px;
+  padding: 5px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line-2);
+  box-shadow: var(--lift-3);
+}
+
+.nf-state-scene-menu-item {
+  padding: 8px 10px;
+  border-radius: var(--r-xs);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-2);
+  text-align: left;
+}
+
+.nf-state-scene-menu-item:hover:not(:disabled) { color: var(--ink); background: var(--jade-tint); }
+.nf-state-scene-menu-item:disabled { opacity: .45; cursor: not-allowed; }
+.nf-state-scene-menu-hazard { color: var(--danger); }
+.nf-state-scene-menu-hazard:hover:not(:disabled) { color: var(--danger-hi); background: var(--danger-tint); }
+
+.nf-state-scene-drawer { width: min(560px, calc(100vw - 24px)); }
+
+/* --------------------------------------------- delete tool and backdrop */
+.nf-state-table-tool-delete { cursor: crosshair; }
+
+.nf-state-table-map.nf-state-table-tool-delete .nf-state-table-plane {
+  box-shadow: 0 0 0 1px rgba(242,97,122,.45), 0 30px 90px rgba(0,0,0,.55);
+}
+
+.nf-state-table-marquee {
+  position: absolute;
+  z-index: 9;
+  border: 1px dashed var(--danger);
+  background: rgba(242,97,122,.12);
+  pointer-events: none;
+}
+
+.nf-state-table-marquee-count {
+  position: absolute;
+  top: -11px;
+  left: 0;
+  padding: 1px 7px;
+  border-radius: var(--r-full);
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--danger);
+  white-space: nowrap;
+}
+
+.nf-state-table-artwork-editing {
+  overflow: visible;
+  outline: 1px dashed var(--jade);
+  outline-offset: -1px;
+  cursor: move;
+}
+
+.nf-state-table-artwork-handle {
+  position: absolute;
+  z-index: 10;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  background: var(--jade);
+  border: 2px solid var(--void);
+  box-shadow: 0 0 10px var(--jade-glow);
+}
+
+.nf-state-table-artwork-handle-nw { top: -7px; left: -7px; cursor: nwse-resize; }
+.nf-state-table-artwork-handle-ne { top: -7px; right: -7px; cursor: nesw-resize; }
+.nf-state-table-artwork-handle-se { right: -7px; bottom: -7px; cursor: nwse-resize; }
+.nf-state-table-artwork-handle-sw { bottom: -7px; left: -7px; cursor: nesw-resize; }
+
+@media (max-width: 1180px) {
+  .nf-state-table-map-inset { right: 332px; left: 116px; }
+  .nf-state-scene-column { width: 300px; }
+}
+
+@media (max-width: 1024px) {
+  .nf-state-rail { width: 58px; }
+  .nf-state-rail .nf-state-rail-label { display: none; }
+  .nf-state-table-map-inset { left: 84px; }
+}
+
+@media (max-width: 900px) {
+  .nf-state-table-map-inset { top: 148px; right: 274px; bottom: 12px; left: 78px; }
+  .nf-state-scene-column { width: min(250px, calc(50vw - 18px)); }
+  .nf-state-rail { top: 148px; left: 10px; max-height: calc(100% - 168px); }
+}
+
+/* Monsters, authored attacks, and stat block reference notes. */
+
+.nf-state-monster-browser {
+  width: min(720px, calc(100vw - 24px));
+}
+
+.nf-state-monster-facets {
+  margin-top: 10px;
+}
+
+.nf-state-monster-list {
+  max-height: min(52vh, 460px);
+  overflow: auto;
+}
+
+.nf-state-monster-attacks {
+  color: var(--jade);
+  opacity: .85;
+}
+
+.nf-state-monster-empty {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 26px 12px;
+  text-align: center;
+}
+
+.nf-state-monster-loading,
+.nf-state-monster-error {
+  padding: 26px 12px;
+  text-align: center;
+}
+
+.nf-state-rail-picker-bestiary {
+  display: grid;
+  place-items: center;
+  color: var(--brass);
+}
+
+.nf-state-scene-attacks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.nf-state-scene-attacks > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  font-size: 12px;
+  background: rgba(0,0,0,.2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+
+.nf-state-scene-attacks em {
+  color: var(--brass);
+  font-style: normal;
+  font-size: 11px;
+}
+
+.nf-state-attack-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.nf-state-attack-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  margin: 0;
+  background: rgba(0,0,0,.2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+
+.nf-state-attack-legend {
+  padding: 0 6px;
+  color: var(--jade);
+  font-size: 11px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.nf-state-attack-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.nf-state-attack-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.nf-state-attack-remove {
+  color: var(--foe);
+}
+
+.nf-state-statblock {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.nf-state-statblock-line strong {
+  color: var(--jade);
+}
+
+.nf-state-statblock-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.nf-state-statblock-section h4 {
+  color: var(--brass);
+  font-size: 11px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+/* ---------------------------------------------------------------------------
+   Damage defences, death saving throws, and the turn-scoped tactics.
+   Every selector here is scoped to its own nf-state- name rather than reaching
+   for a shared primitive, because none of these shapes appears anywhere else.
+--------------------------------------------------------------------------- */
+
+.nf-state-battle-down-dying { color: var(--brass); background: var(--brass-tint); }
+.nf-state-battle-down-stable { color: var(--jade); background: var(--jade-tint); }
+
+.nf-state-battle-death {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.nf-state-battle-death-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ink-4);
+}
+
+.nf-state-battle-death-pip {
+  width: 9px;
+  height: 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-full);
+  background: transparent;
+}
+
+.nf-state-battle-death-pip.on {
+  border-color: var(--jade);
+  background: var(--jade);
+  box-shadow: 0 0 7px var(--jade-glow);
+}
+
+.nf-state-battle-death-fail.on {
+  border-color: var(--foe);
+  background: var(--foe);
+  box-shadow: 0 0 7px rgba(226, 108, 131, .4);
+}
+
+.nf-state-battle-defenses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 10px;
+}
+
+.nf-state-battle-defense-immune { color: var(--ink-1); background: rgba(143, 115, 95, .22); border-color: rgba(143, 115, 95, .45); }
+.nf-state-battle-defense-resistant { color: var(--jade); background: var(--jade-tint); border-color: var(--jade-edge); }
+.nf-state-battle-defense-vulnerable { color: var(--foe); background: var(--foe-tint); border-color: rgba(226, 108, 131, .3); }
+
+.nf-state-battle-vitality-type { min-width: 118px; }
+
+.nf-state-cinematic-defense,
+.nf-state-cinematic-dying {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 7px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.nf-state-cinematic-defense-immune { color: var(--ink-2); }
+.nf-state-cinematic-defense-resistant { color: var(--jade); }
+.nf-state-cinematic-defense-vulnerable { color: var(--foe); }
+.nf-state-cinematic-dying { color: var(--brass); }
+
+.nf-state-command-tactics > button > span > small { line-height: 1.35; }
+
+.nf-state-scene-defences { margin-top: 10px; }
+
+.nf-state-scene-defences > small {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+
+.nf-state-scene-defence-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 7px;
+}
+
+.nf-state-scene-defence-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 10.5px;
+}
+
+.nf-state-scene-defence-chip:disabled { cursor: default; opacity: .55; }
+
+.nf-state-scene-defence-add {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) auto;
+  gap: 5px;
+}
+
+.nf-state-table-help-status > .tag { white-space: normal; }
+
+/* Editable initiative keeps selection as the wide target and puts the compact
+   score/tie controls on a second line, so the dock remains usable on narrow
+   maps without nesting interactive controls. */
+.nf-state-initiative-entry { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px; }
+.nf-state-initiative-edit { display: inline-flex; align-items: center; gap: 2px; }
+.nf-state-initiative-edit input {
+  width: 42px;
+  padding: 4px;
+  color: var(--brass);
+  background: rgba(0,0,0,.24);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-xs);
+  font: 700 11px var(--mono);
+  text-align: center;
+}
+.nf-state-initiative-edit .glyph { width: 23px; height: 23px; font-size: 12px; }
+
+.nf-state-coins { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--line-2); border-radius: var(--r-sm); background: rgba(255,255,255,.018); }
+.nf-state-coins .unit-label { display: inline-flex; align-items: center; gap: 6px; }
+.nf-state-coin-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.nf-state-coin { display: grid; grid-template-columns: 1fr; justify-items: center; gap: 3px; min-width: 0; }
+.nf-state-coin > span { font-size: 9px; font-weight: 800; color: var(--brass); }
+.nf-state-coin input { width: 100%; min-width: 0; padding: 5px 2px; color: var(--ink); background: rgba(0,0,0,.24); border: 1px solid var(--line-2); border-radius: var(--r-xs); text-align: center; }
+.nf-state-coin .glyph { width: 23px; height: 23px; }
+.nf-state-coins-compact { padding: 10px; }
+
+.nf-state-forced-movement { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line-2); }
+.nf-state-forced-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.nf-state-forced-directions { display: grid; grid-template-columns: repeat(3, 32px); justify-content: center; gap: 4px; }
+.nf-state-forced-directions > span { display: grid; place-items: center; color: var(--ink-4); }

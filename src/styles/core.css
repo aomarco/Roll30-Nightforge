@@ -4,7 +4,45 @@
    core.css defines tokens, the reset, and every shared primitive.
    ========================================================================== */
 
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+@font-face {
+  font-family: "Nightforge Fraunces";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("../../node_modules/@fontsource-variable/fraunces/files/fraunces-latin-full-normal.woff2") format("woff2-variations");
+}
+
+@font-face {
+  font-family: "Nightforge Plus Jakarta Sans";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 800;
+  src: url("../../node_modules/@fontsource-variable/plus-jakarta-sans/files/plus-jakarta-sans-latin-wght-normal.woff2") format("woff2-variations");
+}
+
+@font-face {
+  font-family: "Nightforge IBM Plex Mono";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url("../../node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Nightforge IBM Plex Mono";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500;
+  src: url("../../node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-500-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Nightforge IBM Plex Mono";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600;
+  src: url("../../node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-600-normal.woff2") format("woff2");
+}
 
 /* ------------------------------------------------------------------ tokens */
 :root {
@@ -74,9 +112,9 @@
   --lift-4: 0 48px 96px -32px rgba(0,0,0,.85), 0 12px 32px rgba(0,0,0,.55);
 
   /* Type */
-  --serif: 'Fraunces', 'Iowan Old Style', Georgia, serif;
-  --sans:  'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --mono:  'IBM Plex Mono', ui-monospace, 'Cascadia Mono', monospace;
+  --serif: 'Nightforge Fraunces', 'Iowan Old Style', Georgia, serif;
+  --sans:  'Nightforge Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono:  'Nightforge IBM Plex Mono', ui-monospace, 'Cascadia Mono', monospace;
 
   /* Motion */
   --swift: 140ms cubic-bezier(.32,.72,.36,1);

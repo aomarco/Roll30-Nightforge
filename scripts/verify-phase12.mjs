@@ -8,8 +8,8 @@ const failures = [];
 const packageJson = JSON.parse(await read("package.json"));
 if (packageJson.scripts?.build !== "vite build --base=/Roll30/") failures.push("Production build must use the exact /Roll30/ base.");
 if (packageJson.scripts?.["build:preview"] !== "vite build --base=/Roll30-Nightforge/") failures.push("Preview build must use the exact /Roll30-Nightforge/ base.");
-if (!packageJson.scripts?.verify?.includes("verify:phase12")) failures.push("The full verification gate omits Phase 12.");
-if (packageJson.scripts?.["acceptance:phase12"] !== "node scripts/phase12-live-acceptance.mjs") failures.push("The repeatable Phase 12 live-acceptance command is missing.");
+if (!packageJson.scripts?.verify?.includes("verify:release")) failures.push("The full verification gate omits the release contract.");
+if (packageJson.scripts?.["acceptance:release"] !== "node scripts/phase12-live-acceptance.mjs") failures.push("The repeatable release live-acceptance command is missing.");
 
 const liveAcceptance = await read("scripts/phase12-live-acceptance.mjs");
 for (const contract of [
@@ -56,7 +56,7 @@ for (const key of [
   "roll30-nightforge-assets",
 ]) if (!constants.includes(key)) failures.push(`Fresh Nightforge storage identifier is missing: ${key}.`);
 
-const completionRecord = await read("Phase Completion.txt");
+const completionRecord = await read("docs/RELEASE.md");
 for (const contract of [
   "PHASE 12 COMPLETION RECORD",
   "pre-nightforge-2026-08-17",

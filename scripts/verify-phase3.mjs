@@ -18,7 +18,7 @@ const sceneScreen = await read("src/screens/SceneScreen.jsx");
 const commands = await read("src/application/commands.js");
 const scenes = await read("src/storage/entityRepositories.js");
 const app = await read("src/App.jsx");
-const table = await read("src/screens/TableScreen.jsx");
+const table = `${await read("src/screens/TableScreen.jsx")}\n${await read("src/screens/useTableController.js")}`;
 
 for (const integration of [
   "onUpdate",
@@ -59,7 +59,7 @@ for (const path of sourceFiles) {
 }
 
 const packageJson = JSON.parse(await read("package.json"));
-for (const scriptName of ["verify:phase3", "test:phase3:render"]) {
+for (const scriptName of ["verify:artwork", "test:artwork:render"]) {
   if (!packageJson.scripts?.[scriptName]) failures.push(`Missing npm script ${scriptName}.`);
 }
 

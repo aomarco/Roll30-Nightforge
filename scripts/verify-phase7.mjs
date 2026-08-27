@@ -1,6 +1,8 @@
 import { readFile, readdir } from "node:fs/promises";
 import { resolve } from "node:path";
 
+import { readStyles } from "./style-manifest.mjs";
+
 const root = resolve(import.meta.dirname, "..");
 const read = (file) => readFile(resolve(root, file), "utf8");
 const failures = [];
@@ -17,7 +19,7 @@ for (const behavior of [
   "BATTLE_NEEDS_TOKENS", "initiativeOrder", "createTurnResources", "conditions: []", "battleItems: []",
 ]) if (!domain.includes(behavior)) failures.push(`Phase 7 Table domain is missing ${behavior}.`);
 
-const table = await read("src/screens/TableScreen.jsx");
+const table = `${await read("src/screens/TableScreen.jsx")}\n${await read("src/screens/useTableController.js")}`;
 for (const integration of [
   "heroes = []", "summonChoice", "addSetupToken", "placeSetupChest", "onChestPointerDown",
   "setupCollisionFailure", "BattleSetupInspector", "beginBattle", "abandonBattle",
@@ -43,7 +45,7 @@ for (const normalizer of ["normalizeChests", "normalizeEncounter", "normalizeTab
   if (!records.includes(normalizer)) failures.push(`Scene records are missing ${normalizer}.`);
 }
 
-const functionalCss = (await read("src/styles/functional-states.css")).replace(/\/\*[\s\S]*?\*\//g, "");
+const functionalCss = (await readStyles(read)).replace(/\/\*[\s\S]*?\*\//g, "");
 for (const match of functionalCss.matchAll(/([^{}]+)\{/g)) {
   const header = match[1].trim();
   if (!header || header.startsWith("@")) continue;
@@ -68,7 +70,7 @@ for (const file of runtimeFiles) {
 }
 
 const packageJson = JSON.parse(await read("package.json"));
-for (const script of ["verify:phase7", "test:phase7:render"]) if (!packageJson.scripts?.[script]) failures.push(`Missing npm script ${script}.`);
+for (const script of ["verify:setup", "test:setup:render"]) if (!packageJson.scripts?.[script]) failures.push(`Missing npm script ${script}.`);
 
 if (failures.length) {
   console.error("Phase 7 verification failed:\n" + failures.map((failure) => `- ${failure}`).join("\n"));

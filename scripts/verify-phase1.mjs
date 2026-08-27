@@ -64,7 +64,7 @@ for (const requiredIdentifier of [
 }
 
 const packageJson = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
-for (const scriptName of ["test", "verify:phase1", "verify"]) {
+for (const scriptName of ["test", "verify:foundation", "verify"]) {
   if (!packageJson.scripts?.[scriptName]) failures.push(`Missing npm script: ${scriptName}`);
 }
 

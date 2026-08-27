@@ -2,6 +2,7 @@ import { readFile, readdir } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import { CLASSES, LANGUAGES, RACES, SAVING_THROWS, SKILLS } from "../src/domain/heroes.js";
+import { readStyles } from "./style-manifest.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const read = (path) => readFile(resolve(root, path), "utf8");
@@ -49,7 +50,7 @@ if (/CHARACTERS|ABILITIES = \[|INVENTORY|const noop/.test(heroes)) failures.push
 if (!commands.includes("const updateHero")) failures.push("Hero transition policy is not enforced by application commands.");
 if (!records.includes("normalizeBaseAbilities")) failures.push("Hero records do not enforce point-buy normalization.");
 
-const functionalCss = await read("src/styles/functional-states.css");
+const functionalCss = await readStyles(read);
 const cssWithoutComments = functionalCss.replace(/\/\*[\s\S]*?\*\//g, "");
 for (const match of cssWithoutComments.matchAll(/([^{}]+)\{/g)) {
   const header = match[1].trim();
@@ -80,7 +81,7 @@ for (const path of sourceFiles) {
 }
 
 const packageJson = JSON.parse(await read("package.json"));
-for (const scriptName of ["verify:phase4", "test:phase4:render"]) {
+for (const scriptName of ["verify:heroes", "test:heroes:render"]) {
   if (!packageJson.scripts?.[scriptName]) failures.push(`Missing npm script ${scriptName}.`);
 }
 

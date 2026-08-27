@@ -1,11 +1,13 @@
 import { readFile, readdir } from "node:fs/promises";
 import { resolve } from "node:path";
 
+import { readStyles } from "./style-manifest.mjs";
+
 const root = resolve(import.meta.dirname, "..");
 const read = (path) => readFile(resolve(root, path), "utf8");
 const failures = [];
 
-const functionalCss = await read("src/styles/functional-states.css");
+const functionalCss = await readStyles(read);
 const cssWithoutComments = functionalCss.replace(/\/\*[\s\S]*?\*\//g, "");
 for (const match of cssWithoutComments.matchAll(/([^{}]+)\{/g)) {
   const header = match[1].trim();
@@ -23,6 +25,9 @@ const requiredFiles = [
   "src/application/library.js",
   "src/phase2.test.js",
   "src/styles/functional-states.css",
+  "src/styles/library-states.css",
+  "src/styles/heroes-states.css",
+  "src/styles/table-states.css",
   "scripts/phase2-render-smoke.mjs",
 ];
 for (const relativePath of requiredFiles) {
@@ -72,7 +77,7 @@ for (const path of sourceFiles) {
 }
 
 const packageJson = JSON.parse(await read("package.json"));
-for (const scriptName of ["verify:phase2", "test:phase2:render"]) {
+for (const scriptName of ["verify:library", "test:library:render"]) {
   if (!packageJson.scripts?.[scriptName]) failures.push(`Missing npm script ${scriptName}.`);
 }
 
@@ -81,6 +86,6 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("All six frozen Nightforge stylesheets match the visual baseline.");
+console.log("Frozen Nightforge visual sheets and state layers match the visual baseline.");
 console.log("Phase 2 Library, routing, active-context, and fresh-storage boundaries are present.");
 console.log("Functional-state CSS is fully scoped beneath nf-state selectors.");

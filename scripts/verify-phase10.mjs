@@ -6,6 +6,7 @@ import {
   LODGING_THROWN_WEAPON_IDS,
   NON_LODGING_THROWN_WEAPON_IDS,
 } from "../src/domain/encounter.js";
+import { readStyles } from "./style-manifest.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const read = (file) => readFile(resolve(root, file), "utf8");
@@ -79,7 +80,7 @@ for (const integration of [
   "ammunitionRecovery",
 ]) if (!attacks.includes(integration)) failures.push(`Attack resolution is missing Phase 10 integration ${integration}.`);
 
-const table = await read("src/screens/TableScreen.jsx");
+const table = `${await read("src/screens/TableScreen.jsx")}\n${await read("src/screens/useTableController.js")}`;
 for (const integration of [
   "isActiveBattle",
   "isCompleteBattle",
@@ -123,7 +124,7 @@ for (const state of ["Battle complete", "No survivor", "Restart Battle", "fired 
   if (!completion.includes(state)) failures.push(`Battle completion presentation is missing ${state}.`);
 }
 
-const functionalCss = (await read("src/styles/functional-states.css")).replace(/\/\*[\s\S]*?\*\//g, "");
+const functionalCss = (await readStyles(read)).replace(/\/\*[\s\S]*?\*\//g, "");
 for (const requiredClass of [
   ".nf-state-command-group",
   ".nf-state-table-chest-eligible",
@@ -162,8 +163,8 @@ const indexHtml = await read("index.html");
 if (/[\u00c2\u00c3\ufffd]|\u00e2[^\s]/u.test(indexHtml)) failures.push("index.html contains malformed UTF-8/mojibake text.");
 
 const packageJson = JSON.parse(await read("package.json"));
-for (const script of ["verify:phase10", "test:phase10:render"]) if (!packageJson.scripts?.[script]) failures.push(`Missing npm script ${script}.`);
-if (!packageJson.scripts?.verify?.includes("verify:phase10") || !packageJson.scripts?.verify?.includes("test:phase10:render")) failures.push("The complete verification gate does not include both Phase 10 gates.");
+for (const script of ["verify:encounter", "test:encounter:render"]) if (!packageJson.scripts?.[script]) failures.push(`Missing npm script ${script}.`);
+if (!packageJson.scripts?.verify?.includes("verify:encounter") || !packageJson.scripts?.verify?.includes("test:encounter:render")) failures.push("The complete verification gate does not include both encounter gates.");
 
 if (failures.length) {
   console.error("Phase 10 verification failed:\n" + failures.map((failure) => `- ${failure}`).join("\n"));

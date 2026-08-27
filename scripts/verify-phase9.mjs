@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 
 import { CONDITIONS } from "../src/domain/conditions.js";
 import { ATTACK_KIND_ACTION, ATTACK_KIND_BONUS } from "../src/domain/attacks.js";
+import { readStyles } from "./style-manifest.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const read = (file) => readFile(resolve(root, file), "utf8");
@@ -69,7 +70,7 @@ for (const behavior of [
 const tableDomain = await read("src/domain/table.js");
 if (!tableDomain.includes("conditions: normalizeConditions(input.conditions)")) failures.push("Persisted token conditions are not normalized through the Phase 9 engine.");
 
-const table = await read("src/screens/TableScreen.jsx");
+const table = `${await read("src/screens/TableScreen.jsx")}\n${await read("src/screens/useTableController.js")}`;
 for (const integration of [
   "AttackRangeLayer",
   "buildAttackRangeBands",
@@ -106,7 +107,7 @@ for (const state of ["spin", "natural", "modifiers", "verdict", "damage", "impac
   if (!cinematic.includes(state)) failures.push(`Attack cinematic is missing ${state}.`);
 }
 
-const functionalCss = (await read("src/styles/functional-states.css")).replace(/\/\*[\s\S]*?\*\//g, "");
+const functionalCss = (await readStyles(read)).replace(/\/\*[\s\S]*?\*\//g, "");
 for (const requiredClass of [
   ".nf-state-table-attack-range",
   ".nf-state-table-attack-band",
@@ -146,8 +147,8 @@ const indexHtml = await read("index.html");
 if (/[\u00c2\u00c3\ufffd]|\u00e2[^\s]/u.test(indexHtml)) failures.push("index.html contains malformed UTF-8/mojibake text.");
 
 const packageJson = JSON.parse(await read("package.json"));
-for (const script of ["verify:phase9", "test:phase9:render"]) if (!packageJson.scripts?.[script]) failures.push(`Missing npm script ${script}.`);
-if (!packageJson.scripts?.verify?.includes("verify:phase9") || !packageJson.scripts?.verify?.includes("test:phase9:render")) failures.push("The complete verification gate does not include both Phase 9 gates.");
+for (const script of ["verify:combat", "test:combat:render"]) if (!packageJson.scripts?.[script]) failures.push(`Missing npm script ${script}.`);
+if (!packageJson.scripts?.verify?.includes("verify:combat") || !packageJson.scripts?.verify?.includes("test:combat:render")) failures.push("The complete verification gate does not include both combat gates.");
 
 if (failures.length) {
   console.error("Phase 9 verification failed:\n" + failures.map((failure) => `- ${failure}`).join("\n"));

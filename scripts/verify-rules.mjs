@@ -6,6 +6,7 @@ import { MAX_LEVEL, XP_THRESHOLDS, levelForXp, xpToNextLevel } from "../src/doma
 import { UNARMED_STRIKE } from "../src/domain/attacks.js";
 import { MAX_VITALITY_ADJUSTMENT } from "../src/domain/vitality.js";
 import { MAX_CHECK_DC, MIN_CHECK_DC } from "../src/domain/checks.js";
+import { readStyles } from "./style-manifest.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const read = (file) => readFile(resolve(root, file), "utf8");
@@ -180,7 +181,7 @@ for (const control of ["encounterExperienceAward", "Award XP", "awardXp(award)",
   if (!completion.includes(control)) failures.push(`Battle completion card is missing ${control}.`);
 }
 
-const table = await read("src/screens/TableScreen.jsx");
+const table = `${await read("src/screens/TableScreen.jsx")}\n${await read("src/screens/useTableController.js")}`;
 for (const integration of [
   "performSavingThrow",
   "performAbilityCheck",
@@ -203,7 +204,7 @@ for (const control of ["levelForXp", "xpToNextLevel", "nf-state-hero-xp", "Exper
   if (!heroes.includes(control)) failures.push(`Heroes screen is missing ${control}.`);
 }
 
-const styles = await read("src/styles/functional-states.css");
+const styles = await readStyles(read);
 for (const selector of [
   ".nf-state-battle-vitality",
   ".nf-state-battle-skill-grid",

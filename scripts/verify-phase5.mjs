@@ -3,6 +3,7 @@ import { readFile, readdir } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import { AMMUNITION, ARMOR, GEAR, HEALING_POTIONS, ITEM_CATALOG, MAGIC_ITEMS, WEAPONS, WORN_MAGIC_ITEMS } from "../src/domain/catalog.js";
+import { readStyles } from "./style-manifest.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const read = (file) => readFile(resolve(root, file), "utf8");
@@ -50,7 +51,7 @@ const heroesScreen = await read("src/screens/HeroesScreen.jsx");
 if (!heroesScreen.includes("GearChapter") || !heroesScreen.includes("hero={activeHero}")) failures.push("Heroes screen does not connect the existing Gear chapter.");
 if (heroesScreen.includes('setChapter(')) failures.push("Heroes screen still splits the sheet into chapters.");
 
-const functionalCss = (await read("src/styles/functional-states.css")).replace(/\/\*[\s\S]*?\*\//g, "");
+const functionalCss = (await readStyles(read)).replace(/\/\*[\s\S]*?\*\//g, "");
 for (const match of functionalCss.matchAll(/([^{}]+)\{/g)) {
   const header = match[1].trim();
   if (!header || header.startsWith("@")) continue;
@@ -75,7 +76,7 @@ for (const file of runtimeFiles) {
 }
 
 const packageJson = JSON.parse(await read("package.json"));
-for (const name of ["verify:phase5", "test:phase5:render"]) if (!packageJson.scripts?.[name]) failures.push(`Missing npm script ${name}.`);
+for (const name of ["verify:equipment", "test:equipment:render"]) if (!packageJson.scripts?.[name]) failures.push(`Missing npm script ${name}.`);
 
 if (failures.length) {
   console.error("Phase 5 verification failed:\n" + failures.map((failure) => `- ${failure}`).join("\n"));

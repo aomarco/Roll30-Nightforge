@@ -2,6 +2,7 @@ import { readFile, readdir } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import { MOVEMENT_FEET_PER_CELL, PATH_SEARCH_LIMIT } from "../src/domain/combat.js";
+import { readStyles } from "./style-manifest.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const read = (file) => readFile(resolve(root, file), "utf8");
@@ -66,7 +67,7 @@ const addsSelectedModeSpeed = combat.includes("resources.movementBase + modeSpee
 if (!addsWalkSpeed && !addsSelectedModeSpeed) failures.push("Dash does not add one complete selected Speed value.");
 if (!combat.includes("resources: { [nextToken.id]: createTurnResources(nextToken) }")) failures.push("End Turn does not discard old resources and create a fresh next turn.");
 
-const table = await read("src/screens/TableScreen.jsx");
+const table = `${await read("src/screens/TableScreen.jsx")}\n${await read("src/screens/useTableController.js")}`;
 for (const integration of [
   "MovementRouteLayer",
   "planActiveMovement",
@@ -106,7 +107,7 @@ if (!/onClick=\{end\}\s+disabled=\{busy \|\| \(dying && !stable && !resources\.d
 }
 if (!drawer.includes("togglePanel(\"attack\")")) failures.push("The Attack command is not connected through the command bar.");
 
-const functionalCss = (await read("src/styles/functional-states.css")).replace(/\/\*[\s\S]*?\*\//g, "");
+const functionalCss = (await readStyles(read)).replace(/\/\*[\s\S]*?\*\//g, "");
 for (const requiredClass of [
   ".nf-state-table-movement-route",
   ".nf-state-table-movement-reachable",
@@ -148,8 +149,8 @@ for (const file of runtimeFiles) {
 }
 
 const packageJson = JSON.parse(await read("package.json"));
-for (const script of ["verify:phase8", "test:phase8:render"]) if (!packageJson.scripts?.[script]) failures.push(`Missing npm script ${script}.`);
-if (!packageJson.scripts?.verify?.includes("verify:phase8") || !packageJson.scripts?.verify?.includes("test:phase8:render")) failures.push("The complete verification gate does not include both Phase 8 gates.");
+for (const script of ["verify:turns", "test:turns:render"]) if (!packageJson.scripts?.[script]) failures.push(`Missing npm script ${script}.`);
+if (!packageJson.scripts?.verify?.includes("verify:turns") || !packageJson.scripts?.verify?.includes("test:turns:render")) failures.push("The complete verification gate does not include both turns gates.");
 
 if (failures.length) {
   console.error("Phase 8 verification failed:\n" + failures.map((failure) => `- ${failure}`).join("\n"));

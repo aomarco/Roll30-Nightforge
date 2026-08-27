@@ -6,6 +6,7 @@ import { DEATH_SAVE_DC, STABILIZE_DC } from "../src/domain/death.js";
 import { CONDITIONS } from "../src/domain/conditions.js";
 import { DEATH_SAVES_REQUIRED } from "../src/domain/table.js";
 import { HELP_REACH_FEET } from "../src/domain/combat.js";
+import { readStyles } from "./style-manifest.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const read = (file) => readFile(resolve(root, file), "utf8");
@@ -212,7 +213,7 @@ for (const control of ["nf-state-scene-defences", "DefenceEditor"]) {
   if (!setupInspector.includes(control)) failures.push(`Battle setup inspector is missing ${control}.`);
 }
 
-const table = await read("src/screens/TableScreen.jsx");
+const table = `${await read("src/screens/TableScreen.jsx")}\n${await read("src/screens/useTableController.js")}`;
 for (const integration of [
   "opportunityAttacksFor",
   "ATTACK_KIND_REACTION",
@@ -249,7 +250,7 @@ for (const control of ["Death saving throw", "deathVerdict", "Back on their feet
   if (!checkCinematic.includes(control)) failures.push(`Check cinematic is missing ${control}.`);
 }
 
-const styles = await read("src/styles/functional-states.css");
+const styles = await readStyles(read);
 for (const selector of [
   ".nf-state-battle-death",
   ".nf-state-battle-death-pip",

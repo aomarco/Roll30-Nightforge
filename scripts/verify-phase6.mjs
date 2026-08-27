@@ -2,6 +2,7 @@ import { readFile, readdir } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import { CAMERA_MAX_ZOOM, CAMERA_MIN_ZOOM, MAP_MAX_SCALE, MAP_MIN_SCALE } from "../src/domain/table.js";
+import { readStyles } from "./style-manifest.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const read = (file) => readFile(resolve(root, file), "utf8");
@@ -14,7 +15,7 @@ for (const file of ["src/domain/table.js", "src/phase6.test.js", "scripts/phase6
 if (CAMERA_MIN_ZOOM !== 0.35 || CAMERA_MAX_ZOOM !== 3) failures.push("Camera zoom clamp must remain 0.35 through 3.");
 if (MAP_MIN_SCALE !== 0.2 || MAP_MAX_SCALE !== 5) failures.push("Artwork scale clamp must remain 0.2 through 5.");
 
-const table = await read("src/screens/TableScreen.jsx");
+const table = `${await read("src/screens/TableScreen.jsx")}\n${await read("src/screens/useTableController.js")}`;
 for (const behavior of [
   "zoomCameraAt", "zoomCameraAtViewportCenter", "adjustArtworkBy", "createPlayToken", "updateToken", "removeToken",
   "createWall", "rulerDistanceFeet", "Table tools — 5 ft grid", "Draw full wall", "Draw half-wall", "toggleWalls",
@@ -37,7 +38,7 @@ for (const normalizer of ["normalizeMapView", "normalizeTableTokens", "normalize
 }
 if (/camera\s*:/.test(records)) failures.push("Transient camera state must not be persisted by Scene records.");
 
-const functionalCss = (await read("src/styles/functional-states.css")).replace(/\/\*[\s\S]*?\*\//g, "");
+const functionalCss = (await readStyles(read)).replace(/\/\*[\s\S]*?\*\//g, "");
 for (const match of functionalCss.matchAll(/([^{}]+)\{/g)) {
   const header = match[1].trim();
   if (!header || header.startsWith("@")) continue;
@@ -62,7 +63,7 @@ for (const file of runtimeFiles) {
 }
 
 const packageJson = JSON.parse(await read("package.json"));
-for (const script of ["verify:phase6", "test:phase6:render"]) if (!packageJson.scripts?.[script]) failures.push(`Missing npm script ${script}.`);
+for (const script of ["verify:map", "test:map:render"]) if (!packageJson.scripts?.[script]) failures.push(`Missing npm script ${script}.`);
 
 if (failures.length) {
   console.error("Phase 6 verification failed:\n" + failures.map((failure) => `- ${failure}`).join("\n"));

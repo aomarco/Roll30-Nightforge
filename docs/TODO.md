@@ -211,40 +211,30 @@ not just item prices.
 
 ## Housekeeping
 
-- [ ] **The phase-numbered npm scripts.** ~45 named `verify-phase1` through
-      `verify-phase12`. The numbers meant something during the rebuild and mean
-      nothing now. New work is named by feature instead — `test:rules`,
-      `verify:rules` — so the migration has somewhere to go.
-- [ ] **`README.md` overlaps `FEATURES.md`.** The test count is correct again
-      (360 in both), but the README still duplicates the design language and the
-      screen-by-screen table that now live in `FEATURES.md`. Cut it back to how
-      to run it and how to deploy it, and let `FEATURES.md` be the one
-      description of the app.
-- [ ] **No linter and no type checking.** There is no ESLint config and no
-      TypeScript. The gap is filled by fourteen `verify-phase*.mjs` scripts,
-      several of which assert on literal source strings — `verify-rules.mjs`
-      checks `attacks.js` for the exact text of a return statement. Those checks
-      would be free and refactor-proof as unit tests or lint rules; as greps
-      they punish cleanup and still miss real type errors.
-- [ ] **The font pipeline differs between dev and production.** `core.css` keeps
-      a Google Fonts `@import` that a Vite plugin strips with a regex at build
-      time, so `npm run dev` uses CDN fonts and the build uses local ones.
-      Reformatting that one line onto two would silently ship remote fonts with
-      nothing to catch it. Delete the `@import` and the plugin, and let the
-      local `@font-face` rules stand on their own.
-- [ ] **`functional-states.css` has outgrown its brief.** At 3,206 lines it is
-      larger than the other six stylesheets combined, and now holds every
-      `@font-face` as well as the responsive and state hardening it was meant
-      for. The `core.css`-plus-per-screen split described in the README no
-      longer matches what is on disk.
-- [ ] **`TableScreen.jsx` is 1,971 lines** with around thirty pieces of
-      `useState` and twenty-four `initial*` props that exist only for test
-      injection. The inspectors were extracted; the interaction state machine
-      wasn't.
-- [ ] **Superseded planning files are still tracked.** `PROJECT_AUDIT.txt`
-      (56KB), `Phase Completion.txt` (136KB) and
-      `NIGHTFORGE_FULL_FUNCTIONALITY_PORT_PLAN.txt` (45KB) sit in the repository
-      root and are replaced by `docs/`.
+- [x] **The phase-numbered npm scripts.** Public npm commands now use feature
+      names such as verify:foundation, test:combat:render, and verify:release.
+      Historical phase filenames remain only where they are useful as
+      evidence-artifact names.
+- [x] **README.md overlaps FEATURES.md.** README now covers setup, builds,
+      deployment, verification, and catalog maintenance. FEATURES.md is the
+      single description of the app and its design language.
+- [x] **No linter and no type checking.** ESLint flat configuration and a
+      TypeScript project check are part of the repository and the full
+      verification gate. The existing JavaScript code remains in a gradual
+      typing mode while TypeScript validates the project graph and JSX setup.
+- [x] **The font pipeline differs between dev and production.** Google Fonts
+      imports and the stripping plugin are gone. Local @font-face rules live
+      in core.css, so development and production use the same bundled fonts.
+- [x] **functional-states.css has outgrown its brief.** State hardening is now
+      separated into a small cross-screen layer plus library, hero, and table
+      state sheets. Font declarations no longer live in a functional
+      stylesheet.
+- [x] **TableScreen.jsx was carrying the interaction state machine.** The
+      controller hook now owns state, effects, and transitions in
+      src/screens/useTableController.js; TableScreen.jsx composes the view.
+- [x] **Superseded planning files are still tracked.** The three root planning
+      records were removed. Durable release evidence now lives in
+      docs/RELEASE.md, alongside the other maintained documentation.
 - [x] **Monster inventories contain their named weapons only.** Exact catalog
       weapons named by authored attacks are added once. Natural attacks, armour,
       money, and generated treasure are never inferred.
