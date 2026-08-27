@@ -24,6 +24,7 @@ import {
   setupCellForPosition,
   setupGridMetrics,
   setupPositionForCell,
+  tokenSkillModifier,
   updateToken,
 } from "./table.js";
 
@@ -345,6 +346,65 @@ export function attackLineOfSight(scene, attacker, target, usage) {
   return { state: "clear", coverLevel: "none", coverBonus: 0, blockingWallIds, halfWallIds, threeQuarterWallIds };
 }
 
+const passivePerception = (token) => 10 + tokenSkillModifier(token, "perception");
+
+/** Hide is a Stealth check against each standing enemy's passive Perception. */
+export function hideAvailability(scene, viewport) {
+  const available = activeTurnContext(scene);
+  if (!available.ok) return available;
+  const { token, tokens, resources } = available.value;
+  if (token.hp <= 0 || isIncapacitated(token.conditions)) return failure(
+    "HIDE_INCAPACITATED",
+    `${token.name} cannot Hide while incapacitated or down.`,
+    "Remove the condition or end the turn.",
+  );
+  if (resources.actionSpent) return failure(
+    "HIDE_ACTION_SPENT",
+    `Hide is unavailable because ${resources.actionType || "the Action"} was already used.`,
+    "Use remaining movement or end the turn.",
+  );
+  if (resources.dashed || resources.swapped) return failure(
+    "HIDE_AFTER_TURN_CHANGE",
+    "Hide is unavailable after Dash or weapon Swap.",
+    "Use remaining movement or end the turn.",
+  );
+  const enemies = tokens.filter((entry) => entry.id !== token.id && entry.faction !== token.faction && entry.hp > 0 && !entry.dead);
+  const concealedFrom = enemies.filter((enemy) =>
+    token.conditions.includes("invisible") || attackLineOfSight(scene, enemy, token, "ranged").state === "blocked",
+  );
+  if (!concealedFrom.length) return failure(
+    "HIDE_NO_CONCEALMENT",
+    `${token.name} is visible to every standing enemy.`,
+    "Move behind total cover, become heavily obscured, or use an applicable racial trait.",
+    true,
+  );
+  return success({ ...available.value, enemies, concealedFrom, viewport });
+}
+
+export function activateHide(scene, viewport, { random = () => 0.5 } = {}) {
+  const available = hideAvailability(scene, viewport);
+  if (!available.ok) return available;
+  const { token, resources, tokens, concealedFrom } = available.value;
+  const die = rollDie(20, random);
+  const modifier = tokenSkillModifier(token, "stealth");
+  const total = die + modifier;
+  const hiddenFromTokenIds = concealedFrom
+    .filter((enemy) => total >= passivePerception(enemy))
+    .map((enemy) => enemy.id);
+  const hidden = hiddenFromTokenIds.length > 0;
+  return success({
+    tokens: updateToken(tokens, token.id, { hiddenFromTokenIds, hidden }),
+    encounter: {
+      ...scene.encounter,
+      resources: { [token.id]: { ...resources, actionSpent: true, actionType: "hide" } },
+      log: appendEncounterLog(
+        scene.encounter.log,
+        `${token.name} rolls Stealth ${total} and ${hidden ? `hides from ${hiddenFromTokenIds.map((id) => tokens.find((entry) => entry.id === id)?.name).filter(Boolean).join(", ")}` : "fails to hide"}.`,
+      ),
+    },
+  }, { outcome: { tokenId: token.id, die, modifier, total, hidden, hiddenFromTokenIds, passivePerception: Object.fromEntries(concealedFrom.map((enemy) => [enemy.id, passivePerception(enemy)])) } });
+}
+
 export function attackTargetEligibility(scene, {
   kind = ATTACK_KIND_ACTION,
   weaponId,
@@ -377,6 +437,12 @@ export function attackTargetEligibility(scene, {
     "ATTACK_TARGET_DEFEATED",
     `${target.name} is already dead.`,
     "Choose a standing or dying target.",
+    true,
+  );
+  if (target.hiddenFromTokenIds.includes(available.value.token.id)) return failure(
+    "ATTACK_TARGET_HIDDEN",
+    `${target.name} is hidden from ${available.value.token.name}.`,
+    "Search, reveal the creature, or choose another target.",
     true,
   );
   // Opportunity attacks land immediately before the creature leaves reach.
@@ -428,6 +494,7 @@ export function combineAttackModes(sources = []) {
 
 export function attackRollSources({ attacker, target, weapon, range, lineOfSight, resources, kind }) {
   const sources = [];
+  if (attacker.hiddenFromTokenIds?.includes(target.id)) sources.push({ mode: ATTACK_MODE_ADVANTAGE, code: "hidden-attacker", label: "Attacker is hidden" });
   if (range.disadvantage) sources.push({ mode: "disadvantage", code: range.tier, label: range.tier === "thrown-long" ? "Long throw" : "Long range" });
   if (attacker.size === "small" && hasProperty(weapon, "heavy")) sources.push({ mode: "disadvantage", code: "small-heavy", label: "Small creature with Heavy weapon" });
   if (weapon.id === "lance" && range.distanceFeet === 5) sources.push({ mode: "disadvantage", code: "lance-close", label: "Lance at 5 feet" });
@@ -487,9 +554,11 @@ export function parseDamageDefinition(definition) {
   };
 }
 
-export function rollWeaponDamage({ definition, critical = false, ability = 0, magic = 0, offHand = false, random = Math.random }) {
+export function rollWeaponDamage({ definition, critical = false, criticalExtraDice = 0, ability = 0, magic = 0, offHand = false, random = Math.random }) {
   const parsed = parseDamageDefinition(definition);
-  const diceCount = parsed.kind === "dice" ? parsed.count * (critical ? 2 : 1) : 0;
+  const diceCount = parsed.kind === "dice"
+    ? parsed.count * (critical ? 2 : 1) + (critical ? Math.max(0, Math.floor(Number(criticalExtraDice) || 0)) : 0)
+    : 0;
   const rolls = Array.from({ length: diceCount }, () => rollDie(parsed.sides, random));
   const diceTotal = parsed.kind === "fixed" ? parsed.fixed : rolls.reduce((total, roll) => total + roll, 0);
   const abilityDamage = offHand ? Math.min(0, ability) : ability;
@@ -539,11 +608,18 @@ export function performWeaponAttack(scene, specification = {}, {
     : weaponMagicBonuses(attacker, option.weaponId);
   const sources = attackRollSources({ attacker, target, weapon: option.weapon, range, lineOfSight, resources, kind });
   const mode = combineAttackModes(sources);
-  const rolls = Array.from({ length: mode === ATTACK_MODE_NORMAL ? 1 : 2 }, () => rollDie(20, random));
-  const selectedIndex = mode === ATTACK_MODE_DISADVANTAGE
+  let rolls = Array.from({ length: mode === ATTACK_MODE_NORMAL ? 1 : 2 }, () => rollDie(20, random));
+  let selectedIndex = mode === ATTACK_MODE_DISADVANTAGE
     ? (rolls[1] < rolls[0] ? 1 : 0)
     : (rolls[1] > rolls[0] ? 1 : 0);
-  const naturalRoll = rolls[selectedIndex];
+  let naturalRoll = rolls[selectedIndex];
+  let luckyReroll = null;
+  if (naturalRoll === 1 && attacker.racialTraitIds?.includes("lucky")) {
+    luckyReroll = rollDie(20, random);
+    rolls = [...rolls, luckyReroll];
+    selectedIndex = rolls.length - 1;
+    naturalRoll = luckyReroll;
+  }
   const proficiency = option.authored ? 0 : proficiencyBonus(attacker.level);
   const attackBonus = option.authored
     ? option.attack.toHit
@@ -553,6 +629,7 @@ export function performWeaponAttack(scene, specification = {}, {
   const hit = naturalRoll === 20 || (naturalRoll !== 1 && attackTotal >= targetAc);
   const autoCritical = hit && targetAutoCritical(target.conditions, range.usage === "melee" ? "melee" : "ranged");
   const critical = hit && (naturalRoll === 20 || autoCritical);
+  const savageAttacks = critical && range.usage === "melee" && attacker.racialTraitIds?.includes("savage-attacks");
   const damage = hit ? rollWeaponDamage({
     definition: option.authored
       ? option.attack.damageDice
@@ -560,6 +637,7 @@ export function performWeaponAttack(scene, specification = {}, {
         ? option.weapon.damageDice
         : option.damageDice || effectiveDamageDice(attacker, option.weaponId),
     critical,
+    criticalExtraDice: savageAttacks ? 1 : 0,
     ability: ability.modifier,
     magic: magic.damage,
     offHand: !option.authored && kind === ATTACK_KIND_BONUS,
@@ -608,6 +686,13 @@ export function performWeaponAttack(scene, specification = {}, {
   const helpedTokens = attacker.helpedAgainstTokenId === target.id
     ? updateToken(reactionTokens, attacker.id, { helpedAgainstTokenId: null, helpedById: null })
     : reactionTokens;
+  const revealedTokens = attacker.hidden || target.hidden
+    ? updateToken(
+      attacker.hidden ? updateToken(helpedTokens, attacker.id, { hiddenFromTokenIds: [], hidden: false }) : helpedTokens,
+      target.hidden ? target.id : attacker.id,
+      target.hidden ? { hiddenFromTokenIds: [], hidden: false } : {},
+    )
+    : helpedTokens;
   let nextResources;
   if (kind === ATTACK_KIND_BONUS) {
     nextResources = {
@@ -646,7 +731,7 @@ export function performWeaponAttack(scene, specification = {}, {
   };
   const supplied = applyAttackSupplyEffects({
     scene,
-    tokens: helpedTokens,
+    tokens: revealedTokens,
     encounter: attackEncounter,
     attackerId: attacker.id,
     targetId: target.id,
@@ -688,6 +773,7 @@ export function performWeaponAttack(scene, specification = {}, {
     rolls,
     selectedIndex,
     naturalRoll,
+    luckyReroll,
     ability,
     proficiency,
     magicAttackBonus: magic.attack,
@@ -699,6 +785,7 @@ export function performWeaponAttack(scene, specification = {}, {
     coverLevel: lineOfSight.coverLevel,
     hit,
     critical,
+    savageAttacks,
     autoCritical,
     verdict,
     damage,

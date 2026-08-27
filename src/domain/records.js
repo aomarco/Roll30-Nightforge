@@ -4,6 +4,7 @@ import {
   backgroundById,
   backgroundByName,
   classById,
+  deriveHero,
   grantedLanguages,
   LANGUAGES,
   normalizeBaseAbilities,
@@ -11,6 +12,7 @@ import {
   SKILLS,
   subraceById,
 } from "./heroes.js";
+import { normalizeRacialChoices, normalizeRacialUses, racialStateFor } from "./racialTraits.js";
 import { normalizeCoins } from "./money.js";
 import { ITEM_BY_ID } from "./catalog.js";
 import { normalizeEquipment, normalizeInventoryEntries } from "./items.js";
@@ -101,18 +103,21 @@ export function createHeroRecord(
   const selectedClass = classById(input.classId);
   const selectedRace = raceById(input.raceId);
   const selectedSubrace = subraceById(selectedRace.id, input.subraceId);
+  const racialChoices = normalizeRacialChoices(input.racialChoices);
   const suppliedLanguages = cleanIdList(input.languages).filter((language) =>
     LANGUAGES.includes(language),
   );
   const languages = [...new Set([
     ...grantedLanguages(selectedRace.id, selectedSubrace?.id),
     ...suppliedLanguages,
+    ...(racialChoices.extraLanguage ? [racialChoices.extraLanguage] : []),
   ])];
   const inventoryResult = normalizeInventoryEntries(input.inventory, ITEM_BY_ID);
   const priorUnknownItems = cleanIdList(input.recoveryDiagnostics?.unknownInventoryItemIds);
   const selectedBackground = backgroundById(input.backgroundBenefitId) || backgroundByName(input.background);
   const benefitsApplied = selectedBackground && input.backgroundBenefitId === selectedBackground.id;
 
+  const racialState = racialStateFor(selectedRace.id, selectedSubrace?.id, racialChoices);
   const hero = {
     id: heroId,
     name:
@@ -146,7 +151,15 @@ export function createHeroRecord(
     armorId: nullableId(input.armorId),
     shieldId: nullableId(input.shieldId),
     enchantments: cleanEnchantments(input.enchantments),
+    attunedItemIds: cleanIdList(Object.hasOwn(input, "attunedItemIds") ? input.attunedItemIds : input.wornItemIds),
     wornItemIds: cleanIdList(input.wornItemIds),
+    itemCharges: input.itemCharges && typeof input.itemCharges === "object" && !Array.isArray(input.itemCharges)
+      ? input.itemCharges
+      : {},
+    racialChoices,
+    racialUses: normalizeRacialUses(input.racialUses, racialState.traitIds),
+    hitDiceSpent: Math.max(0, Math.min(Math.max(0, Math.floor(finiteNumber(input.level, 1))), Math.floor(finiteNumber(input.hitDiceSpent, 0)))),
+    currentHp: input.currentHp === undefined ? null : Math.max(0, Math.floor(finiteNumber(input.currentHp, 0))),
     recoveryDiagnostics: {
       unknownInventoryItemIds: [...new Set([
         ...priorUnknownItems,
@@ -157,7 +170,12 @@ export function createHeroRecord(
     updatedAt: timestamp(input.updatedAt, now),
     schemaVersion: 1,
   };
-  return { ...hero, ...normalizeEquipment(hero, hero.inventory, ITEM_BY_ID) };
+  const equipped = { ...hero, ...normalizeEquipment(hero, hero.inventory, ITEM_BY_ID) };
+  const maxHp = deriveHero(equipped).hp;
+  return {
+    ...equipped,
+    currentHp: Math.max(0, Math.min(maxHp, equipped.currentHp === null ? maxHp : equipped.currentHp)),
+  };
 }
 
 export const normalizeSceneRecord = (record, options = {}) =>

@@ -151,6 +151,36 @@
   font: 800 9px/1 var(--sans);
 }
 
+.nf-state-table-hidden {
+  filter: saturate(.55) opacity(.68);
+}
+
+.nf-state-table-hidden .piece-disc {
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.25),
+    inset 0 -3px 10px rgba(0,0,0,.46),
+    0 0 0 2px rgba(184, 198, 204, .62),
+    0 0 18px rgba(184, 198, 204, .3);
+}
+
+.nf-state-table-hidden-badge {
+  position: absolute;
+  right: -12px;
+  bottom: 3px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 20px;
+  height: 17px;
+  padding: 0 4px;
+  color: var(--ink-2);
+  background: rgba(12, 19, 22, .94);
+  border: 1px solid rgba(184, 198, 204, .66);
+  border-radius: var(--r-full);
+  font: 800 9px/1 var(--sans);
+  box-shadow: 0 3px 9px rgba(0,0,0,.5);
+}
+
 .nf-state-embedded-inspector .btn {
   justify-content: flex-start;
   margin-top: 7px;

@@ -7,6 +7,8 @@ import {
   attackTargetEligibility,
   bonusAttackAvailability,
   buildAttackRangeBands,
+  activateHide,
+  hideAvailability,
   mainAttackAvailability,
   opportunityAttacksFor,
   performWeaponAttack,
@@ -128,9 +130,10 @@ const BRIEF_REFUSALS = Object.freeze({
   SETUP_CELL_OCCUPIED: "That square is taken",
   SETUP_GRID_FULL: "No empty square left",
   ATTACK_OUT_OF_RANGE: "Target is out of range",
-  ATTACK_LINE_BLOCKED: "A wall blocks the shot",
-  ATTACK_TARGET_DEFEATED: "That target is already down",
-  ATTACK_TARGET_INVALID: "Choose another target",
+    ATTACK_LINE_BLOCKED: "A wall blocks the shot",
+    ATTACK_TARGET_DEFEATED: "That target is already down",
+    ATTACK_TARGET_HIDDEN: "That target is hidden from this token",
+    ATTACK_TARGET_INVALID: "Choose another target",
   ATTACK_ACTION_SPENT: "Action already used",
   ATTACK_INCAPACITATED: "This token cannot attack",
   ATTACK_AFTER_DASH: "Cannot attack after Dash",
@@ -1201,6 +1204,15 @@ export function useTableController({
     return savePatch(disengaged.value);
   };
 
+  const useHide = () => {
+    const hidden = activateHide(scene, setupViewport(), { random });
+    if (!hidden.ok) {
+      setLocalError(hidden);
+      return hidden;
+    }
+    return savePatch(hidden.value);
+  };
+
   /**
    * Help needs two names, and only one of them is known when the button is
    * pressed. Choosing the ally arms a targeting mode exactly like an attack
@@ -1770,6 +1782,7 @@ export function useTableController({
   const attackState = isActiveBattle ? mainAttackAvailability(scene) : { ok: false, message: "Battle is not active." };
   const bonusState = isActiveBattle ? bonusAttackAvailability(scene) : { ok: false, message: "Battle is not active." };
   const tacticState = isActiveBattle ? dodgeAvailability(scene) : { ok: false, message: "Battle is not active." };
+  const hideState = isActiveBattle ? hideAvailability(scene, setupViewport()) : { ok: false, message: "Battle is not active." };
   const readyState = isActiveBattle ? readyAvailability(scene) : { ok: false, message: "Battle is not active." };
   const battleViewport = setupViewport();
   // Asked without an ally so it comes back with the list of who is close
@@ -1978,6 +1991,7 @@ export function useTableController({
     useDash,
     useDodge,
     useDisengage,
+    useHide,
     startHelp,
     confirmHelp,
     startReady,
@@ -2026,6 +2040,7 @@ export function useTableController({
     attackState,
     bonusState,
     tacticState,
+    hideState,
     readyState,
     battleViewport,
     helpState,

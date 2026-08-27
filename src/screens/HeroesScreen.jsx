@@ -35,6 +35,8 @@ import {
   subraceById,
   xpToNextLevel,
 } from "../domain/heroes.js";
+import { DRAGON_ANCESTRIES } from "../domain/racialTraits.js";
+import { hitDiceAvailable, hitDiceTotal } from "../domain/rest.js";
 import { useDialogA11y } from "../ui/useDialogA11y.js";
 import GearChapter from "./GearChapter.jsx";
 import CoinEditor from "./CoinEditor.jsx";
@@ -98,6 +100,7 @@ export default function HeroesScreen({
   onCreate = okay,
   onUpdate = okay,
   onRetire = okay,
+  onRest = okay,
   portraitRepository = null,
   onReplacePortrait = async () => okay(),
   onRemovePortrait = async () => okay(),
@@ -114,6 +117,8 @@ export default function HeroesScreen({
     background: heroes[0]?.background || "",
   }));
   const [localError, setLocalError] = useState(null);
+  const [restDice, setRestDice] = useState(0);
+  const [restMessage, setRestMessage] = useState("");
   const draftRef = useRef(drafts);
   const dirtyRef = useRef(new Set());
   const timerRef = useRef(null);
@@ -135,6 +140,8 @@ export default function HeroesScreen({
     draftRef.current = next;
     dirtyRef.current.clear();
     setLocalError(null);
+    setRestDice(0);
+    setRestMessage("");
   }, [activeHero?.id]);
 
   useEffect(() => {
@@ -212,6 +219,21 @@ export default function HeroesScreen({
     }
     setActiveId(result.value.id);
     setLocalError(null);
+  };
+
+  const takeRest = (kind) => {
+    if (!activeHero || !flushDraft().ok) return null;
+    const result = onRest(activeHero.id, kind, { diceToSpend: kind === "short" ? restDice : 0 }) || okay();
+    if (!result.ok) {
+      setLocalError(result);
+      return result;
+    }
+    setLocalError(null);
+    const outcome = result.outcome;
+    setRestMessage(kind === "short"
+      ? `Short rest: ${outcome?.healing || 0} HP restored from ${outcome?.dice || 0} hit dice.`
+      : `Long rest: HP restored and ${outcome?.hitDiceRecovered || 0} hit dice recovered.`);
+    return result;
   };
 
   const confirmRetire = () => {
@@ -317,6 +339,7 @@ export default function HeroesScreen({
   const xpRemaining = activeHero ? xpToNextLevel(activeHero.xp) : null;
   const activeBackground = BACKGROUND_DETAILS.find((entry) => entry.id === activeHero?.backgroundBenefitId) || null;
   const backgroundSkills = new Set(activeBackground?.skills || []);
+  const racialSkills = new Set(derived?.racialSkillProficiencies || []);
   const selectedSkills = activeHero?.skillProficiencies.filter((skillId) => !backgroundSkills.has(skillId)).length || 0;
   const overRecommended =
     selectedClass.id === "fighter" && selectedSkills > selectedClass.recommendedSkillCount;
@@ -329,7 +352,7 @@ export default function HeroesScreen({
         : "Forge your first persisted Nightforge hero.";
 
   const vitals = activeHero ? [
-    { label: "Hit Points", value: String(derived.hp), note: `${selectedClass.name} + Constitution`, icon: HeartPulse, tone: "hp" },
+    { label: "Hit Points", value: `${derived.currentHp}/${derived.hp}`, note: `${selectedClass.name} + Constitution`, icon: HeartPulse, tone: "hp" },
     { label: "Armour Class", value: String(derived.ac), note: activeHero.armorId ? "Equipped armour" : "Unarmoured + Dexterity", icon: ShieldHalf, tone: "ally" },
     { label: "Initiative", value: formatModifier(derived.initiative), note: "Dexterity modifier", icon: Zap, tone: "brass" },
     { label: "Speed", value: `${derived.speed} ft`, note: `${derived.race.name} walking speed`, icon: Footprints, tone: "jade" },
@@ -460,6 +483,24 @@ export default function HeroesScreen({
               </div>
             </section>
 
+            <section className="sheet enter nf-state-hero-rests" key="rests">
+              <header className="sheet-head">
+                <div><span className="kicker">Recovery</span><h3>Rests</h3></div>
+                <span className="tag tag-jade">{derived.restHours}h sleep equivalent</span>
+              </header>
+              <div className="nf-state-hero-rest-grid">
+                <div className="nf-state-hero-rest-stat"><span>Current HP</span><strong className="numeral">{derived.currentHp}/{derived.hp}</strong></div>
+                <div className="nf-state-hero-rest-stat"><span>Hit dice ready</span><strong className="numeral">{hitDiceAvailable(activeHero)}/{hitDiceTotal(activeHero)}</strong></div>
+                <label className="field"><span className="label">Dice for short rest</span><input className="inp" type="number" min="0" max={hitDiceAvailable(activeHero)} value={restDice} onChange={(event) => setRestDice(Math.max(0, Math.min(hitDiceAvailable(activeHero), Math.floor(Number(event.target.value) || 0))))} disabled={busy} /></label>
+              </div>
+              <div className="nf-state-hero-rest-actions">
+                <button className="btn btn-line" type="button" onClick={() => takeRest("short")} disabled={busy || restDice > hitDiceAvailable(activeHero)}><HeartPulse size={15} /> Short rest</button>
+                <button className="btn btn-key" type="button" onClick={() => takeRest("long")} disabled={busy}><Zap size={15} /> Long rest</button>
+              </div>
+              <p className="note">Short rests spend the selected hit dice and refresh short-rest racial abilities. Long rests restore HP, recover half your spent hit dice, refresh long-rest abilities, and restore catalogued daily charges.</p>
+              {restMessage && <p className="prose-sm" role="status">{restMessage}</p>}
+            </section>
+
             {/* One page. Identity, abilities and gear used to hide behind three
                 toggles; they are all one scroll now. */}
             <section className="sheet enter" key="identity">
@@ -553,6 +594,71 @@ export default function HeroesScreen({
                 </div>
             </section>
 
+            <section className="sheet enter nf-state-hero-traits" key="racial-traits">
+              <header className="sheet-head">
+                <div><span className="kicker">Ancestry</span><h3>Racial traits</h3></div>
+                <span className="tag tag-brass">{derived.traits.length} active rules</span>
+              </header>
+              <div className="nf-state-hero-trait-list">
+                {derived.traits.map((trait) => (
+                  <article className="nf-state-hero-trait" key={trait.id}>
+                    <strong>{trait.name}</strong>
+                    <p>{trait.description}</p>
+                  </article>
+                ))}
+              </div>
+              {derived.traitIds.includes("draconic-ancestry") && (
+                <label className="field span-all">
+                  <span className="label">Dragon ancestry</span>
+                  <select className="sel" value={activeHero.racialChoices.dragonAncestry} onChange={(event) => apply({ racialChoices: { ...activeHero.racialChoices, dragonAncestry: event.target.value } })}>
+                    {DRAGON_ANCESTRIES.map((entry) => <option value={entry.id} key={entry.id}>{entry.label} · {entry.damageType}</option>)}
+                  </select>
+                </label>
+              )}
+              {derived.traitIds.includes("tool-proficiency") && (
+                <label className="field span-all">
+                  <span className="label">Dwarven tool proficiency</span>
+                  <select className="sel" value={activeHero.racialChoices.dwarfTool} onChange={(event) => apply({ racialChoices: { ...activeHero.racialChoices, dwarfTool: event.target.value } })}>
+                    <option value="smiths-tools">Smith's tools</option>
+                    <option value="brewers-supplies">Brewer's supplies</option>
+                    <option value="masons-tools">Mason's tools</option>
+                  </select>
+                </label>
+              )}
+              {derived.traitIds.includes("skill-versatility") && (
+                <div className="field span-all">
+                  <span className="label">Half-elf skill choices · {activeHero.racialChoices.halfElfSkills.length}/2</span>
+                  <div className="afflict">
+                    {SKILLS.map((skill) => {
+                      const selected = activeHero.racialChoices.halfElfSkills.includes(skill.id);
+                      return <button type="button" className={`toggle-chip${selected ? " on" : ""}`} key={skill.id} aria-pressed={selected} disabled={!selected && activeHero.racialChoices.halfElfSkills.length >= 2} onClick={() => apply({ racialChoices: { ...activeHero.racialChoices, halfElfSkills: toggleValue(activeHero.racialChoices.halfElfSkills, skill.id) } })}>{skill.name}</button>;
+                    })}
+                  </div>
+                </div>
+              )}
+              {derived.traitIds.includes("extra-language") && (
+                <label className="field span-all">
+                  <span className="label">High elf extra language</span>
+                  <select className="sel" value={activeHero.racialChoices.extraLanguage || ""} onChange={(event) => apply({ racialChoices: { ...activeHero.racialChoices, extraLanguage: event.target.value || null } })}>
+                    <option value="">Choose a language</option>
+                    {LANGUAGES.filter((language) => !grantedLanguages(activeHero.raceId, activeHero.subraceId).includes(language)).map((language) => <option value={language} key={language}>{language}</option>)}
+                  </select>
+                </label>
+              )}
+              {derived.traitIds.includes("high-elf-cantrip") && (
+                <label className="field span-all">
+                  <span className="label">High elf cantrip</span>
+                  <input className="inp" value={activeHero.racialChoices.highElfCantrip || ""} placeholder="Wizard cantrip name" onChange={(event) => apply({ racialChoices: { ...activeHero.racialChoices, highElfCantrip: event.target.value } })} />
+                </label>
+              )}
+              {derived.traitIds.includes("tinker") && (
+                <label className="field span-all">
+                  <span className="label">Tinker device note</span>
+                  <input className="inp" value={activeHero.racialChoices.tinkerDevice || ""} placeholder="Optional tiny device" onChange={(event) => apply({ racialChoices: { ...activeHero.racialChoices, tinkerDevice: event.target.value } })} />
+                </label>
+              )}
+            </section>
+
             <section className="sheet enter" key="abilities">
                 <header className="sheet-head">
                   <div>
@@ -626,18 +732,21 @@ export default function HeroesScreen({
                     </p>
                     <div className="nf-state-hero-skills">
                       {SKILLS.map((skill) => {
-                        const proficient = activeHero.skillProficiencies.includes(skill.id);
+                        const proficient = derived.skillProficiencies.includes(skill.id);
                         const backgroundGranted = backgroundSkills.has(skill.id);
+                        const racialGranted = racialSkills.has(skill.id);
                         return (
                           <button
                             type="button"
                             key={skill.id}
                             className={`toggle-chip${proficient ? " on" : ""}`}
                             aria-pressed={proficient}
-                            disabled={backgroundGranted}
-                            title={backgroundGranted
-                              ? `${skill.name}: granted by ${activeBackground.name}.`
-                              : proficient
+                            disabled={backgroundGranted || racialGranted}
+                             title={backgroundGranted
+                               ? `${skill.name}: granted by ${activeBackground.name}.`
+                               : racialGranted
+                               ? `${skill.name}: granted by racial traits.`
+                               : proficient
                               ? `${skill.name}: proficient. Tap to remove proficiency and lose +${derived.proficiency}.`
                               : `${skill.name}: not proficient. Tap to add proficiency and gain +${derived.proficiency}.`}
                             onClick={() => apply({ skillProficiencies: toggleValue(activeHero.skillProficiencies, skill.id) })}

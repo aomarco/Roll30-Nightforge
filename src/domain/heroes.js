@@ -1,5 +1,6 @@
 import { ITEM_BY_ID } from "./catalog.js";
 import { normalizeInventoryEntries, wornMagicBonuses } from "./items.js";
+import { normalizeRacialChoices, racialStateFor } from "./racialTraits.js";
 
 export const ABILITY_KEYS = Object.freeze(["str", "dex", "con", "int", "wis", "cha"]);
 
@@ -325,9 +326,10 @@ export function deriveHero(hero, { equipmentById = ITEM_BY_ID, acBonus = 0 } = {
     ABILITY_KEYS.map((ability) => [ability, baseAbilities[ability] + bonuses[ability]]),
   );
   const level = Math.max(1, Math.min(20, Math.floor(Number(hero?.level) || 1)));
+  const racial = racialStateFor(race.id, selectedSubrace?.id, hero?.racialChoices);
   const constitutionModifier = abilityModifier(finalAbilities.con);
   const laterLevelGain = selectedClass.hitDie / 2 + 1 + constitutionModifier;
-  const hp = Math.max(1, selectedClass.hitDie + constitutionModifier + (level - 1) * Math.max(1, laterLevelGain));
+  const hp = Math.max(1, selectedClass.hitDie + constitutionModifier + (level - 1) * Math.max(1, laterLevelGain) + racial.hitPointBonusPerLevel * level);
   const armor = equipmentById[hero?.armorId] || null;
   const shield = equipmentById[hero?.shieldId] || null;
   const strengthMinimum = armor?.category === "heavy" ? Number(armor.strengthMinimum || 0) : 0;
@@ -337,6 +339,9 @@ export function deriveHero(hero, { equipmentById = ITEM_BY_ID, acBonus = 0 } = {
     ? abilityModifier(finalAbilities[selectedClass.spellcasting.ability])
     : null;
   const magicBonuses = wornMagicBonuses(hero, equipmentById);
+  const skillProficiencies = [...new Set([...(hero?.skillProficiencies || []), ...racial.skillProficiencies])];
+  const toolProficiencies = [...new Set([...(hero?.toolProficiencies || []), ...racial.toolProficiencies])];
+  const weaponProficiencies = racial.weaponProficiencies;
 
   return {
     class: selectedClass,
@@ -352,6 +357,7 @@ export function deriveHero(hero, { equipmentById = ITEM_BY_ID, acBonus = 0 } = {
     pointBuyRemaining: pointBuyRemaining(baseAbilities),
     proficiency,
     hp,
+    currentHp: Math.max(0, Math.min(hp, Math.floor(Number(hero?.currentHp ?? hp) || 0))),
     ac: computeArmorClass({
       dexterity: finalAbilities.dex,
       armor,
@@ -368,7 +374,32 @@ export function deriveHero(hero, { equipmentById = ITEM_BY_ID, acBonus = 0 } = {
     attackBonus: magicBonuses.attack,
     rangedDamageBonus: magicBonuses.rangedDamage,
     magicBonuses,
-    languages: [...new Set([...grantedLanguages(race.id, selectedSubrace?.id), ...(hero?.languages || [])])],
+    racialChoices: normalizeRacialChoices(hero?.racialChoices),
+    traitIds: racial.traitIds,
+    traits: racial.traits,
+    darkvisionFeet: racial.darkvisionFeet,
+    skillProficiencies,
+    racialSkillProficiencies: racial.skillProficiencies,
+    toolProficiencies,
+    weaponProficiencies,
+    saveAdvantages: racial.saveAdvantages,
+    magicSaveAdvantages: racial.magicSaveAdvantages,
+    damageResistances: racial.damageResistances,
+    conditionalExpertise: racial.conditionalExpertise,
+    hitPointBonusPerLevel: racial.hitPointBonusPerLevel,
+    sleepImmunity: racial.sleepImmunity,
+    restHours: racial.restHours,
+    hideBehindLargerCreature: racial.hideBehindLargerCreature,
+    lucky: racial.lucky,
+    savageAttacks: racial.savageAttacks,
+    relentlessEndurance: racial.relentlessEndurance,
+    breathWeapon: racial.breathWeapon,
+    racialSpellcasting: racial.racialSpellcasting,
+    languages: [...new Set([
+      ...grantedLanguages(race.id, selectedSubrace?.id),
+      ...(hero?.languages || []),
+      ...(racial.choices.extraLanguage ? [racial.choices.extraLanguage] : []),
+    ])],
     spellcasting: selectedClass.spellcasting
       ? {
           ability: selectedClass.spellcasting.ability,
@@ -388,4 +419,4 @@ export const saveModifier = (hero, derived, ability) =>
 
 export const skillModifier = (hero, derived, skill) =>
   derived.abilityModifiers[skill.ability] +
-  (hero.skillProficiencies?.includes(skill.id) ? derived.proficiency : 0);
+  ((derived.skillProficiencies || hero?.skillProficiencies || []).includes(skill.id) ? derived.proficiency : 0);

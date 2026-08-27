@@ -3,6 +3,7 @@ import {
   ArchiveRestore,
   Check,
   ChevronsRight,
+  EyeOff,
   Footprints,
   HandHelping,
   HeartPulse,
@@ -73,6 +74,7 @@ export default function CommandBar({
   lootOptions = [],
   busy = false,
   tacticState = { ok: false, message: "Battle is not active." },
+  hideState = { ok: false, message: "Battle is not active." },
   helpState = { ok: false, message: "Battle is not active." },
   stabilizeState = { ok: false, message: "Battle is not active." },
   readyState = { ok: false, message: "Battle is not active." },
@@ -82,6 +84,7 @@ export default function CommandBar({
   swap,
   dodge,
   disengage,
+  hide,
   help,
   stabilize,
   ready,
@@ -343,6 +346,13 @@ export default function CommandBar({
                 <span>
                   <strong>Disengage</strong>
                   <small>Move away without drawing an opportunity attack for the rest of this turn.</small>
+                </span>
+              </button>
+              <button className="nf-state-command-option" type="button" onClick={hide} disabled={busy || !hideState.ok} title={hideState.ok ? "Spend the Action to make a Stealth check." : hideState.message}>
+                <EyeOff size={16} />
+                <span>
+                  <strong>Hide</strong>
+                  <small>{hideState.ok ? "Stealth versus each enemy's passive Perception; total cover is required." : hideState.message}</small>
                 </span>
               </button>
               <span className="nf-state-command-group">Ready an attack</span>

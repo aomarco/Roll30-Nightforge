@@ -169,9 +169,10 @@ const BRIEF_REFUSALS = Object.freeze({
   SETUP_CELL_OCCUPIED: "That square is taken",
   SETUP_GRID_FULL: "No empty square left",
   ATTACK_OUT_OF_RANGE: "Target is out of range",
-  ATTACK_LINE_BLOCKED: "A wall blocks the shot",
-  ATTACK_TARGET_DEFEATED: "That target is already down",
-  ATTACK_TARGET_INVALID: "Choose another target",
+    ATTACK_LINE_BLOCKED: "A wall blocks the shot",
+    ATTACK_TARGET_DEFEATED: "That target is already down",
+    ATTACK_TARGET_HIDDEN: "That target is hidden from this token",
+    ATTACK_TARGET_INVALID: "Choose another target",
   ATTACK_ACTION_SPENT: "Action already used",
   ATTACK_INCAPACITATED: "This token cannot attack",
   ATTACK_AFTER_DASH: "Cannot attack after Dash",
@@ -611,6 +612,7 @@ export default function TableScreen(props) {
     useDash,
     useDodge,
     useDisengage,
+    useHide,
     startHelp,
     confirmHelp,
     startReady,
@@ -659,6 +661,7 @@ export default function TableScreen(props) {
     attackState,
     bonusState,
     tacticState,
+    hideState,
     readyState,
     battleViewport,
     helpState,
@@ -786,7 +789,7 @@ export default function TableScreen(props) {
               return (
               <button
                 key={token.id}
-                className={`piece${selectedId === token.id ? " on" : ""}${isActiveBattle && token.id === active?.id ? " acting" : ""}${tokenPreview?.id === token.id && tokenPreview.blocked ? " blocked" : ""}${arrivalId === token.id ? " nf-state-table-arriving" : ""}${targetState?.ok || tacticTargetable ? " nf-state-table-targetable" : ""}${isBattle && token.hp <= 0 ? " nf-state-token-down" : ""}${impact?.targetId === token.id ? ` nf-state-table-hit${impact.critical ? " nf-state-table-critical" : ""}` : ""}`}
+                className={`piece${selectedId === token.id ? " on" : ""}${isActiveBattle && token.id === active?.id ? " acting" : ""}${token.hidden ? " nf-state-table-hidden" : ""}${tokenPreview?.id === token.id && tokenPreview.blocked ? " blocked" : ""}${arrivalId === token.id ? " nf-state-table-arriving" : ""}${targetState?.ok || tacticTargetable ? " nf-state-table-targetable" : ""}${isBattle && token.hp <= 0 ? " nf-state-token-down" : ""}${impact?.targetId === token.id ? ` nf-state-table-hit${impact.critical ? " nf-state-table-critical" : ""}` : ""}`}
                 style={{ left: `${token.position.xPercent}%`, top: `${token.position.yPercent}%`, "--piece": token.color }}
                 onPointerDown={(event) => onTokenPointerDown(event, token)}
                 onKeyDown={(event) => onTokenKeyDown(event, token)}
@@ -800,6 +803,7 @@ export default function TableScreen(props) {
                 <span className="piece-name">{token.name}</span>
                 {isBattle && <span className="piece-hp"><i style={{ width: `${(token.hp / token.maxHp) * 100}%`, background: healthTone(token.hp, token.maxHp) }} /></span>}
                 {isBattle && conditions.length > 0 && <span className="nf-state-table-condition-badges" aria-label={`${conditions.length} conditions`}>{conditions.map((condition) => <i key={condition.id} title={`${condition.name}: ${condition.note}`} style={{ "--nf-condition": condition.color }}>{condition.abbreviation}</i>)}</span>}
+                {isBattle && token.hidden && <span className="nf-state-table-hidden-badge" title={`Hidden from ${token.hiddenFromTokenIds.length} token${token.hiddenFromTokenIds.length === 1 ? "" : "s"}`}><EyeOff size={10} /> {token.hiddenFromTokenIds.length}</span>}
                 {isBattle && embedded.length > 0 && <span className="nf-state-table-embedded-count" aria-label={`${embedded.length} embedded weapon${embedded.length === 1 ? "" : "s"}`}><ArchiveRestore size={10} />{embedded.length}</span>}
                 {impact?.targetId === token.id && <span className="nf-state-table-damage-float" role="status">−{impact.damage}{impact.critical ? " critical" : ""}</span>}
               </button>
@@ -1028,12 +1032,14 @@ export default function TableScreen(props) {
           attack={startAttack}
           dash={useDash}
           tacticState={tacticState}
+          hideState={hideState}
           readyState={readyState}
           potionState={potionState}
           helpState={helpState}
           stabilizeState={stabilizeState}
           dodge={useDodge}
           disengage={useDisengage}
+          hide={useHide}
           help={startHelp}
           stabilize={stabilizeToken}
           ready={startReady}

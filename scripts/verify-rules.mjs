@@ -73,7 +73,7 @@ for (const contract of [
   "xpAwarded: Boolean(encounter.xpAwarded)",
   "export function tokenSkillModifier",
   "export const tokenSkillProfile",
-  "skillProficiencies: hero.skillProficiencies || []",
+  "skillProficiencies: derived.skillProficiencies",
   "xp: monster.xp",
 ]) if (!tableDomain.includes(contract)) failures.push(`Table domain is missing ${contract}.`);
 // The schema version must not move: new fields default instead.

@@ -32,6 +32,8 @@ import {
   setOffHand,
   setOffHandSlot,
   setShield,
+  setItemCharges,
+  toggleAttunedItem,
   toggleWornItem,
   wornMagicBonuses,
 } from "../domain/items.js";
@@ -107,11 +109,25 @@ function EnchantmentControl({ hero, item, run, busy }) {
   );
 }
 
+function ChargeControl({ hero, item, run, busy }) {
+  const state = hero.itemCharges?.[item.id] || { current: item.chargeMaximum, max: item.chargeMaximum };
+  return (
+    <div className="step" title={item.chargeRecharge ? `Recharge: ${item.chargeRecharge}` : "Charges"}>
+      <button onClick={stop(() => run(setItemCharges(hero, item.id, state.current - 1)))} disabled={busy || state.current <= 0} aria-label={`Use one ${item.name} charge`}><Minus size={13} /></button>
+      <span className="val">{state.current}/{state.max}</span>
+      <button onClick={stop(() => run(setItemCharges(hero, item.id, state.current + 1)))} disabled={busy || state.current >= state.max} aria-label={`Restore one ${item.name} charge`}><Plus size={13} /></button>
+    </div>
+  );
+}
+
 function OwnedItemRow({ hero, item, run, open, busy }) {
   const Icon = itemIcon(item);
   const enchantable = item.kind === "weapon" || item.kind === "armor";
-  const wearable = Boolean(item.implementedEffect);
-  const worn = hero.wornItemIds.includes(item.id);
+  const wearable = Boolean(item.implementedEffect || item.requiresAttunement);
+  const wornItemIds = hero.wornItemIds || [];
+  const attunedItemIds = hero.attunedItemIds || [];
+  const worn = wornItemIds.includes(item.id);
+  const attuned = attunedItemIds.includes(item.id);
   const bonus = hero.enchantments?.[item.id] || 0;
   return (
     <article className={`loot loot-${item.kind} nf-state-loot-button`}>
@@ -125,10 +141,11 @@ function OwnedItemRow({ hero, item, run, open, busy }) {
       <div className="loot-acts">
         {enchantable && <EnchantmentControl hero={hero} item={item} run={run} busy={busy} />}
         {wearable && (
-          <button className={`attune${worn ? " on" : ""}`} onClick={stop(() => run(toggleWornItem(hero, item.id)))} disabled={busy}>
-            {worn ? "Worn" : "Wear"}
+          <button className={`attune${worn ? " on" : ""}`} onClick={stop(() => run(item.requiresAttunement ? toggleAttunedItem(hero, item.id) : toggleWornItem(hero, item.id)))} disabled={busy}>
+            {item.requiresAttunement ? (attuned ? "Attuned" : "Attune") : (worn ? "Worn" : "Wear")}
           </button>
         )}
+        {item.chargeMaximum > 0 && <ChargeControl hero={hero} item={item} run={run} busy={busy} />}
         <QuantityControl hero={hero} item={item} run={run} busy={busy} />
         <button className="glyph glyph-hazard" onClick={stop(() => run(removeInventoryItem(hero, item.id)))} disabled={busy} title="Remove all" aria-label={`Remove ${item.name}`}><Trash2 size={15} /></button>
       </div>
@@ -245,15 +262,17 @@ function LoadoutPanel({ hero, run, error, clearError, busy }) {
 
 function WornMagicPanel({ hero }) {
   const wornBonuses = wornMagicBonuses(hero);
+  const attunedItemIds = hero.attunedItemIds || [];
   return (
     <section className="nf-state-hero-panel nf-state-gear-continuation">
-      <div className="unit-top"><span className="unit-label">Worn magic</span><span className="tag tag-brass">No attunement cap</span></div>
+      <div className="unit-top"><span className="unit-label">Worn magic</span><span className={`tag${attunedItemIds.length >= 3 ? " tag-foe" : " tag-brass"}`}>{attunedItemIds.length}/3 attuned</span></div>
       <div className="nf-state-gear-bonuses">
         <span>AC <strong className="numeral">+{wornBonuses.ac}</strong></span>
         <span>Saves <strong className="numeral">+{wornBonuses.save}</strong></span>
         <span>Attacks <strong className="numeral">+{wornBonuses.attack}</strong></span>
         <span>Ranged damage <strong className="numeral">+{wornBonuses.rangedDamage}</strong></span>
       </div>
+      <p className="note">Attunement is limited to three items. Charged items show their current pool beside the inventory controls.</p>
     </section>
   );
 }
@@ -298,8 +317,10 @@ function CatalogDrawer({ hero, filters, setFilters, run, close, busy }) {
 
 function ItemDrawer({ hero, item, run, close, error, busy }) {
   const Icon = itemIcon(item);
-  const bonus = hero.enchantments?.[item.id] || 0;
-  const worn = hero.wornItemIds.includes(item.id);
+  const wornItemIds = hero.wornItemIds || [];
+  const attunedItemIds = hero.attunedItemIds || [];
+  const worn = wornItemIds.includes(item.id);
+  const attuned = attunedItemIds.includes(item.id);
   const main = hero.loadout.mainHand === item.id;
   const off = hero.loadout.offHand === item.id;
   const body = hero.armorId === item.id;
@@ -317,11 +338,12 @@ function ItemDrawer({ hero, item, run, close, error, busy }) {
             <div className="unit-top"><span className="unit-label">Inventory</span><span className="tag">{formatCost(item)}</span></div>
             <div className="row"><QuantityControl hero={hero} item={item} run={run} busy={busy} />{(item.kind === "weapon" || item.kind === "armor") && <EnchantmentControl hero={hero} item={item} run={run} busy={busy} />}</div>
           </section>
+          {item.chargeMaximum > 0 && <section className="nf-state-hero-panel"><div className="unit-top"><span className="unit-label">Charges</span><span className="tag tag-brass">{item.chargeRechargeKind || "manual"}</span></div><ChargeControl hero={hero} item={item} run={run} busy={busy} /><p className="note">{item.chargeRecharge || "This item has a charge pool."}</p></section>}
           {item.kind === "weapon" && <section className="nf-state-hero-panel"><div className="unit-top"><span className="unit-label">Weapon loadout</span></div><div className="nf-state-equipment-actions"><button className={`btn ${main ? "btn-key" : "btn-line"}`} onClick={() => run(setMainHand(hero, main ? null : item.id))}>{main ? "Main hand" : "Equip main hand"}</button><button className={`btn ${off ? "btn-key" : "btn-line"}`} onClick={() => run(setOffHand(hero, off ? null : item.id))}>{off ? "Off hand" : "Equip off hand"}</button></div></section>}
           {item.kind === "armor" && item.category !== "shield" && <section className="nf-state-hero-panel"><div className="unit-top"><span className="unit-label">Armour loadout</span></div><button className={`btn ${body ? "btn-key" : "btn-line"}`} onClick={() => run(setArmor(hero, body ? null : item.id))}>{body ? "Worn armour" : "Wear armour"}</button></section>}
           {item.kind === "armor" && item.category === "shield" && <section className="nf-state-hero-panel"><div className="unit-top"><span className="unit-label">Shield loadout</span></div><button className={`btn ${shield ? "btn-key" : "btn-line"}`} onClick={() => run(setShield(hero, shield ? null : item.id))}>{shield ? "Shield raised" : "Raise shield"}</button></section>}
-          {item.implementedEffect && <section className="nf-state-hero-panel"><div className="unit-top"><span className="unit-label">Implemented magic</span><span className="tag tag-brass">{item.rarity}</span></div><p className="note">{EFFECT_LABELS[item.implementedEffect]}</p><button className={`attune${worn ? " on" : ""}`} onClick={() => run(toggleWornItem(hero, item.id))}>{worn ? "Worn" : "Wear"}</button></section>}
-          {item.kind === "magic-item" && !item.implementedEffect && <p className="note">This non-battle magic item is stored as inventory. Its special rules are intentionally inert in the current feature boundary.</p>}
+          {(item.implementedEffect || item.requiresAttunement) && <section className="nf-state-hero-panel"><div className="unit-top"><span className="unit-label">{item.implementedEffect ? "Implemented magic" : "Attunement"}</span><span className="tag tag-brass">{item.rarity}</span></div><p className="note">{item.implementedEffect ? EFFECT_LABELS[item.implementedEffect] : "This magic item is tracked in the three-item attunement pool. Its special action is still reference-only."}</p><button className={`attune${worn ? " on" : ""}`} onClick={() => run(item.requiresAttunement ? toggleAttunedItem(hero, item.id) : toggleWornItem(hero, item.id))}>{item.requiresAttunement ? (attuned ? "Attuned" : "Attune") : (worn ? "Worn" : "Wear")}</button></section>}
+          {item.kind === "magic-item" && <section className="nf-state-hero-panel"><div className="unit-top"><span className="unit-label">SRD rule</span><span className="tag">{item.requiresAttunement ? (attuned ? "Attuned" : "Requires attunement") : "No attunement"}</span></div><p className="note">{item.description || "No description supplied."}</p></section>}
         </div>
         <div className="drawer-foot"><button className="btn btn-hazard" onClick={() => { const result = run(removeInventoryItem(hero, item.id)); if (result?.ok !== false) close(); }} disabled={busy}><Trash2 size={15} /> Remove all</button><button className="btn btn-line" onClick={close}>Close</button></div>
       </aside>

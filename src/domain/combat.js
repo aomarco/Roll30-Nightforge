@@ -372,7 +372,7 @@ export function moveActiveToken(scene, tokenId, destination, viewport, options =
     movementSpent: context.resources.movementSpent + costFeet,
     swapChoice: context.resources.swapped ? "movement" : context.resources.swapChoice,
   };
-  let tokens = updateToken(context.tokens, tokenId, { position: landing });
+  let tokens = updateToken(context.tokens, tokenId, { position: landing, hiddenFromTokenIds: [], hidden: false });
   if (plan.value.grappledTargetId) {
     const followPosition = plan.value.route[Math.max(0, requestedLandingIndex - 1)];
     tokens = updateToken(tokens, plan.value.grappledTargetId, { position: followPosition });
@@ -744,7 +744,7 @@ function resolveForcedMovement(scene, tokens, target, specification, viewport) {
     "Choose another direction or clear the blocked square.",
   );
   const position = setupPositionForCell(current, viewport);
-  let nextTokens = updateToken(tokens, target.id, { position });
+  let nextTokens = updateToken(tokens, target.id, { position, hiddenFromTokenIds: [], hidden: false });
   nextTokens = nextTokens.map((entry) => {
     const grapplerId = entry.id === target.id ? entry.grappledById : entry.grappledById === target.id ? target.id : null;
     const grappler = grapplerId ? nextTokens.find((candidate) => candidate.id === grapplerId) : null;

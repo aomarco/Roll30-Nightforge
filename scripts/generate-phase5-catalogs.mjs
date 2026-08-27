@@ -147,16 +147,46 @@ if (missingMagic.length) {
   throw new Error(`Missing SRD magic records: ${missingMagic.join(", ")}`);
 }
 
-const magicShape = (entry, implementedEffect = null) => ({
-  id: entry.index,
-  name: entry.name,
-  kind: "magic-item",
-  typeLabel: "Magic item",
-  itemCategory: entry.equipment_category?.name || "Magic Item",
-  rarity: entry.rarity?.name || "Unknown",
-  implementedEffect,
-  source: "SRD 5.1",
-});
+const magicDescription = (entry) => (entry?.desc || []).join("\n\n");
+const attunementText = (description) => description.match(/\((requires attunement[^)]*)\)/i)?.[1] || null;
+const chargeMaximum = (description) => {
+  const match = description.match(/(?:starts with|has|contains)\s+(\d+)\s+charges?/i);
+  return match ? Number(match[1]) : null;
+};
+const chargeRecharge = (description) => description
+  .split(/\n\n+/)
+  .find((paragraph) => /regain|regains|recharge/i.test(paragraph)) || null;
+const chargeRechargeKind = (recharge) => {
+  if (!recharge) return null;
+  if (/short or long rest/i.test(recharge)) return "short-rest";
+  if (/long rest/i.test(recharge)) return "long-rest";
+  if (/short rest/i.test(recharge)) return "short-rest";
+  if (/daily|dawn/i.test(recharge)) return "daily";
+  return null;
+};
+
+const magicShape = (entry, implementedEffect = null) => {
+  const description = magicDescription(entry);
+  const attunementRequirement = attunementText(description);
+  const recharge = chargeRecharge(description);
+  return {
+    id: entry.index,
+    name: entry.name,
+    kind: "magic-item",
+    typeLabel: "Magic item",
+    itemCategory: entry.equipment_category?.name || "Magic Item",
+    rarity: entry.rarity?.name || "Unknown",
+    description,
+    requiresAttunement: Boolean(attunementRequirement),
+    attunementRequirement,
+    chargeMaximum: chargeMaximum(description),
+    chargeRecharge: recharge,
+    chargeRechargeKind: chargeRechargeKind(recharge),
+    destroyOnLastCharge: /last charge/i.test(description),
+    implementedEffect,
+    source: "SRD 5.1",
+  };
+};
 
 const magicItems = [...nonBattleNames]
   .map((name) => magicShape(magicByName.get(name)))

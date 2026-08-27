@@ -49,10 +49,10 @@ try {
   assert.match(gear, /Longsword \+2/);
   assert.match(gear, /Plate Armor \+1/);
   assert.match(gear, /Ring of Protection/);
-  assert.match(gear, />Worn</);
+  assert.match(gear, />Attuned</);
   assert.match(gear, /Loadout/);
   assert.match(gear, /Only owned equipment is listed/);
-  assert.match(gear, /No attunement cap/);
+  assert.match(gear, /1\/3 attuned/);
 
   const emptyHero = createHeroRecord({}, { id: "empty-gear", now: "2026-08-16T00:00:00.000Z" });
   const empty = renderToStaticMarkup(React.createElement(GearChapter, { hero: emptyHero, apply: () => ({ ok: true }) }));
@@ -95,12 +95,12 @@ try {
   }));
   assert.match(magicDrawer, /Implemented magic/);
   assert.match(magicDrawer, /\+1 AC and calculated saving throws/);
-  assert.match(magicDrawer, />Worn</);
+  assert.match(magicDrawer, />Attuned</);
 
   for (const markup of [gear, empty, catalog, weaponDrawer, magicDrawer]) {
     assert.doesNotMatch(markup, /[\u00c2\u00c3\ufffd]|\u00e2[^\s]/u);
   }
-  console.log("Phase 5 render smoke passed for owned Gear, empty inventory, catalog filtering, equipment drawer, loadout continuation, and worn magic.");
+  console.log("Phase 5 render smoke passed for owned Gear, empty inventory, catalog filtering, equipment drawer, loadout continuation, and attuned magic.");
 } finally {
   await vite.close();
 }

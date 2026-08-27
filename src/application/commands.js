@@ -6,6 +6,7 @@ import {
   raceById,
   subraceById,
 } from "../domain/heroes.js";
+import { longRest, shortRest } from "../domain/rest.js";
 
 export function createApplicationCommands({
   sceneRepository,
@@ -299,6 +300,17 @@ export function createApplicationCommands({
     return persist(() => heroRepository.update(id, normalizedPatch, { expectedRevision }), refreshHeroes);
   };
 
+  const restHero = (id, kind = "long", options = {}) => {
+    const current = heroRepository.get(id);
+    if (!current.ok) return persist(() => current, refreshHeroes);
+    const rested = kind === "short"
+      ? shortRest(current.value, { ...options, random: options.random || Math.random })
+      : longRest(current.value);
+    if (!rested.ok) return rested;
+    const saved = persist(() => heroRepository.update(id, rested.value), refreshHeroes);
+    return saved.ok ? { ...saved, outcome: rested.outcome } : saved;
+  };
+
   return {
     initialize,
     synchronize,
@@ -412,6 +424,7 @@ export function createApplicationCommands({
     },
     createHero: (input) => persist(() => heroRepository.create(input), refreshHeroes),
     updateHero,
+    restHero,
     awardExperience,
     removeHero: (id) => {
       const existing = heroRepository.get(id);

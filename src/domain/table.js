@@ -21,6 +21,7 @@ import {
   wornMagicBonuses,
 } from "./items.js";
 import { normalizeCoins } from "./money.js";
+import { normalizeRacialChoices, normalizeRacialUses, resetRacialUses } from "./racialTraits.js";
 
 const SKILL_BY_ID = Object.freeze(Object.fromEntries(SKILLS.map((skill) => [skill.id, skill])));
 
@@ -528,7 +529,21 @@ export function normalizeTableToken(input = {}, { id, ordinal = 0 } = {}) {
     armorId: typeof input.armorId === "string" ? input.armorId : null,
     shieldId: typeof input.shieldId === "string" ? input.shieldId : null,
     enchantments: input.enchantments && typeof input.enchantments === "object" ? input.enchantments : {},
+    attunedItemIds: Array.isArray(input.attunedItemIds)
+      ? [...new Set(input.attunedItemIds.filter((value) => typeof value === "string"))]
+      : Array.isArray(input.wornItemIds) ? [...new Set(input.wornItemIds.filter((value) => typeof value === "string"))] : [],
     wornItemIds: Array.isArray(input.wornItemIds) ? [...new Set(input.wornItemIds.filter((value) => typeof value === "string"))] : [],
+    itemCharges: input.itemCharges && typeof input.itemCharges === "object" && !Array.isArray(input.itemCharges) ? input.itemCharges : {},
+    racialTraitIds: Array.isArray(input.racialTraitIds) ? [...new Set(input.racialTraitIds.filter((value) => typeof value === "string"))] : [],
+    racialChoices: normalizeRacialChoices(input.racialChoices),
+    racialUses: normalizeRacialUses(input.racialUses, input.racialTraitIds),
+    darkvisionFeet: Math.max(0, Math.floor(finite(input.darkvisionFeet, 0))),
+    weaponProficiencies: Array.isArray(input.weaponProficiencies) ? [...new Set(input.weaponProficiencies.filter((value) => typeof value === "string"))] : [],
+    saveAdvantages: Array.isArray(input.saveAdvantages) ? [...new Set(input.saveAdvantages.filter((value) => typeof value === "string"))] : [],
+    magicSaveAdvantages: Array.isArray(input.magicSaveAdvantages) ? [...new Set(input.magicSaveAdvantages.filter((value) => typeof value === "string"))] : [],
+    racialExpertise: Array.isArray(input.racialExpertise) ? [...new Set(input.racialExpertise.filter((value) => value && typeof value === "object"))] : [],
+    hiddenFromTokenIds: Array.isArray(input.hiddenFromTokenIds) ? [...new Set(input.hiddenFromTokenIds.filter((value) => typeof value === "string" && value.trim()))] : [],
+    hidden: Array.isArray(input.hiddenFromTokenIds) && input.hiddenFromTokenIds.length > 0,
     conditions: normalizeConditions(input.conditions),
     conditionImmunities: normalizeConditionImmunities(input.conditionImmunities),
     conditionExpiries: normalizeConditionExpiries(input.conditionExpiries, input.conditions),
@@ -588,8 +603,15 @@ export function normalizeTableToken(input = {}, { id, ordinal = 0 } = {}) {
 }
 
 export const normalizeTableTokens = (tokens) =>
-  uniqueNormalizedRecords(tokens, (token, ordinal) =>
-    normalizeTableToken(token, { id: token?.id, ordinal }));
+  (() => {
+    const normalized = uniqueNormalizedRecords(tokens, (token, ordinal) =>
+      normalizeTableToken(token, { id: token?.id, ordinal }));
+    const tokenIds = new Set(normalized.map((token) => token.id));
+    return normalized.map((token) => {
+      const hiddenFromTokenIds = token.hiddenFromTokenIds.filter((tokenId) => tokenIds.has(tokenId) && tokenId !== token.id);
+      return { ...token, hiddenFromTokenIds, hidden: hiddenFromTokenIds.length > 0 };
+    });
+  })();
 
 export function createPlayToken({ id, ordinal = 0, name } = {}) {
   // Fanned across distinct cells near the middle of the board. The old
@@ -732,7 +754,7 @@ export function createHeroTokenSnapshot(hero, { id, ordinal = 0, position } = {}
     heroId: hero.id,
     name: hero.name,
     position,
-    hp: derived.hp,
+    hp: derived.currentHp,
     maxHp: derived.hp,
     ac: derived.ac,
     baseSpeed: derived.speed,
@@ -744,8 +766,17 @@ export function createHeroTokenSnapshot(hero, { id, ordinal = 0, position } = {}
     wisdom: derived.finalAbilities.wis,
     charisma: derived.finalAbilities.cha,
     saveProficiencies: hero.saveProficiencies || [],
-    skillProficiencies: hero.skillProficiencies || [],
-    toolProficiencies: hero.toolProficiencies || [],
+    skillProficiencies: derived.skillProficiencies,
+    toolProficiencies: derived.toolProficiencies,
+    racialTraitIds: derived.traitIds,
+    racialChoices: derived.racialChoices,
+    racialUses: hero.racialUses,
+    darkvisionFeet: derived.darkvisionFeet,
+    weaponProficiencies: derived.weaponProficiencies,
+    saveAdvantages: derived.saveAdvantages,
+    magicSaveAdvantages: derived.magicSaveAdvantages,
+    racialExpertise: derived.conditionalExpertise,
+    damageResistances: derived.damageResistances,
     level: derived.level,
     initiativeBonus: derived.initiative,
     size: derived.size,
@@ -756,6 +787,9 @@ export function createHeroTokenSnapshot(hero, { id, ordinal = 0, position } = {}
     shieldId: hero.shieldId,
     enchantments: hero.enchantments,
     wornItemIds: hero.wornItemIds,
+    attunedItemIds: hero.attunedItemIds,
+    itemCharges: hero.itemCharges,
+    hiddenFromTokenIds: [],
     conditions: [],
   }, { id, ordinal });
 }
@@ -801,12 +835,15 @@ export const skillById = (skillId) => SKILL_BY_ID[skillId] || null;
  * excluded — the implemented effects only cover attacks, armour class, and
  * saves, and none of them claims to help with skills.
  */
-export function tokenSkillModifier(token, skillId) {
+export function tokenSkillModifier(token, skillId, context = null) {
   const skill = SKILL_BY_ID[skillId];
   if (!skill) return 0;
   const base = abilityModifier(tokenAbilityScore(token, skill.ability));
   const proficient = (token?.skillProficiencies || []).includes(skill.id);
-  return base + (proficient ? proficiencyBonus(token?.level) : 0);
+  const expertise = proficient && context && (token?.racialExpertise || []).some((entry) =>
+    entry?.skillId === skill.id && entry.context === context,
+  );
+  return base + (proficient ? proficiencyBonus(token?.level) * (expertise ? 2 : 1) : 0);
 }
 
 export const tokenSkillProfile = (token) => SKILLS.map((skill) => ({
@@ -833,7 +870,17 @@ export function derivedTokenArmorClass(token) {
 export function applySetupTokenEquipment(tokens, tokenId, equipmentState) {
   return normalizeTableTokens(tokens).map((token, ordinal) => {
     if (token.id !== tokenId) return token;
-    const normalized = normalizeTableToken({ ...token, ...equipmentState }, { id: token.id, ordinal });
+    // `wornItemIds` was the only persisted magic-equipment switch before
+    // attunement existed. Treat an explicit legacy edit as the complete
+    // attunement edit too, so an old Setup inspector can still remove an item
+    // from both active lists instead of leaving a stale attunement behind.
+    const legacyWornEdit = Object.hasOwn(equipmentState || {}, "wornItemIds")
+      && !Object.hasOwn(equipmentState || {}, "attunedItemIds");
+    const normalized = normalizeTableToken({
+      ...token,
+      ...equipmentState,
+      ...(legacyWornEdit ? { attunedItemIds: equipmentState.wornItemIds } : {}),
+    }, { id: token.id, ordinal });
     return normalized.heroId
       ? { ...normalized, ac: derivedTokenArmorClass(normalized) }
       : normalized;
@@ -1222,6 +1269,9 @@ export function restoreSetupTokens(tokens, snapshot) {
       ...CLEARED_DEATH_STATE,
       ...CLEARED_TURN_STATE,
       position: saved ? normalizePosition(saved.position) : token.position,
+      hiddenFromTokenIds: [],
+      hidden: false,
+      racialUses: resetRacialUses(token.racialUses, token.racialTraitIds, "long"),
     };
   });
 }
@@ -1285,6 +1335,9 @@ export function prepareBattleStart(scene, { viewport, random = Math.random } = {
       ...CLEARED_TURN_STATE,
       // Every creature starts the encounter holding its own weapons.
       attacks: token.attacks.map((attack) => ({ ...attack, thrown: false })),
+      hiddenFromTokenIds: [],
+      hidden: false,
+      racialUses: resetRacialUses(token.racialUses, token.racialTraitIds, "long"),
     });
   }
 

@@ -88,6 +88,32 @@ export function resolveIncomingDamage(token, amount, { critical = false } = {}) 
   // the number that would have gone negative is already gone.
   const overflow = Math.max(0, incoming - pools.absorbed - Math.max(0, token.hp));
   const instantDeath = downed && overflow >= token.maxHp;
+  const relentlessEndurance = felled
+    && Boolean(token.racialUses?.relentlessEndurance)
+    && !instantDeath;
+  if (relentlessEndurance) {
+    return {
+      patch: {
+        hp: 1,
+        tempHp: pools.nextTempHp,
+        racialUses: {
+          ...(token.racialUses || {}),
+          relentlessEndurance: false,
+        },
+      },
+      absorbed: pools.absorbed,
+      previousHp: token.hp,
+      nextHp: 1,
+      nextTempHp: pools.nextTempHp,
+      downed: false,
+      felled: false,
+      dyingHit: false,
+      failuresAdded: 0,
+      died: false,
+      instantDeath: false,
+      relentlessEndurance: true,
+    };
+  }
   // A monster that reaches zero is simply killed; a Hero is killed only by
   // damage large enough to blow through their whole maximum on top of it.
   const killed = felled && (!makesDeathSaves || instantDeath);
@@ -122,6 +148,7 @@ export function resolveIncomingDamage(token, amount, { critical = false } = {}) 
  * log reads as an account of the fight rather than a column of numbers.
  */
 export function damageStateText(token, result) {
+  if (result.relentlessEndurance) return ` ${token.name} refuses to fall and drops to 1 hit point instead.`;
   if (result.instantDeath) return ` The blow is enough to kill ${token.name} outright.`;
   if (result.dyingHit && result.died) return ` ${token.name} fails a final death saving throw and dies.`;
   if (result.dyingHit) return ` ${token.name} fails ${result.failuresAdded === 2 ? "two death saving throws" : "a death saving throw"}.`;

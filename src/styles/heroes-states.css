@@ -31,6 +31,55 @@
   margin-top: 20px;
 }
 
+.nf-state-hero-rest-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.nf-state-hero-rest-stat {
+  display: flex;
+  min-height: 58px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: rgba(7, 16, 18, .42);
+}
+
+.nf-state-hero-rest-stat span {
+  color: var(--ink-3);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.nf-state-hero-rest-stat strong { font-size: 18px; }
+
+.nf-state-hero-rest-actions {
+  display: flex;
+  gap: 9px;
+  margin-top: 13px;
+}
+
+.nf-state-hero-trait-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.nf-state-hero-trait {
+  padding: 12px 13px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: rgba(7, 16, 18, .42);
+}
+
+.nf-state-hero-trait strong { color: var(--brass-hi); }
+.nf-state-hero-trait p { margin: 6px 0 0; color: var(--ink-2); font-size: 12px; line-height: 1.45; }
+
 .nf-state-hero-panel {
   padding: 18px;
   border: 1px solid var(--line);
@@ -88,7 +137,9 @@
 @media (max-width: 720px) {
   .nf-state-heroes-empty-body { align-items: flex-start; flex-direction: column; }
   .nf-state-hero-checks,
-  .nf-state-hero-skills { grid-template-columns: 1fr; }
+  .nf-state-hero-skills,
+  .nf-state-hero-trait-list,
+  .nf-state-hero-rest-grid { grid-template-columns: 1fr; }
 }
 
 .nf-state-loot-button {

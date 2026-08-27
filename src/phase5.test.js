@@ -197,7 +197,7 @@ test("equipment normalization repairs impossible persisted combinations", () => 
   };
   assert.deepEqual(normalizeEquipment(corrupt), {
     loadout: { mainHand: "greatsword", offHand: null }, armorId: null, shieldId: null,
-    enchantments: {}, wornItemIds: [],
+    enchantments: {}, attunedItemIds: [], wornItemIds: [], itemCharges: {},
   });
 });
 
@@ -223,17 +223,18 @@ test("weapon enchantments and worn attack/damage bonuses combine by item", () =>
   assert.deepEqual(weaponMagicBonuses(archer, "longbow"), { attack: 3, damage: 4 });
 });
 
-test("all six implemented worn effects derive exactly and have no attunement cap", () => {
+test("implemented worn effects respect the three-item attunement cap", () => {
   const ids = WORN_MAGIC_ITEMS.map((item) => item.id);
   const unarmored = hero({ inventory: ids.map((id) => entry(id)), wornItemIds: ids, classId: "wizard", baseAbilities: { int: 15 } });
-  assert.deepEqual(unarmored.wornItemIds, ids);
-  assert.deepEqual(wornMagicBonuses(unarmored), { ac: 5, save: 2, attack: 1, rangedDamage: 2 });
+  assert.deepEqual(unarmored.wornItemIds, ids.slice(0, 3));
+  assert.deepEqual(unarmored.attunedItemIds, ids.slice(0, 3));
+  assert.deepEqual(wornMagicBonuses(unarmored), { ac: 3, save: 1, attack: 0, rangedDamage: 2 });
   const derived = deriveHero(unarmored);
-  assert.equal(derived.ac, 14);
-  assert.equal(derived.spellcasting.attackBonus, 6);
-  assert.equal(saveModifier(unarmored, derived, "str"), 1);
+  assert.equal(derived.ac, 12);
+  assert.equal(derived.spellcasting.attackBonus, 5);
+  assert.equal(saveModifier(unarmored, derived, "str"), 0);
   const armored = { ...unarmored, inventory: [...unarmored.inventory, entry("leather-armor")], armorId: "leather-armor" };
-  assert.equal(wornMagicBonuses(armored).ac, 3);
+  assert.equal(wornMagicBonuses(armored).ac, 1);
 });
 
 test("worn toggles require ownership and an implemented effect", () => {

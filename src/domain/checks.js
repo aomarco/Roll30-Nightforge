@@ -81,15 +81,22 @@ function rollableToken(scene, tokenId) {
  */
 function resolveD20({ token, kind, ability, skill, dc, modifier, sources, autoFail, random }) {
   const mode = combineAttackModes(sources);
-  const rolls = autoFail
+  let rolls = autoFail
     ? []
     : Array.from({ length: mode === CHECK_MODE_NORMAL ? 1 : 2 }, () => rollDie(20, random));
-  const selectedIndex = autoFail
+  let selectedIndex = autoFail
     ? -1
     : mode === CHECK_MODE_DISADVANTAGE
       ? (rolls[1] < rolls[0] ? 1 : 0)
       : (rolls[1] > rolls[0] ? 1 : 0);
-  const naturalRoll = autoFail ? null : rolls[selectedIndex];
+  let naturalRoll = autoFail ? null : rolls[selectedIndex];
+  let luckyReroll = null;
+  if (naturalRoll === 1 && token.racialTraitIds?.includes("lucky")) {
+    luckyReroll = rollDie(20, random);
+    rolls = [...rolls, luckyReroll];
+    selectedIndex = rolls.length - 1;
+    naturalRoll = luckyReroll;
+  }
   const total = autoFail ? null : naturalRoll + modifier;
   const succeeded = autoFail ? false : dc === null ? null : total >= dc;
   return {
@@ -116,6 +123,7 @@ function resolveD20({ token, kind, ability, skill, dc, modifier, sources, autoFa
     succeeded,
     autoFailed: Boolean(autoFail),
     autoFailReasons: autoFail ? autoFail.map((condition) => condition.name) : [],
+    luckyReroll,
   };
 }
 
@@ -153,6 +161,12 @@ export function performSavingThrow(scene, specification = {}, { random = Math.ra
   const sources = [
     ...requestedModeSource(specification.mode),
     ...conditionSaveModes(token.conditions, ability),
+    ...(specification.saveAgainst && token.saveAdvantages?.includes(specification.saveAgainst)
+      ? [{ mode: CHECK_MODE_ADVANTAGE, code: `racial-${specification.saveAgainst}`, label: `Racial advantage against ${specification.saveAgainst}` }]
+      : []),
+    ...(specification.magical && token.magicSaveAdvantages?.includes(ability)
+      ? [{ mode: CHECK_MODE_ADVANTAGE, code: "gnome-cunning", label: "Gnome Cunning against magic" }]
+      : []),
     ...(cover.coverBonus ? [{ mode: CHECK_MODE_NORMAL, code: `${cover.coverLevel}-cover`, label: `${cover.coverLevel === "half" ? "Half" : "Three-quarters"} cover (+${cover.coverBonus})` }] : []),
   ];
   const outcome = resolveD20({
@@ -198,7 +212,7 @@ export function performAbilityCheck(scene, specification = {}, { random = Math.r
     "Choose Strength, Dexterity, Constitution, Intelligence, Wisdom, or Charisma.",
   );
   const dc = normalizeDc(specification.dc);
-  const modifier = skill ? tokenSkillModifier(token, skill.id) : abilityCheckModifier(token, ability);
+  const modifier = skill ? tokenSkillModifier(token, skill.id, specification.context) : abilityCheckModifier(token, ability);
   const outcome = resolveD20({
     token,
     kind: skill ? CHECK_KIND_SKILL : CHECK_KIND_ABILITY,

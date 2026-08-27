@@ -17,7 +17,7 @@ anything you decide against to the bottom **with the reason**.
 |---|---|---|---|
 | 1 | Classes | 2 of 12 | Fighter and Wizard. No features, no subclasses |
 | 2 | Levels | Yes | 1–20, but only HP and proficiency scale |
-| 3 | Races and subraces | All 9 + 4 | Bonuses, speed, size. No racial traits |
+| 3 | Races and subraces | All 9 + 4 | Bonuses, speed, size, and the 38-rules racial trait catalog |
 | 4 | Backgrounds | All 13 | Grant their two skills, tool proficiencies, and catalog-backed starting equipment |
 | 5 | Feats | No | — |
 | 6 | Character creation | Yes | Point buy, skills, saves, languages |
@@ -27,7 +27,7 @@ anything you decide against to the bottom **with the reason**.
 | 10 | Weapons | All 36 | Yes, incl. properties except Special and Monk |
 | 11 | Armor and shields | All 13 | Yes |
 | 12 | Magic weapons and armor | Yes | +1 to +3 enchantments work |
-| 13 | Magic items | 123 | 10 work: 6 worn items and 4 healing potions. 113 remain inert; no attunement or charges |
+| 13 | Magic items | 123 | Attunement and charge pools are tracked; 10 have active effects and 113 remain reference-only |
 | 14 | Monsters | All 334 | Yes. Traits, reactions, legendary actions are text only |
 | 15 | Conditions | All 15 | Permanent or timed; immunity enforced. Exhaustion is tracked, not laddered — decided against |
 | 16 | Attack rolls | Yes | Advantage, crits, multiattack, two-weapon, thrown, ammo |
@@ -36,10 +36,10 @@ anything you decide against to the bottom **with the reason**.
 | 19 | Initiative and turns | Yes | Editable scores, reroll-all, and manual tie ordering |
 | 20 | Movement | Yes | Walking, flying, swimming, climbing, difficult terrain, and manual forced movement |
 | 21 | Reactions | Yes | Opportunity attacks interrupt movement; Ready uses the same reaction resource |
-| 22 | Other actions | Partly | Unarmed strikes, Dodge, Disengage, Help, Stabilise, Grapple, and Shove. No Hide |
-| 23 | Vision | Partly | Half, three-quarters, and total cover. No light levels or darkvision |
+| 22 | Other actions | Partly | Unarmed strikes, Dodge, Disengage, Help, Hide, Stabilise, Grapple, and Shove |
+| 23 | Vision | Partly | Cover and racial darkvision are surfaced; there is no light-level model |
 | 24 | Concentration | No | — |
-| 25 | Rests | No | No short/long rest, no hit dice |
+| 25 | Rests | Yes | Hero sheet short/long rests spend hit dice, restore HP, and refresh racial/item uses |
 | 26 | Loot and chests | Yes | Yes |
 | 27 | Money | Yes | Five coin purses and loot transfers; no shopping |
 | 28 | XP | Yes | Awarded at battle end by hand. Only defeated foes count |
@@ -169,7 +169,12 @@ a rule was once wrong is worth more than a tidy list.
 - [x] **Backgrounds** — all thirteen grant two skills, their tool proficiencies,
       and catalog-backed starting equipment. Changing background swaps
       only the previous background's grants.
-- [ ] **Racial traits** — 38 individual rules
+- [x] **Racial traits** — all 38 rules are catalogued and shown on the Hero sheet.
+      Proficiencies, darkvision, resistances, save advantages, conditional
+      expertise, Hill Dwarf HP, Lucky, Relentless Endurance, Savage Attacks,
+      dragon ancestry, and rest-based uses are derived or enforced. Racial
+      spell choices and the dragonborn breath profile are recorded for the
+      future spell/action systems.
 - [x] **Forced movement** — shared collision-aware push, pull, and directional
       slide engine. Shove uses the same engine; forced movement spends no speed
       and draws no opportunity attack.
@@ -186,11 +191,17 @@ a rule was once wrong is worth more than a tidy list.
       swing, and Disengage prevents it. Movement pauses at the departure square,
       the reaction resolves, and a surviving mobile creature resumes its route.
       Ready uses the same reaction resource.
-- [ ] **Hide** — needs Stealth, plus per-token visibility
-- [ ] **Attunement and charges** — a new system touching every item
+- [x] **Hide** — Stealth checks run against each enemy's passive Perception when
+      total cover or invisibility provides concealment. Visibility is stored per
+      enemy token; hidden attackers gain advantage and reveal when they attack
+      or move.
+- [x] **Attunement and charges** — magic-item attunement is capped at three,
+      class requirements are checked, legacy worn state is normalized, and SRD
+      charge metadata is generated into persistent per-Hero pools.
 - [ ] **Feats** — each one is bespoke
 - [ ] **The 113 inert magic items** — each one is bespoke
-- [ ] **Rests** — needs hit dice and everything that recharges
+- [x] **Rests** — Hero-sheet short and long rests spend/recover hit dice, restore
+      HP, and refresh racial uses plus catalogued short/long/daily item charges.
 - [ ] **Concentration** — effects need durations and sources first
 - [ ] **Light and darkvision** — needs a lighting model on the map
 - [ ] **Monster traits automated** — 334 monsters of bespoke rules
@@ -203,9 +214,10 @@ a rule was once wrong is worth more than a tidy list.
 
 Condition immunity and durations, surprise, all four movement modes, difficult
 terrain, Ready, healing potions, backgrounds, Grapple and Shove have landed.
-The next smallest combat gap is **Hide**. Shopping remains separate from the
-implemented coin purses because it needs a merchant and transaction workflow,
-not just item prices.
+Hide, racial traits, rests, and the attunement/charge state system have now
+landed. The next open systems are **Feats** and the 113 bespoke magic-item
+actions. Shopping remains separate from the implemented coin purses because it
+needs a merchant and transaction workflow, not just item prices.
 
 ---
 

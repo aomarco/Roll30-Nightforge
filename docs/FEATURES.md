@@ -211,6 +211,14 @@ to do instead.
 - **9 races** (Dwarf, Elf, Halfling, Human, Dragonborn, Gnome, Half-Elf,
   Half-Orc, Tiefling) with subraces where the SRD defines them, each applying
   its own ability score bonuses and granted languages.
+- **38 racial traits** are catalogued and shown for each Hero. The sheet offers
+  the choices that need a player decision — dragon ancestry, dwarf tools,
+  half-elf skills, and high-elf language/cantrip notes — while the rules derive
+  racial proficiencies, darkvision, resistances, save advantages, conditional
+  expertise, Hill Dwarf hit points, and racial spell descriptors. Lucky,
+  Relentless Endurance, and Savage Attacks are enforced in the dice and damage
+  engines. The breath-weapon profile and racial spell choices are recorded for
+  the future area-action and spell systems.
 - **2 classes: Fighter and Wizard.** The other ten are not built — see
   [`TODO.md`](./TODO.md).
 - **13 mechanical backgrounds, 9 alignments, 16 languages, 18 skills.** Each
@@ -221,10 +229,11 @@ to do instead.
 - **Point buy** with the standard 27-point budget. Scores run 8–15 before racial
   bonuses, costing 0/1/2/3/4/5/7/9 respectively. Overspending is refused with a
   message rather than silently clamped.
-- **Everything derived is derived, never stored.** Ability modifiers,
+- **Totals are derived, while play state is stored.** Ability modifiers,
   proficiency bonus, armour class, save modifiers, and skill modifiers are all
-  computed from the base numbers each time they're read. There is no way for a
-  sheet to hold a stale total.
+  computed from the base numbers each time they're read. Mutable play state
+  such as current HP, spent Hit Dice, and uses is stored explicitly; there is
+  no way for a sheet to hold a stale total.
 - **Proficiency bonus** is `2 + floor((level - 1) / 4)`, capped to levels 1–20.
 - **Experience is recorded but never spent.** Heroes carry an XP total against
   the SRD's 20 thresholds. The sheet says how much is left to the next level, or
@@ -232,6 +241,12 @@ to do instead.
   Level field is always a deliberate act.
 - **Armour class** accounts for the armour worn, its Dexterity cap, a shield,
   and any magic bonuses from worn items.
+- **Rests** live on the Hero sheet. A short rest spends the selected number of
+  available class hit dice and heals by the rolled die plus Constitution
+  modifier. A long rest restores HP, recovers half the spent dice (minimum one
+  when any were spent), and refreshes long-rest racial uses and catalogued item
+  charges. Old Hero saves receive full HP, an unspent hit-dice pool, and ready
+  racial uses automatically.
 - **Changing class resets save proficiencies** to that class's two, because
   keeping the old ones would silently produce an illegal character.
 - **The sheet keeps Identity, Abilities and Gear on one continuous record**, so
@@ -257,6 +272,17 @@ to do instead.
 - **Enchantments from +0 to +3** can be applied to eligible weapons and armour,
   and they feed through to attack rolls, damage, and AC.
 - **Worn magic items** apply passive bonuses while worn.
+- **Attunement is a real three-item pool.** Magic items that require attunement
+  must be owned, satisfy the supported class restriction, and occupy one of
+  three slots. Existing `wornItemIds` saves are read as legacy attunement state
+  and normalized without a schema bump. Items without an attunement rule can
+  still use the older implemented worn-effect path.
+- **Charges are generated from the SRD descriptions.** The catalog keeps the
+  maximum, recharge wording, recharge kind, and last-charge note; a Hero owns a
+  separate current/max pool for each charged item. Inventory controls expose
+  charge use, and short/long rests restore the matching pools. The special
+  action behind an otherwise inert magic item remains reference-only until its
+  bespoke item feature is built.
 - **The catalogue is generated, not hand-written.** `catalog.generated.js` is
   built by `npm run catalog:generate` from three SRD files. Never edit it
   directly — edit the generator in `scripts/` and re-run.
@@ -274,7 +300,14 @@ to do instead.
   proficiencies, level, size, conditions and their immunities/expiry rounds,
   an inventory, a five-denomination coin purse, a list of attacks, its damage defences, its death-save tally,
   and the turn-scoped states — whether it is Dodging, whether it has Disengaged,
-  whether its reaction is still available, and any Help an ally gave it.
+  whether its reaction is still available, and any Help an ally gave it. Hero
+  snapshots also carry racial traits, choices, racial uses, attunement, and
+  item-charge state so a battle does not change silently when the roster does.
+- **Per-token visibility** is tracked during Battle. Hide spends the Action and
+  rolls Stealth against each standing enemy's passive Perception when total
+  cover or invisibility conceals the creature. The result names exactly which
+  enemy tokens failed to notice it. A hidden attacker gets advantage against
+  those enemies, while moving or attacking clears the hidden state.
 - **Those last four live on the token rather than on turn resources**, because
   every one of them outlives the turn that bought it, and turn resources exist
   only for whoever is currently active — the rest are discarded when the turn
@@ -464,6 +497,11 @@ split is the single most important design decision in the combat code.
   its turn. When triggered it resolves through the ordinary attack cinematic
   and spends the creature's reaction. If it never fires, it expires at the
   start of the creature's next turn.
+- **Hide** spends the Action on a Stealth check against each enemy's passive
+  Perception. The command is available when the active token is concealed by a
+  full wall or Invisible; a successful result stores visibility per enemy,
+  grants advantage only against those enemies, and clears when the token moves
+  or attacks.
 - **Grapple and Shove are contested attacks.** The attacker rolls Athletics and
   the defender uses the better of Athletics or Acrobatics. Size and five-foot
   reach are enforced. Grapple prevents movement, can be escaped with an Action
