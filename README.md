@@ -35,8 +35,7 @@ npm run build:preview
 ```
 
 The production build uses the `/Roll30/` GitHub Pages base. The preview build
-uses `/Roll30-Nightforge/`. The Pages workflow runs the complete verification
-gate before publishing.
+uses `/Roll30-Nightforge/`. The Pages workflow builds and publishes directly.
 
 ## Verification
 
