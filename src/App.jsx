@@ -1,11 +1,13 @@
 import { useEffect, useReducer, useRef } from "react";
-import { Compass, ScrollText, ShieldCheck } from "lucide-react";
+import { BookOpen, Compass, ScrollText, ShieldCheck } from "lucide-react";
 
 import { createBrowserRuntime } from "./application/browserRuntime.js";
 import { tableModeForScene } from "./application/library.js";
 import { applicationReducer, createInitialApplicationState } from "./application/state.js";
 import { STORAGE_KEYS } from "./storage/constants.js";
 import { D20 } from "./ui/Glyphs.jsx";
+import AiAssistant from "./screens/AiAssistant.jsx";
+import CompendiumScreen from "./screens/CompendiumScreen.jsx";
 import LibraryScreen from "./screens/LibraryScreen.jsx";
 import HeroesScreen from "./screens/HeroesScreen.jsx";
 import SceneScreen from "./screens/SceneScreen.jsx";
@@ -15,6 +17,7 @@ import BackupsScreen from "./screens/BackupsScreen.jsx";
 const TABS = [
   { id: "home", label: "Library", icon: Compass },
   { id: "characters", label: "Heroes", icon: ScrollText },
+  { id: "compendium", label: "Compendium", icon: BookOpen },
   { id: "backups", label: "Backups", icon: ShieldCheck },
 ];
 
@@ -122,25 +125,31 @@ export default function App({ browser = window, runtimeFactory = createBrowserRu
 
   if (state.route.page === "board") {
     return (
-      <TableScreen
-        scene={activeScene}
-        heroes={state.heroes}
-        mode={state.route.mode || tableModeForScene(activeScene)}
-        go={go}
-        setMode={(mode) => go({ page: "board", mode })}
-        onUpdate={updateScene}
-        onAwardExperience={(id, award) => trackRevision(() => runtime.commands.awardExperience(id, award, revisionRef.current))}
-        onRollCheck={rollCheck}
-        rollLog={state.rollLog}
-        artworkRepository={runtime.artworkRepository}
-        persistence={state.persistence}
-      />
+      <>
+        <TableScreen
+          scene={activeScene}
+          heroes={state.heroes}
+          mode={state.route.mode || tableModeForScene(activeScene)}
+          go={go}
+          setMode={(mode) => go({ page: "board", mode })}
+          onUpdate={updateScene}
+          onAwardExperience={(id, award) => trackRevision(() => runtime.commands.awardExperience(id, award, revisionRef.current))}
+          onRollCheck={rollCheck}
+          rollLog={state.rollLog}
+          artworkRepository={runtime.artworkRepository}
+          persistence={state.persistence}
+        />
+        <AiAssistant scene={activeScene} heroes={state.heroes} route={state.route} mode={state.route.mode || tableModeForScene(activeScene)} />
+      </>
     );
   }
 
   let screen;
   if (state.route.page === "backups") {
     screen = <BackupsScreen service={runtime.backups} browser={browser} />;
+  }
+  else if (state.route.page === "compendium") {
+    screen = <CompendiumScreen />;
   }
   else if (state.route.page === "characters") {
     screen = (
@@ -203,6 +212,7 @@ export default function App({ browser = window, runtimeFactory = createBrowserRu
     <div className="app nf-state-responsive-shell">
       <CommandDeck route={state.route} go={go} />
       <main className="viewport" key={state.route.page}>{screen}</main>
+      <AiAssistant scene={activeScene} heroes={state.heroes} route={state.route} mode={null} />
     </div>
   );
 }

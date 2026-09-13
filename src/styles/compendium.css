@@ -1,0 +1,185 @@
+.nf-state-compendium {
+  position: relative;
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 28px 22px 60px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.nf-state-compendium .codex-top {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.nf-state-compendium .codex-top h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nf-state-compendium .seek {
+  min-width: min(320px, 100%);
+}
+
+.nf-state-compendium-crumbs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  color: rgba(191, 245, 232, 0.65);
+  font-size: 13px;
+}
+
+.nf-state-compendium-crumbs > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.nf-state-compendium-crumbs button {
+  background: transparent;
+  border: none;
+  padding: 2px 4px;
+  color: #2fd3b4;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.nf-state-compendium-crumbs button:hover {
+  color: #bff5e8;
+  text-decoration: underline;
+}
+
+.nf-state-compendium-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.nf-state-compendium-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  margin-bottom: 8px;
+  text-align: left;
+  border-radius: 12px;
+  border: 1px solid rgba(47, 211, 180, 0.18);
+  background: rgba(16, 34, 38, 0.55);
+  color: #eaf6f2;
+  cursor: pointer;
+}
+
+.nf-state-compendium-row:hover {
+  border-color: rgba(47, 211, 180, 0.5);
+}
+
+.nf-state-compendium-row-ico {
+  display: grid;
+  place-items: center;
+  color: #e0b055;
+  flex: none;
+}
+
+.nf-state-compendium-row-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-right: auto;
+  min-width: 0;
+}
+
+.nf-state-compendium-row-meta small {
+  color: rgba(191, 245, 232, 0.6);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.nf-state-compendium-row > svg:last-child {
+  flex: none;
+  color: rgba(191, 245, 232, 0.4);
+}
+
+.nf-state-compendium-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+  border-radius: 14px;
+  border: 1px solid rgba(224, 176, 85, 0.3);
+  background: rgba(16, 34, 38, 0.65);
+}
+
+.nf-state-compendium-detail h2 {
+  margin: 2px 0;
+}
+
+.nf-state-compendium-detail h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #e0b055;
+}
+
+.nf-state-compendium-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+  font-size: 13.5px;
+  color: rgba(191, 245, 232, 0.75);
+}
+
+.nf-state-compendium-stats strong {
+  color: #eaf6f2;
+  font-weight: 600;
+}
+
+.nf-state-compendium-abilities {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+}
+
+.nf-state-compendium-abilities > span {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 4px;
+  border-radius: 10px;
+  border: 1px solid rgba(47, 211, 180, 0.18);
+  background: rgba(6, 12, 14, 0.5);
+}
+
+.nf-state-compendium-abilities small {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: rgba(191, 245, 232, 0.6);
+}
+
+.nf-state-compendium-sub {
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(47, 211, 180, 0.14);
+  background: rgba(6, 12, 14, 0.45);
+}
+
+.nf-state-compendium-sub small {
+  color: rgba(191, 245, 232, 0.65);
+}
+
+.nf-state-compendium-detail section {
+  display: flex;
+  flex-direction: column;
+}

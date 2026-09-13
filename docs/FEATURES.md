@@ -858,7 +858,19 @@ split is the single most important design decision in the combat code.
 ## Interface and accessibility
 
 - **The command deck** runs across the top: brand, navigation, and a standing
-  "Enter the table" action.
+  "Enter the table" action. Library, Heroes, Compendium, and Backups each have
+  their own tab.
+- **The Compendium** shelves every rule in the library as browsable folders:
+  334 monsters by creature type with full stat blocks, 359 items by kind, 319
+  spells A to Z with honest automation status, all 12 classes marked playable
+  or not yet, 9 races with subraces, and all 15 conditions with what each does.
+  A search box answers to any name from anywhere.
+- **The tabletop sage** is a floating button on every screen, in and out of
+  battle. It opens a draggable chat bubble where the user pastes an OpenRouter
+  or OpenAI-style key (kept in this browser only) and talks to the Muse Spark
+  contributor model, with thinking off or on xhigh. The sage is fed the D&D
+  rules this table enforces plus the open scene, the fight, and the roster, so
+  it answers in context.
 - **The map owns the window** on the Table screen. Instruments float over it as
   glass panels — corner HUDs, side docks, and a turn track along the bottom —
   rather than boxing the map into a column.
