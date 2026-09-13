@@ -172,7 +172,7 @@ test("Scene normalization persists map view, walls, visibility, and Play tokens 
   assert.equal("camera" in scene, false);
 });
 
-test("Phase 6 Scene state survives a fresh repository instance", () => {
+test("Phase 6 Scene state survives a fresh repository instance", async () => {
   const storage = createMemoryStorage();
   const makeRepository = () => createSceneRepository(createStateRepository(storage, { clock: () => NOW }), {
     clock: () => NOW,
@@ -181,9 +181,9 @@ test("Phase 6 Scene state survives a fresh repository instance", () => {
   const repository = makeRepository();
   const token = createPlayToken({ id: "persisted-token" });
   const wall = createWall({ id: "persisted-wall", type: "full", points: [{ xPercent: 10, yPercent: 15 }, { xPercent: 80, yPercent: 60 }] });
-  const created = repository.create({ kind: "play", tokens: [token], walls: [wall], wallsVisible: false, mapView: { scale: 1.4, x: 33, y: -12 } });
+  const created = (await repository.create({ kind: "play", tokens: [token], walls: [wall], wallsVisible: false, mapView: { scale: 1.4, x: 33, y: -12 } }));
   assert.equal(created.ok, true);
-  const loaded = makeRepository().get(created.value.id);
+  const loaded = (await makeRepository().get(created.value.id));
   assert.equal(loaded.ok, true);
   assert.deepEqual(loaded.value.mapView, { scale: 1.4, x: 33, y: -12 });
   assert.deepEqual(loaded.value.walls, [wall]);
@@ -192,37 +192,37 @@ test("Phase 6 Scene state survives a fresh repository instance", () => {
   assert.equal("camera" in loaded.value, false);
 });
 
-test("Scene repository updates persist completed Table operations", () => {
+test("Scene repository updates persist completed Table operations", async () => {
   const storage = createMemoryStorage();
   const makeRepository = () => createSceneRepository(createStateRepository(storage, { clock: () => NOW }), {
     clock: () => NOW,
     idFactory: () => "updated-scene",
   });
   const repository = makeRepository();
-  const created = repository.create({ kind: "play" }).value;
+  const created = (await repository.create({ kind: "play" })).value;
   const token = createPlayToken({ id: "updated-token" });
   const wall = createWall({ id: "updated-wall", type: "half", points: [{ xPercent: 1, yPercent: 2 }, { xPercent: 90, yPercent: 70 }] });
-  const updated = repository.update(created.id, {
+  const updated = (await repository.update(created.id, {
     tokens: [token], walls: [wall], wallsVisible: false, mapView: { scale: 2.2, x: -120, y: 48 },
-  });
+  }));
   assert.equal(updated.ok, true);
-  const reloaded = makeRepository().get(created.id).value;
+  const reloaded = (await makeRepository().get(created.id)).value;
   assert.equal(reloaded.tokens[0].id, "updated-token");
   assert.deepEqual(reloaded.walls, [wall]);
   assert.equal(reloaded.wallsVisible, false);
   assert.deepEqual(reloaded.mapView, { scale: 2.2, x: -120, y: 48 });
 });
 
-test("a failed Table persistence write preserves the last valid Scene", () => {
+test("a failed Table persistence write preserves the last valid Scene", async () => {
   const storage = createMemoryStorage();
   const repository = createSceneRepository(createStateRepository(storage, { clock: () => NOW }), {
     clock: () => NOW,
     idFactory: () => "failure-scene",
   });
-  const created = repository.create({ kind: "play", mapView: { scale: 1, x: 0, y: 0 } }).value;
+  const created = (await repository.create({ kind: "play", mapView: { scale: 1, x: 0, y: 0 } })).value;
   storage.setFailureMode("write");
-  const failed = repository.update(created.id, { mapView: { scale: 3, x: 900, y: 900 } });
+  const failed = (await repository.update(created.id, { mapView: { scale: 3, x: 900, y: 900 } }));
   assert.equal(failed.ok, false);
   storage.setFailureMode(null);
-  assert.deepEqual(repository.get(created.id).value.mapView, { scale: 1, x: 0, y: 0 });
+  assert.deepEqual((await repository.get(created.id)).value.mapView, { scale: 1, x: 0, y: 0 });
 });

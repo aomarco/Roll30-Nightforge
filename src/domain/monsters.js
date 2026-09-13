@@ -6,6 +6,8 @@
 let cachedMonsters = null;
 let pendingLoad = null;
 
+export const MONSTER_CONTENT_VERSION = "srd-5.1-2014-monsters-v2";
+
 export const loadedMonsters = () => cachedMonsters;
 
 export function loadMonsters() {
@@ -23,6 +25,83 @@ export function loadMonsters() {
       });
   }
   return pendingLoad;
+}
+
+/**
+ * A source record is allowed to be incomplete, but it is never allowed to
+ * disappear silently. These helpers are intentionally pure so the generator,
+ * setup inspector, and migration code can all use the same comparison shape.
+ */
+export const monsterCapabilitySummary = (monster) => {
+  const capabilities = Array.isArray(monster?.actionCapabilities) ? monster.actionCapabilities : [];
+  return Object.freeze({
+    implemented: capabilities.filter((entry) => entry.status === "implemented").length,
+    assisted: capabilities.filter((entry) => entry.status === "assisted").length,
+    referenceOnly: capabilities.filter((entry) => entry.status === "reference-only").length,
+    total: capabilities.length,
+  });
+};
+
+const comparable = (value) => JSON.stringify(value ?? null);
+
+export function monsterRefreshDiff(token, monster) {
+  if (!token?.monsterId || !monster || token.monsterId !== monster.id) return null;
+  const source = {
+    name: monster.name,
+    creatureType: monster.subtype ? `${monster.creatureType} (${monster.subtype})` : monster.creatureType,
+    challengeRating: monster.challengeRating,
+    xp: monster.xp,
+    hp: monster.hp,
+    maxHp: monster.hp,
+    ac: monster.ac,
+    speeds: monster.speed,
+    baseSpeed: monster.baseSpeed,
+    initiativeBonus: Math.floor((Number(monster.dexterity || 10) - 10) / 2),
+    strength: monster.strength,
+    dexterity: monster.dexterity,
+    constitution: monster.constitution,
+    intelligence: monster.intelligence,
+    wisdom: monster.wisdom,
+    charisma: monster.charisma,
+    saveProficiencies: monster.saveProficiencies,
+    skillProficiencies: monster.skillProficiencies,
+    saveTotals: monster.saveTotals,
+    skillTotals: monster.skillTotals,
+    skillExpertise: monster.skillExpertise,
+    passivePerception: monster.passivePerception,
+    damageResistances: monster.damageResistances,
+    damageImmunities: monster.damageImmunities,
+    damageVulnerabilities: monster.damageVulnerabilities,
+    conditionImmunities: monster.conditionImmunities,
+    attacks: monster.attacks,
+    attacksPerAction: monster.attacksPerAction,
+    actionCapabilities: monster.actionCapabilities,
+    capabilityStatus: monster.capabilityStatus,
+    sourceDatasetHash: monster.sourceDatasetHash,
+  };
+  const changed = Object.keys(source).filter((field) => comparable(token[field]) !== comparable(source[field]));
+  return {
+    monsterId: monster.id,
+    sourceSnapshotVersion: `${monster.sourceDatasetHash}:${monster.definitionVersion}`,
+    changed,
+    hasChanges: changed.length > 0,
+    source,
+    overrides: token.overrides || {},
+  };
+}
+
+export function refreshedMonsterToken(token, monster, { id = token?.id, position = token?.position } = {}) {
+  const diff = monsterRefreshDiff(token, monster);
+  if (!diff) return null;
+  const overrides = token.overrides || {};
+  const preserve = new Set(Object.keys(overrides));
+  const next = { ...token, ...diff.source, id, position };
+  for (const field of preserve) if (Object.hasOwn(token, field)) next[field] = token[field];
+  return {
+    ...next,
+    sourceSnapshotVersion: diff.sourceSnapshotVersion,
+    overrides,
+  };
 }
 
 export const CHALLENGE_BANDS = Object.freeze([

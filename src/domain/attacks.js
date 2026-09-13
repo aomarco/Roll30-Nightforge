@@ -9,6 +9,7 @@ import {
 import { applyDamageDefense, damageDefenseText } from "./damageTypes.js";
 import { abilityModifier, proficiencyBonus } from "./heroes.js";
 import { effectiveDamageDice, equippedWeapons, weaponMagicBonuses } from "./items.js";
+import { distanceBetweenPositions, normalizeBoard } from "./geometry.js";
 import {
   applyAttackSupplyEffects,
   attackSupplyAvailability,
@@ -42,7 +43,8 @@ export const ATTACK_MODE_DISADVANTAGE = "disadvantage";
 export const attackDistanceFeet = (from, to, viewport) => {
   const start = setupCellForPosition(from, viewport);
   const end = setupCellForPosition(to, viewport);
-  return Math.max(Math.abs(end.column - start.column), Math.abs(end.row - start.row)) * 5;
+  const feetPerCell = Math.max(1, Math.floor(Number(viewport?.feetPerCell) || 5));
+  return Math.max(Math.abs(end.column - start.column), Math.abs(end.row - start.row)) * feetPerCell;
 };
 
 const THROWN_AWAY = Object.freeze({
@@ -253,6 +255,7 @@ export function readiedAttacksFor(scene, trigger, targetTokenId) {
       hand: ready.hand,
       attackId: ready.attackId,
       trigger,
+      resolutionId: `ready-${reactor.id}-${target.id}-${trigger}`,
     }];
   });
 }
@@ -454,7 +457,13 @@ export function attackTargetEligibility(scene, {
   const targetingTarget = targetingPosition === target.position
     ? target
     : { ...target, position: targetingPosition };
-  const distanceFeet = attackDistanceFeet(available.value.token.position, targetingPosition, viewport);
+  const board = viewport?.board || normalizeBoard({ columns: setupGridMetrics(viewport).columns, rows: setupGridMetrics(viewport).rows, feetPerCell: viewport?.feetPerCell });
+  const distanceFeet = distanceBetweenPositions(
+    available.value.token.position,
+    targetingPosition,
+    board,
+    { first: available.value.token.size, second: target.size },
+  );
   const range = option.authored
     ? authoredRangeAtDistance(option.attack, distanceFeet)
     : weaponRangeAtDistance(option.weapon, distanceFeet);
@@ -497,7 +506,10 @@ export function attackRollSources({ attacker, target, weapon, range, lineOfSight
   if (attacker.hiddenFromTokenIds?.includes(target.id)) sources.push({ mode: ATTACK_MODE_ADVANTAGE, code: "hidden-attacker", label: "Attacker is hidden" });
   if (range.disadvantage) sources.push({ mode: "disadvantage", code: range.tier, label: range.tier === "thrown-long" ? "Long throw" : "Long range" });
   if (attacker.size === "small" && hasProperty(weapon, "heavy")) sources.push({ mode: "disadvantage", code: "small-heavy", label: "Small creature with Heavy weapon" });
-  if (weapon.id === "lance" && range.distanceFeet === 5) sources.push({ mode: "disadvantage", code: "lance-close", label: "Lance at 5 feet" });
+  // Special is lance-only in the SRD import: disadvantage against an adjacent
+  // target. Kept on the property plus id so a future Special weapon cannot
+  // slip through silently.
+  if ((weapon.id === "lance" || hasProperty(weapon, "special")) && range.distanceFeet === 5 && weapon.weaponRange === "melee") sources.push({ mode: "disadvantage", code: "lance-close", label: "Lance at 5 feet" });
   if (kind === ATTACK_KIND_ACTION && resources.swapped) sources.push({ mode: "disadvantage", code: "attack-after-swap", label: "Attack after weapon Swap" });
   // A Dodging creature is harder to hit with everything. The exception is a
   // creature that cannot actually dodge: the Action does nothing for someone
@@ -521,6 +533,8 @@ export function attackRollSources({ attacker, target, weapon, range, lineOfSight
 
 const randomUnit = (random) => Math.max(0, Math.min(0.999999999999, Number(random?.()) || 0));
 export const rollDie = (sides, random = Math.random) => Math.floor(randomUnit(random) * Math.max(1, Math.floor(Number(sides) || 1))) + 1;
+const rollTrackedDie = (sides, random, transcript, kind = `d${sides}`) =>
+  transcript?.roll ? transcript.roll(sides, kind) : rollDie(sides, random);
 
 const attackAbility = (token, weapon) => {
   const strength = abilityModifier(token.strength);
@@ -554,12 +568,12 @@ export function parseDamageDefinition(definition) {
   };
 }
 
-export function rollWeaponDamage({ definition, critical = false, criticalExtraDice = 0, ability = 0, magic = 0, offHand = false, random = Math.random }) {
+export function rollWeaponDamage({ definition, critical = false, criticalExtraDice = 0, ability = 0, magic = 0, offHand = false, random = Math.random, transcript = null }) {
   const parsed = parseDamageDefinition(definition);
   const diceCount = parsed.kind === "dice"
     ? parsed.count * (critical ? 2 : 1) + (critical ? Math.max(0, Math.floor(Number(criticalExtraDice) || 0)) : 0)
     : 0;
-  const rolls = Array.from({ length: diceCount }, () => rollDie(parsed.sides, random));
+  const rolls = Array.from({ length: diceCount }, () => rollTrackedDie(parsed.sides, random, transcript, `damage-d${parsed.sides}`));
   const diceTotal = parsed.kind === "fixed" ? parsed.fixed : rolls.reduce((total, roll) => total + roll, 0);
   const abilityDamage = offHand ? Math.min(0, ability) : ability;
   // A critical doubles dice, never the flat term written into the definition.
@@ -588,6 +602,7 @@ const dualWieldFollowup = (token, attackedOption) => {
 
 export function performWeaponAttack(scene, specification = {}, {
   random = Math.random,
+  transcript = null,
   battleItemIdFactory = () => `battle-item-${globalThis.crypto?.randomUUID?.() || Date.now()}`,
 } = {}) {
   const kind = specification.kind === ATTACK_KIND_BONUS
@@ -608,17 +623,25 @@ export function performWeaponAttack(scene, specification = {}, {
     : weaponMagicBonuses(attacker, option.weaponId);
   const sources = attackRollSources({ attacker, target, weapon: option.weapon, range, lineOfSight, resources, kind });
   const mode = combineAttackModes(sources);
-  let rolls = Array.from({ length: mode === ATTACK_MODE_NORMAL ? 1 : 2 }, () => rollDie(20, random));
+  let rolls = Array.from({ length: mode === ATTACK_MODE_NORMAL ? 1 : 2 }, () => rollTrackedDie(20, random, transcript, "d20"));
   let selectedIndex = mode === ATTACK_MODE_DISADVANTAGE
     ? (rolls[1] < rolls[0] ? 1 : 0)
     : (rolls[1] > rolls[0] ? 1 : 0);
   let naturalRoll = rolls[selectedIndex];
+  transcript?.record?.({
+    type: "selection",
+    selectedIndex,
+    selected: naturalRoll,
+    discarded: rolls.filter((_, index) => index !== selectedIndex),
+  });
   let luckyReroll = null;
   if (naturalRoll === 1 && attacker.racialTraitIds?.includes("lucky")) {
-    luckyReroll = rollDie(20, random);
+    const replaced = naturalRoll;
+    luckyReroll = rollTrackedDie(20, random, transcript, "d20-lucky");
     rolls = [...rolls, luckyReroll];
     selectedIndex = rolls.length - 1;
     naturalRoll = luckyReroll;
+    transcript?.record?.({ type: "reroll", source: "Lucky", replaced, selected: naturalRoll });
   }
   const proficiency = option.authored ? 0 : proficiencyBonus(attacker.level);
   const attackBonus = option.authored
@@ -629,6 +652,7 @@ export function performWeaponAttack(scene, specification = {}, {
   const hit = naturalRoll === 20 || (naturalRoll !== 1 && attackTotal >= targetAc);
   const autoCritical = hit && targetAutoCritical(target.conditions, range.usage === "melee" ? "melee" : "ranged");
   const critical = hit && (naturalRoll === 20 || autoCritical);
+  transcript?.record?.({ type: "committed-result", attackTotal, targetAc, hit, critical });
   const savageAttacks = critical && range.usage === "melee" && attacker.racialTraitIds?.includes("savage-attacks");
   const damage = hit ? rollWeaponDamage({
     definition: option.authored
@@ -642,6 +666,7 @@ export function performWeaponAttack(scene, specification = {}, {
     magic: magic.damage,
     offHand: !option.authored && kind === ATTACK_KIND_BONUS,
     random,
+    transcript,
   }) : null;
   // Resistance, immunity and vulnerability land on the finished total, which is
   // where the SRD puts them: after every other modifier, not inside the dice.
@@ -999,6 +1024,8 @@ export function opportunityAttacksFor(scene, plan, viewport) {
         departurePosition: positions[step],
         landingPosition: positions[landing],
         distanceFeet: before,
+        type: "opportunity-attack",
+        resolutionId: `opportunity-${reactor.id}-${mover.id}-${step}-${scene.encounter?.boundarySequence || 0}`,
       });
       break;
     }

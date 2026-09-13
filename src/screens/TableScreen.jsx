@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 
 import { getItem } from "../domain/catalog.js";
+import { footprintSize } from "../domain/geometry.js";
 import { generatedId } from "../application/generatedId.js";
 import {
   ATTACK_KIND_REACTION,
@@ -147,6 +148,8 @@ import MonsterBrowser from "./MonsterBrowser.jsx";
 import SceneObjects from "./SceneObjects.jsx";
 import SetupRail from "./SetupRail.jsx";
 import RetrievalCinematic from "./RetrievalCinematic.jsx";
+import CheckPanel from "./CheckPanel.jsx";
+import RollLogPanel from "./RollLogPanel.jsx";
 
 const okay = () => ({ ok: true });
 const initials = (name) => String(name || "?").slice(0, 2).toUpperCase();
@@ -439,6 +442,7 @@ export default function TableScreen(props) {
     onUpdate,
     onAwardExperience,
     heroes,
+    rollLog = [],
     artworkRepository,
     persistence,
     tokenIdFactory,
@@ -486,6 +490,9 @@ export default function TableScreen(props) {
     setSelectedChestId,
     summonChoice,
     setSummonChoice,
+    monsterReview,
+    reviewSelectedMonster,
+    applySelectedMonsterSource,
     drawerOpen,
     setDrawerOpen,
     activeTool,
@@ -790,7 +797,7 @@ export default function TableScreen(props) {
               <button
                 key={token.id}
                 className={`piece${selectedId === token.id ? " on" : ""}${isActiveBattle && token.id === active?.id ? " acting" : ""}${token.hidden ? " nf-state-table-hidden" : ""}${tokenPreview?.id === token.id && tokenPreview.blocked ? " blocked" : ""}${arrivalId === token.id ? " nf-state-table-arriving" : ""}${targetState?.ok || tacticTargetable ? " nf-state-table-targetable" : ""}${isBattle && token.hp <= 0 ? " nf-state-token-down" : ""}${impact?.targetId === token.id ? ` nf-state-table-hit${impact.critical ? " nf-state-table-critical" : ""}` : ""}`}
-                style={{ left: `${token.position.xPercent}%`, top: `${token.position.yPercent}%`, "--piece": token.color }}
+                style={{ left: `${token.position.xPercent}%`, top: `${token.position.yPercent}%`, "--piece": token.color, "--nf-token-size": `${sceneSize.cellSize * footprintSize(token.size).columns * 0.82}px` }}
                 onPointerDown={(event) => onTokenPointerDown(event, token)}
                 onKeyDown={(event) => onTokenKeyDown(event, token)}
                 onClick={(event) => { event.stopPropagation(); if (attackDraft) resolveAttackTarget(token.id); else if (helpDraft) confirmHelp(token.id); else if (readyDraft) confirmReady(token.id); else if (specialDraft) confirmSpecialAttack(token.id); else { setSelectedId(token.id); setSelectedChestId(null); } }}
@@ -834,7 +841,7 @@ export default function TableScreen(props) {
         {/* Setup keeps its tools on the rail; Play and Battle still reach them
             through this chip, which doubles as the grid readout. */}
         {isPlay && <>
-          <button className="tag tag-brass nf-state-table-tools-trigger" onClick={() => setDrawerOpen(true)} title="Table tools — 5 ft grid" aria-label="Table tools — 5 ft grid"><Grid3x3 size={12} /> 5 ft</button>
+          <button className="tag tag-brass nf-state-table-tools-trigger" onClick={() => setDrawerOpen(true)} title={`Table tools — ${sceneSize.feetPerCell} ft grid`} aria-label={`Table tools — ${sceneSize.feetPerCell} ft grid`}><Grid3x3 size={12} /> {sceneSize.feetPerCell} ft</button>
           <span className="hud-div" />
         </>}
         <button className="glyph" onClick={() => go({ page: "settings", returnTo: { page: "board", mode } })} title="Scene settings" aria-label="Scene settings"><SlidersHorizontal size={17} /></button>
@@ -971,6 +978,9 @@ export default function TableScreen(props) {
             changeChestItem={changeSelectedChestItem}
             changeChestCoins={changeSelectedChestCoins}
             removeChest={removeSelectedSetupChest}
+            monsterReview={monsterReview}
+            reviewMonsterSource={reviewSelectedMonster}
+            applyMonsterSource={applySelectedMonsterSource}
             initialDrawer={initialInspectorDrawer}
           />
           <SceneObjects
@@ -994,7 +1004,11 @@ export default function TableScreen(props) {
           <header className="dock-head"><span className="sigil sigil-lg" style={{ background: selected.color }}>{initials(selected.name)}</span><div><span className="kicker">Selected token</span><h2>{selected.name}</h2></div></header>
           <div className="dock-body">
             {isPlay ? (
-              <section className="unit"><div className="unit-top"><span className="unit-label">Free position</span><span className="tag tag-jade">No turn limits</span></div><div className="nf-state-table-position"><span>X <strong className="numeral">{selected.position.xPercent.toFixed(1)}%</strong></span><span>Y <strong className="numeral">{selected.position.yPercent.toFixed(1)}%</strong></span></div><p className="note">Drag this token directly on the Table. No grid snapping or combat resources apply in Play.</p></section>
+              <>
+                <section className="unit"><div className="unit-top"><span className="unit-label">Free position</span><span className="tag tag-jade">No turn limits</span></div><div className="nf-state-table-position"><span>X <strong className="numeral">{selected.position.xPercent.toFixed(1)}%</strong></span><span>Y <strong className="numeral">{selected.position.yPercent.toFixed(1)}%</strong></span></div><p className="note">Drag this token directly on the Table. No grid snapping or combat resources apply in Play.</p></section>
+                <CheckPanel actorName={selected.name} disabled={busy} onRoll={(specification) => rollTokenCheck(selected.id, specification)} />
+                <RollLogPanel entries={rollLog} sceneId={scene?.id} />
+              </>
             ) : (
               <BattleTokenInspector
                 token={selected}

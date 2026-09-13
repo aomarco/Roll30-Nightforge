@@ -127,7 +127,7 @@ function AttackEditor({ token, save, busy, close }) {
   };
   const add = () => setDraft((current) => [...current, blankAttack(current.length)]);
   const remove = (index) => setDraft((current) => current.filter((_, position) => position !== index));
-  const submit = (event) => {
+  const submit = async (event) => {
     event.preventDefault();
     const attacks = draft.map((attack, index) => ({
       ...attack,
@@ -138,7 +138,7 @@ function AttackEditor({ token, save, busy, close }) {
       longFeet: Number(attack.longFeet) || 60,
       damageType: String(attack.damageType || "").trim(),
     }));
-    const result = save({ attacks });
+    const result = await save({ attacks });
     if (!result || result.ok) close();
   };
 
@@ -349,6 +349,64 @@ function StatBlockNotes({ notes }) {
   );
 }
 
+const sourceFieldLabel = (field) => ({
+  name: "Name",
+  creatureType: "Creature type",
+  challengeRating: "Challenge rating",
+  xp: "Experience",
+  hp: "Hit points",
+  maxHp: "Maximum hit points",
+  ac: "Armour class",
+  speeds: "Movement speeds",
+  strength: "Strength",
+  dexterity: "Dexterity",
+  constitution: "Constitution",
+  intelligence: "Intelligence",
+  wisdom: "Wisdom",
+  charisma: "Charisma",
+  saveTotals: "Saving throw totals",
+  skillTotals: "Skill totals",
+  skillExpertise: "Skill expertise",
+  passivePerception: "Passive Perception",
+  attacks: "Attacks",
+  attacksPerAction: "Attacks per Action",
+  actionCapabilities: "Action capabilities",
+  capabilityStatus: "Capability status",
+}[field] || field);
+
+const sourceValue = (value) => {
+  if (Array.isArray(value)) return value.length ? `${value.length} entries` : "None";
+  if (value && typeof value === "object") return Object.entries(value).map(([key, entry]) => `${key}: ${entry}`).join(" · ");
+  return value === null || value === undefined ? "—" : String(value);
+};
+
+function MonsterSourceReview({ token, review, reviewSource, applySource, busy, close }) {
+  return (
+    <div className="unit nf-state-monster-source-review">
+      <div className="unit-top"><div><span className="unit-label">SRD source review</span><p className="note">{token.name} · local source snapshot {token.sourceSnapshotVersion || "unknown"}</p></div><span className="tag tag-brass">Preview first</span></div>
+      {!review ? (
+        <>
+          <p className="note">Load the current generated record to see exactly which authored fields would change. Manual overrides remain protected.</p>
+          <button className="btn btn-line btn-sm btn-wide" type="button" onClick={reviewSource} disabled={busy}>Load source diff</button>
+        </>
+      ) : (
+        <>
+          <p className="note">{review.diff.hasChanges ? `${review.diff.changed.length} source field${review.diff.changed.length === 1 ? "" : "s"} changed since this token was placed.` : "This token already matches the current generated source."}</p>
+          {review.diff.changed.length > 0 && (
+            <div className="nf-state-monster-source-fields">
+              {review.diff.changed.map((field) => <div key={field}><strong>{sourceFieldLabel(field)}</strong><span>{review.diff.overrides?.[field] ? "Manual override kept" : sourceValue(review.diff.source[field])}</span></div>)}
+            </div>
+          )}
+          <div className="row nf-state-monster-source-actions">
+            <button className="btn btn-line btn-sm" type="button" onClick={close}>Keep current</button>
+            <button className="btn btn-key btn-sm" type="button" onClick={async () => { const result = await applySource(); if (result?.ok) close(); }} disabled={busy || !review.diff.hasChanges}>Apply source update</button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function ManualTokenFields({ token, save, busy, close }) {
   const [draft, setDraft] = useState(() => draftFromToken(token));
   useEffect(() => setDraft(draftFromToken(token)), [
@@ -366,9 +424,9 @@ function ManualTokenFields({ token, save, busy, close }) {
     token.size,
   ]);
   const change = (field) => (event) => setDraft((current) => ({ ...current, [field]: event.target.value }));
-  const submit = (event) => {
+  const submit = async (event) => {
     event.preventDefault();
-    const result = save({
+    const result = await save({
       ...draft,
       ...Object.fromEntries(numericFields.map(([field]) => [field, Number(draft[field])])),
       speeds: {
@@ -504,6 +562,9 @@ export default function BattleSetupInspector({
   changeChestItem,
   changeChestCoins,
   removeChest,
+  monsterReview = null,
+  reviewMonsterSource = async () => ({ ok: false }),
+  applyMonsterSource = async () => ({ ok: false }),
   initialDrawer = null,
 }) {
   const [drawer, setDrawer] = useState(initialDrawer);
@@ -591,6 +652,7 @@ export default function BattleSetupInspector({
                 { label: "Edit stats…", onSelect: () => setDrawer("stats") },
                 { label: "Attacks…", onSelect: () => setDrawer("attacks") },
               ]),
+              ...(token.monsterId ? [{ label: "Review source update…", onSelect: () => setDrawer("source") }] : []),
               ...(token.statBlockNotes ? [{ label: "Stat block notes…", onSelect: () => setDrawer("statblock") }] : []),
               { label: "Gear & inventory…", onSelect: () => setDrawer("gear") },
               { label: "Remove token", hazard: true, disabled: busy, onSelect: removeToken },
@@ -653,6 +715,11 @@ export default function BattleSetupInspector({
       {drawer === "statblock" && token.statBlockNotes && (
         <Drawer kicker={token.name} title="Stat block notes" id="token-statblock-title" close={close}>
           <StatBlockNotes notes={token.statBlockNotes} />
+        </Drawer>
+      )}
+      {drawer === "source" && token.monsterId && (
+        <Drawer kicker={token.name} title="Review source update" id="token-source-title" close={close} footer={false}>
+          <MonsterSourceReview token={token} review={monsterReview} reviewSource={reviewMonsterSource} applySource={applyMonsterSource} busy={busy} close={close} />
         </Drawer>
       )}
       {drawer === "gear" && (

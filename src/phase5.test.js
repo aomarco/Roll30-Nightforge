@@ -246,22 +246,22 @@ test("worn toggles require ownership and an implemented effect", () => {
   assert.deepEqual(toggleWornItem(ring, "ring-of-protection").value.wornItemIds, ["ring-of-protection"]);
 });
 
-test("inventory, loadout, enchantment, and worn state survive a repository reload", () => {
+test("inventory, loadout, enchantment, and worn state survive a repository reload", async () => {
   const storage = createMemoryStorage();
   const makeRepository = () => createHeroRepository(createStateRepository(storage, { clock: () => NOW }), {
     clock: () => NOW,
     idFactory: () => "persisted-gear-hero",
   });
   const repository = makeRepository();
-  const created = repository.create({
+  const created = (await repository.create({
     inventory: [entry("dagger", 2), entry("leather-armor"), entry("ring-of-protection")],
     loadout: { mainHand: "dagger", offHand: "dagger" },
     armorId: "leather-armor",
     enchantments: { dagger: 2, "leather-armor": 1 },
     wornItemIds: ["ring-of-protection"],
-  });
+  }));
   assert.equal(created.ok, true);
-  const reloaded = makeRepository().get(created.value.id);
+  const reloaded = (await makeRepository().get(created.value.id));
   assert.equal(reloaded.ok, true);
   assert.deepEqual(reloaded.value.inventory, created.value.inventory);
   assert.deepEqual(reloaded.value.loadout, { mainHand: "dagger", offHand: "dagger" });

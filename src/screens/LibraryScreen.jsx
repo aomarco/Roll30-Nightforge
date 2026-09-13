@@ -113,17 +113,17 @@ export default function LibraryScreen({
   const forgeDialogRef = useDialogA11y({ open: forging, onClose: () => setForging(false) });
   const deleteDialogRef = useDialogA11y({ open: Boolean(deleting), onClose: () => setDeleting(null) });
 
-  const forge = (event) => {
+  const forge = async (event) => {
     event.preventDefault();
-    const result = onForge({ name: mapName, kind: createMode });
+    const result = (await onForge({ name: mapName, kind: createMode }));
     if (!result?.ok) return;
     setMapName("");
     setCreateMode("battle");
     setForging(false);
   };
 
-  const confirmDelete = () => {
-    const result = onDelete(deleting);
+  const confirmDelete = async () => {
+    const result = (await onDelete(deleting));
     if (result?.ok) setDeleting(null);
   };
 

@@ -6,11 +6,13 @@ import {
   raceById,
   subraceById,
 } from "../domain/heroes.js";
-import { longRest, shortRest } from "../domain/rest.js";
+import { dailyItemReset, longRest, shortRest } from "../domain/rest.js";
+import { performAbilityCheck, performSavingThrow } from "../domain/checks.js";
 
 export function createApplicationCommands({
   sceneRepository,
   heroRepository,
+  rollLogRepository = null,
   sessionRepository,
   artworkRepository = null,
   artworkDecoder = null,
@@ -18,6 +20,8 @@ export function createApplicationCommands({
   portraitRepository = null,
   portraitDecoder = null,
   portraitKeyFactory = () => `portrait-${crypto.randomUUID()}`,
+  random = Math.random,
+  commandBus = null,
   dispatch,
 }) {
   if (!sceneRepository || !heroRepository || !sessionRepository || !dispatch) {
@@ -26,12 +30,16 @@ export function createApplicationCommands({
 
   const cleanupArtworkKey = async (artworkKey) => {
     if (!artworkRepository || !artworkKey) return success(artworkKey);
+    const retention = (await sceneRepository.retention?.());
+    if (!retention?.ok || !retention.value.certain || retention.value.artworkKeys.includes(artworkKey)) {
+      return success(artworkKey, { deferred: true });
+    }
     const removed = await artworkRepository.remove(artworkKey);
     if (!removed.ok) {
-      sceneRepository.scheduleArtworkDelete?.(artworkKey);
+      (await sceneRepository.scheduleArtworkDelete?.(artworkKey));
       return removed;
     }
-    const acknowledged = sceneRepository.acknowledgeArtworkDelete(artworkKey);
+    const acknowledged = (await sceneRepository.acknowledgeArtworkDelete(artworkKey));
     if (!acknowledged.ok) return acknowledged;
     dispatch({ type: "persistence-saved", revision: acknowledged.revision || 0 });
     return success(artworkKey, {
@@ -40,33 +48,36 @@ export function createApplicationCommands({
     });
   };
 
+  const cleanupPortraitKey = async (key) => {
+    const retained = (await heroRepository.retention?.());
+    if (!retained?.ok || !retained.value.certain || retained.value.portraitKeys.includes(key)) return success(key, { deferred: true });
+    return portraitRepository.remove(key);
+  };
+
   const cleanupPendingArtwork = async () => {
     if (!artworkRepository || !sceneRepository.pendingArtworkDeletes) {
       return success([], { issues: [] });
     }
-    const pending = sceneRepository.pendingArtworkDeletes();
+    const pending = (await sceneRepository.pendingArtworkDeletes());
     if (!pending.ok) return pending;
-    const stored = await artworkRepository.keys();
-    const referenced = new Set(
-      pending.envelope.scenes.map((scene) => scene.artworkKey).filter(Boolean),
-    );
-    const orphaned = stored.ok
-      ? stored.value.filter((artworkKey) => !referenced.has(artworkKey))
-      : [];
-    const targets = [...new Set([...pending.value, ...orphaned])];
+    // Legacy blobs have no durable staging ownership. An unreferenced key may
+    // be an upload in another tab, so only explicitly scheduled keys are safe
+    // candidates. The vault performs journal-aware orphan collection later.
+    const targets = [...new Set(pending.value)];
     const cleaned = [];
-    const issues = stored.ok ? [] : [stored];
+    const issues = [];
     for (const artworkKey of targets) {
       const result = await cleanupArtworkKey(artworkKey);
-      if (result.ok) cleaned.push(artworkKey);
+      if (result.ok && !result.deferred) cleaned.push(artworkKey);
+      else if (result.ok) continue;
       else issues.push(result);
     }
     return success(cleaned, { issues });
   };
 
-  const initialize = () => {
-    const scenes = sceneRepository.list();
-    const heroes = heroRepository.list();
+  const initialize = async () => {
+    const scenes = (await sceneRepository.list());
+    const heroes = (await heroRepository.list());
     const session = sessionRepository.load();
     const failed = [scenes, heroes].find((result) => !result.ok);
     if (failed) {
@@ -84,20 +95,23 @@ export function createApplicationCommands({
       type: "hydrate-success",
       scenes: scenes.value,
       heroes: heroes.value,
+      rollLog: scenes.envelope?.rollLog || [],
       activeSceneId,
       revision: scenes.envelope?.revision || 0,
       recovered: Boolean(scenes.recovered || heroes.recovered),
       recoverySource: scenes.recovered ? scenes.source : heroes.recovered ? heroes.source : null,
+      classification: scenes.classification,
+      readOnly: scenes.readOnly,
     });
     return success(
       { scenes: scenes.value, heroes: heroes.value, activeSceneId },
-      { cleanup: cleanupPendingArtwork() },
+      { cleanup: (await cleanupPendingArtwork()) },
     );
   };
 
-  const synchronize = () => {
-    const scenes = sceneRepository.list();
-    const heroes = heroRepository.list();
+  const synchronize = async () => {
+    const scenes = (await sceneRepository.list());
+    const heroes = (await heroRepository.list());
     const failed = [scenes, heroes].find((result) => !result.ok);
     if (failed) {
       dispatch({ type: "persistence-failed", error: failed });
@@ -107,8 +121,11 @@ export function createApplicationCommands({
       type: "external-state-synchronized",
       scenes: scenes.value,
       heroes: heroes.value,
+      rollLog: scenes.envelope?.rollLog || [],
       activeSceneId: scenes.envelope?.lastActiveSceneId || null,
       revision: scenes.envelope?.revision || 0,
+      readOnly: scenes.readOnly,
+      classification: scenes.classification,
     });
     return success({ scenes: scenes.value, heroes: heroes.value }, {
       revision: scenes.envelope?.revision || 0,
@@ -132,8 +149,8 @@ export function createApplicationCommands({
     return success(route);
   };
 
-  const selectScene = (sceneId) => {
-    const scene = sceneRepository.setActive(sceneId);
+  const selectScene = async (sceneId) => {
+    const scene = (await sceneRepository.setActive(sceneId));
     if (!scene.ok) return scene;
     const session = sessionRepository.save({ activeSceneId: sceneId });
     dispatch({ type: "persistence-saved", revision: scene.revision || 0 });
@@ -144,14 +161,14 @@ export function createApplicationCommands({
     });
   };
 
-  const refreshScenes = () => {
-    const scenes = sceneRepository.list();
+  const refreshScenes = async () => {
+    const scenes = (await sceneRepository.list());
     if (scenes.ok) dispatch({ type: "replace-scenes", scenes: scenes.value });
     return scenes;
   };
 
-  const refreshHeroes = () => {
-    const heroes = heroRepository.list();
+  const refreshHeroes = async () => {
+    const heroes = (await heroRepository.list());
     if (heroes.ok) dispatch({ type: "replace-heroes", heroes: heroes.value });
     return heroes;
   };
@@ -162,9 +179,9 @@ export function createApplicationCommands({
     dispatch({ type: "persistence-saved", revision: result.revision || 0 });
   };
 
-  const persistScene = (operation) => {
+  const persistScene = async (operation) => {
     dispatch({ type: "persistence-saving" });
-    const result = operation();
+    const result = (await operation());
     if (!result.ok) {
       dispatch({ type: "persistence-failed", error: result });
       return result;
@@ -180,9 +197,9 @@ export function createApplicationCommands({
     return remembered.ok ? [] : [remembered];
   };
 
-  const enterScene = (operation, route) => {
+  const enterScene = async (operation, route) => {
     dispatch({ type: "persistence-saving" });
-    const result = operation();
+    const result = (await operation());
     if (!result.ok) {
       dispatch({ type: "persistence-failed", error: result });
       return result;
@@ -197,74 +214,93 @@ export function createApplicationCommands({
     });
   };
 
-  const persist = (operation, refresh) => {
+  const persist = async (operation, refresh) => {
     dispatch({ type: "persistence-saving" });
-    const result = operation();
+    const result = (await operation());
     if (!result.ok) {
       dispatch({ type: "persistence-failed", error: result });
       return result;
     }
-    refresh();
+    (await refresh());
     dispatch({ type: "persistence-saved", revision: result.revision || 0 });
     return result;
   };
 
-  /**
-   * Experience crosses the Scene and Hero collections, which is why it lives
-   * here rather than in the domain: the domain never reaches across
-   * repositories. Nothing is written until the award succeeds for every
-   * recipient, and the encounter is flagged afterwards so a second press cannot
-   * pay the party twice.
-   */
-  const awardExperience = (sceneId, award) => {
-    const recipients = (award?.recipients || []).filter((entry) => entry.heroId && entry.share > 0);
-    if (!recipients.length) {
-      return failure("xp-no-recipients", "No surviving Hero is eligible for experience.", {
-        recovery: "Only Heroes standing at the end of a Battle earn experience.",
-        retryable: false,
-      });
-    }
-    const scene = sceneRepository.get(sceneId);
-    if (!scene.ok) return persist(() => scene, refreshScenes);
-    if (scene.value.encounter?.xpAwarded) {
-      return failure("xp-already-awarded", "Experience for this Battle has already been awarded.", {
-        recovery: "Restart the Battle to fight it again.",
-        retryable: false,
-      });
-    }
+  // State, recipient totals, and the replay outcome share one durable save.
+  const awardExperience = async (sceneId, award, expectedRevision) => {
     dispatch({ type: "persistence-saving" });
-    const applied = [];
-    for (const recipient of recipients) {
-      const hero = heroRepository.get(recipient.heroId);
-      if (!hero.ok) {
-        dispatch({ type: "persistence-failed", error: hero });
-        return hero;
-      }
-      const saved = heroRepository.update(recipient.heroId, {
-        xp: Math.max(0, Math.floor(Number(hero.value.xp) || 0)) + recipient.share,
-      });
-      if (!saved.ok) {
-        dispatch({ type: "persistence-failed", error: saved });
-        return saved;
-      }
-      applied.push({ heroId: recipient.heroId, name: saved.value.name, xp: saved.value.xp });
+    const result = (await sceneRepository.awardEncounterExperience(sceneId, {
+      expectedRevision, encounterInstanceId: award?.encounterInstanceId,
+    }));
+    if (!result.ok) {
+      dispatch({ type: "persistence-failed", error: result });
+      return result;
     }
-    const flagged = sceneRepository.update(sceneId, {
-      encounter: { ...scene.value.encounter, xpAwarded: true },
-    });
-    if (!flagged.ok) {
-      dispatch({ type: "persistence-failed", error: flagged });
-      return flagged;
-    }
-    refreshHeroes();
-    refreshScenes();
-    dispatch({ type: "persistence-saved", revision: flagged.revision || 0 });
-    return success(flagged.value, { revision: flagged.revision, awarded: applied });
+    dispatch({ type: "replace-heroes", heroes: result.envelope.heroes });
+    applySceneSave(result);
+    return result;
   };
 
-  const updateHero = (id, patch = {}, expectedRevision) => {
-    const current = heroRepository.get(id);
-    if (!current.ok) return persist(() => current, refreshHeroes);
+  const rollCheck = async (sceneId, specification = {}, { expectedRevision, random: rollRandom = random } = {}) => {
+    if (!rollLogRepository) {
+      const unavailable = failure("roll-log-unavailable", "Exploration rolls are unavailable in this runtime.", {
+        recovery: "Refresh the application and retry the check.",
+        retryable: true,
+      });
+      dispatch({ type: "persistence-failed", error: unavailable });
+      return unavailable;
+    }
+    dispatch({ type: "persistence-saving" });
+    const rosterHero = specification.heroId
+      ? await heroRepository.get(specification.heroId)
+      : success(null);
+    if (!rosterHero.ok) {
+      dispatch({ type: "persistence-failed", error: rosterHero });
+      return rosterHero;
+    }
+    const sourceScene = rosterHero.value
+      ? null
+      : (await sceneRepository.get(sceneId));
+    if (!rosterHero.value && !sourceScene.ok) {
+      dispatch({ type: "persistence-failed", error: sourceScene });
+      return sourceScene;
+    }
+    const scene = sourceScene?.value || null;
+    const target = { ...specification, hero: rosterHero.value || undefined };
+    const rolled = specification.kind === "save"
+      ? performSavingThrow(scene, target, { random: rollRandom })
+      : performAbilityCheck(scene, target, { random: rollRandom });
+    if (!rolled.ok) {
+      dispatch({ type: "persistence-failed", error: rolled });
+      return rolled;
+    }
+    const baseEntry = rolled.value.rollLogEntry;
+    const entry = {
+      ...baseEntry,
+      id: specification.logId || `roll-${globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`}`,
+      sceneId: scene?.id || null,
+      heroId: rosterHero.value?.id || null,
+      visibility: specification.visibility === "private" ? "private" : "public",
+    };
+    const saved = await rollLogRepository.append(entry, { expectedRevision });
+    if (!saved.ok) {
+      dispatch({ type: "persistence-failed", error: saved });
+      return saved;
+    }
+    dispatch({ type: "replace-scenes", scenes: saved.envelope.scenes });
+    dispatch({ type: "replace-heroes", heroes: saved.envelope.heroes });
+    dispatch({ type: "replace-roll-log", rollLog: saved.envelope.rollLog || [] });
+    dispatch({ type: "persistence-saved", revision: saved.revision || 0 });
+    return success({ ...rolled.value, rollLogEntry: entry }, {
+      outcome: rolled.outcome,
+      revision: saved.revision,
+      envelope: saved.envelope,
+    });
+  };
+
+  const updateHero = async (id, patch = {}, expectedRevision) => {
+    const current = (await heroRepository.get(id));
+    if (!current.ok) return (await persist(() => current, refreshHeroes));
     let normalizedPatch = { ...patch };
 
     if (patch.classId && classById(patch.classId).id !== current.value.classId) {
@@ -297,32 +333,39 @@ export function createApplicationCommands({
       };
     }
 
-    return persist(() => heroRepository.update(id, normalizedPatch, { expectedRevision }), refreshHeroes);
+    return (await persist(async () => (await heroRepository.update(id, normalizedPatch, { expectedRevision })), refreshHeroes));
   };
 
-  const restHero = (id, kind = "long", options = {}) => {
-    const current = heroRepository.get(id);
-    if (!current.ok) return persist(() => current, refreshHeroes);
-    const rested = kind === "short"
+  const restHero = async (id, kind = "long", options = {}) => {
+    const current = (await heroRepository.get(id));
+    if (!current.ok) return (await persist(() => current, refreshHeroes));
+    const rested = kind === "daily" ? dailyItemReset(current.value, { ...options, random: options.random || random }) : kind === "short"
       ? shortRest(current.value, { ...options, random: options.random || Math.random })
       : longRest(current.value);
     if (!rested.ok) return rested;
-    const saved = persist(() => heroRepository.update(id, rested.value), refreshHeroes);
+    if (rested.replayed) return success(current.value, { outcome: rested.outcome, replayed: true, revision: current.envelope.revision });
+    const saved = (await persist(async () => (await heroRepository.update(id, rested.value)), refreshHeroes));
     return saved.ok ? { ...saved, outcome: rested.outcome } : saved;
   };
 
   return {
+    previewCommand: async (command) => commandBus
+      ? commandBus.preview(command)
+      : failure("command-bus-unavailable", "This Nightforge action boundary is not available in the current runtime.", { recovery: "Refresh the application and retry.", retryable: true }),
+    executeCommand: async (command) => commandBus
+      ? commandBus.execute(command)
+      : failure("command-bus-unavailable", "This Nightforge action boundary is not available in the current runtime.", { recovery: "Refresh the application and retry.", retryable: true }),
     initialize,
     synchronize,
     navigate,
     selectScene,
-    forgeScene: (input, route = { page: "board", mode: "setup" }) =>
-      enterScene(() => sceneRepository.createActive(input), route),
-    openScene: (id, route = { page: "board", mode: "setup" }) =>
-      enterScene(() => sceneRepository.open(id), route),
-    createScene: (input) => persist(() => sceneRepository.create(input), refreshScenes),
-    updateScene: (id, patch, expectedRevision) =>
-      persistScene(() => sceneRepository.update(id, patch, { expectedRevision })),
+    forgeScene: async (input, route = { page: "board", mode: "setup" }) =>
+      (await enterScene(async () => (await sceneRepository.createActive(input)), route)),
+    openScene: async (id, route = { page: "board", mode: "setup" }) =>
+      (await enterScene(async () => (await sceneRepository.open(id)), route)),
+    createScene: async (input) => (await persist(async () => (await sceneRepository.create(input)), refreshScenes)),
+    updateScene: async (id, patch, expectedRevision) =>
+      (await persistScene(async () => (await sceneRepository.update(id, patch, { expectedRevision })))),
     replaceSceneArtwork: async (id, blob) => {
       if (!artworkRepository || !artworkDecoder) {
         const unavailable = failure(
@@ -351,7 +394,7 @@ export function createApplicationCommands({
       const verified = await artworkRepository.get(artworkKey);
       if (!verified.ok || !verified.value) {
         const stagedCleanup = await artworkRepository.remove(artworkKey);
-        if (!stagedCleanup.ok) sceneRepository.scheduleArtworkDelete?.(artworkKey);
+        if (!stagedCleanup.ok) (await sceneRepository.scheduleArtworkDelete?.(artworkKey));
         const failed = verified.ok
           ? failure("artwork-verification-failed", "Nightforge could not verify the staged Scene artwork.", {
               recovery: "The previous artwork remains active. Retry the upload.",
@@ -363,10 +406,10 @@ export function createApplicationCommands({
         return result;
       }
 
-      const saved = sceneRepository.updateArtwork(id, artworkKey, false);
+      const saved = (await sceneRepository.updateArtwork(id, artworkKey, false));
       if (!saved.ok) {
         const stagedCleanup = await artworkRepository.remove(artworkKey);
-        if (!stagedCleanup.ok) sceneRepository.scheduleArtworkDelete?.(artworkKey);
+        if (!stagedCleanup.ok) (await sceneRepository.scheduleArtworkDelete?.(artworkKey));
         const result = { ...saved, issues: stagedCleanup.ok ? [] : [stagedCleanup] };
         dispatch({ type: "persistence-failed", error: result });
         return result;
@@ -384,7 +427,7 @@ export function createApplicationCommands({
     },
     useWhiteCanvas: async (id) => {
       dispatch({ type: "persistence-saving" });
-      const saved = sceneRepository.updateArtwork(id, null, true);
+      const saved = (await sceneRepository.updateArtwork(id, null, true));
       if (!saved.ok) {
         dispatch({ type: "persistence-failed", error: saved });
         return saved;
@@ -400,9 +443,9 @@ export function createApplicationCommands({
       });
     },
     cleanupPendingArtwork,
-    removeScene: (id) => {
+    removeScene: async (id) => {
       dispatch({ type: "persistence-saving" });
-      const result = sceneRepository.remove(id);
+      const result = (await sceneRepository.remove(id));
       if (!result.ok) {
         dispatch({ type: "persistence-failed", error: result });
         return result;
@@ -422,19 +465,18 @@ export function createApplicationCommands({
         cleanup,
       });
     },
-    createHero: (input) => persist(() => heroRepository.create(input), refreshHeroes),
+    createHero: async (input) => (await persist(async () => (await heroRepository.create(input)), refreshHeroes)),
     updateHero,
     restHero,
     awardExperience,
-    removeHero: (id) => {
-      const existing = heroRepository.get(id);
+    rollCheck,
+    removeHero: async (id) => {
+      const existing = (await heroRepository.get(id));
       const portraitKey = existing.ok ? existing.value.portraitKey : null;
-      const removed = persist(() => heroRepository.remove(id), refreshHeroes);
+      const removed = (await persist(async () => (await heroRepository.remove(id)), refreshHeroes));
       if (removed.ok && portraitKey && portraitRepository) {
-        const cleanup = portraitRepository.remove(portraitKey);
-        cleanup.then?.((result) => {
-          if (!result?.ok) dispatch({ type: "persistence-failed", error: result });
-        });
+        const cleanup = await cleanupPortraitKey(portraitKey);
+        if (!cleanup.ok) dispatch({ type: "persistence-failed", error: cleanup });
         return success(removed.value, {
           envelope: removed.envelope,
           revision: removed.revision,
@@ -454,7 +496,7 @@ export function createApplicationCommands({
         return unavailable;
       }
 
-      const current = heroRepository.get(id);
+      const current = (await heroRepository.get(id));
       if (!current.ok) {
         dispatch({ type: "persistence-failed", error: current });
         return current;
@@ -488,17 +530,17 @@ export function createApplicationCommands({
       }
 
       const previousPortraitKey = current.value.portraitKey;
-      const saved = heroRepository.update(id, { portraitKey });
+      const saved = (await heroRepository.update(id, { portraitKey }));
       if (!saved.ok) {
         await portraitRepository.remove(portraitKey);
         dispatch({ type: "persistence-failed", error: saved });
         return saved;
       }
 
-      refreshHeroes();
+      (await refreshHeroes());
       dispatch({ type: "persistence-saved", revision: saved.revision || 0 });
       const cleanup = previousPortraitKey
-        ? await portraitRepository.remove(previousPortraitKey)
+        ? await cleanupPortraitKey(previousPortraitKey)
         : success(null);
       return success(saved.value, {
         revision: saved.revision,
@@ -506,22 +548,22 @@ export function createApplicationCommands({
       });
     },
     removeHeroPortrait: async (id) => {
-      const current = heroRepository.get(id);
+      const current = (await heroRepository.get(id));
       if (!current.ok) {
         dispatch({ type: "persistence-failed", error: current });
         return current;
       }
       const previousPortraitKey = current.value.portraitKey;
       dispatch({ type: "persistence-saving" });
-      const saved = heroRepository.update(id, { portraitKey: null });
+      const saved = (await heroRepository.update(id, { portraitKey: null }));
       if (!saved.ok) {
         dispatch({ type: "persistence-failed", error: saved });
         return saved;
       }
-      refreshHeroes();
+      (await refreshHeroes());
       dispatch({ type: "persistence-saved", revision: saved.revision || 0 });
       const cleanup = previousPortraitKey && portraitRepository
-        ? await portraitRepository.remove(previousPortraitKey)
+        ? await cleanupPortraitKey(previousPortraitKey)
         : success(null);
       return success(saved.value, {
         revision: saved.revision,

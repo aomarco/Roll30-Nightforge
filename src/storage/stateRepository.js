@@ -28,12 +28,13 @@ export function createStateRepository(
 
   const load = () => {
     const primaryRead = safeRead(storage, keys.state);
-    if (!primaryRead.ok) return primaryRead;
+    if (!primaryRead.ok) return { ...primaryRead, classification: "storage-unavailable" };
     const backupRead = safeRead(storage, keys.backup);
-    if (!backupRead.ok) return backupRead;
+    if (!backupRead.ok) return { ...backupRead, classification: "storage-unavailable" };
 
     const primary = inspectEnvelope(primaryRead.value);
     const backup = inspectEnvelope(backupRead.value);
+    const unsupported = [primary, backup].some((result) => result.code === "state-version-incompatible");
     const candidates = [
       primary.ok ? { source: "primary", envelope: primary.value } : null,
       backup.ok ? { source: "backup", envelope: backup.value } : null,
@@ -46,6 +47,8 @@ export function createStateRepository(
         source: "empty",
         recovered: issues.length > 0,
         issues,
+        classification: unsupported ? "unsupported-version" : issues.length ? "damaged-unrecoverable" : "truly-empty",
+        readOnly: issues.length > 0,
       });
     }
 
@@ -55,6 +58,8 @@ export function createStateRepository(
       source: chosen.source,
       recovered: chosen.source === "backup" || !primary.ok,
       issues: primary.ok ? [] : [primary],
+      classification: unsupported ? "unsupported-version" : chosen.source === "backup" ? "valid-backup" : "healthy-primary",
+      readOnly: unsupported,
     });
   };
 
@@ -64,6 +69,11 @@ export function createStateRepository(
     const currentPrimary = inspectEnvelope(primaryRead.value);
     const loaded = load();
     if (!loaded.ok) return loaded;
+    if (loaded.readOnly) return failure("storage-recovery-required", "Saved data needs recovery before it can be changed.", {
+      recovery: "Export the preserved data or choose a recovery source. The original records have not been overwritten.",
+      retryable: false,
+      classification: loaded.classification,
+    });
     const proposedRevision = Number(proposed?.revision);
     if (!Number.isSafeInteger(proposedRevision) || proposedRevision < 0 || proposedRevision !== loaded.value.revision) {
       return failure("storage-revision-conflict", "Nightforge state changed before this save could complete.", {
@@ -90,23 +100,14 @@ export function createStateRepository(
     const serialized = serializeEnvelope(next);
 
     try {
-      if (currentPrimary.ok) storage.setItem(keys.backup, primaryRead.value);
+      if (currentPrimary.ok && currentPrimary.value.revision >= loaded.value.revision) {
+        storage.setItem(keys.backup, primaryRead.value);
+      }
+      // Storage.setItem is the atomic commit point. A later read failure must
+      // not turn a committed award into a failure or overwrite a newer writer.
       storage.setItem(keys.state, serialized);
-      const verification = inspectEnvelope(storage.getItem(keys.state));
-      if (!verification.ok || verification.value.revision !== next.revision) {
-        if (currentPrimary.ok) storage.setItem(keys.state, primaryRead.value);
-        return failure("storage-verification-failed", "Nightforge could not verify the saved state.", {
-          recovery: "Your previous valid state was restored. Retry the save.",
-          retryable: true,
-        });
-      }
-      return success(verification.value, { revision: verification.value.revision });
+      return success(inspectEnvelope(next).value, { revision: next.revision });
     } catch (error) {
-      try {
-        if (currentPrimary.ok) storage.setItem(keys.state, primaryRead.value);
-      } catch {
-        // The original failure is more actionable; recovery is attempted best-effort.
-      }
       if (isQuotaExceededError(error)) return fromThrown(
         "storage-quota-exceeded",
         "Nightforge browser storage is full.",
@@ -122,5 +123,28 @@ export function createStateRepository(
     }
   };
 
-  return { load, save };
+  const retention = () => {
+    const envelopes = [];
+    const issues = [];
+    for (const key of [keys.state, keys.backup]) {
+      const raw = safeRead(storage, key);
+      if (!raw.ok) { issues.push(raw); continue; }
+      const inspected = inspectEnvelope(raw.value);
+      if (inspected.ok) envelopes.push(inspected.value);
+      else if (inspected.code !== "state-missing") issues.push(inspected);
+    }
+    return success({
+      certain: issues.length === 0,
+      artworkKeys: [...new Set(envelopes.flatMap((value) => value.scenes.map((scene) => scene.artworkKey)).filter(Boolean))],
+      portraitKeys: [...new Set(envelopes.flatMap((value) => value.heroes.map((hero) => hero.portraitKey)).filter(Boolean))],
+    }, { issues });
+  };
+
+  const evidence = () => {
+    const primary = safeRead(storage, keys.state);
+    const backup = safeRead(storage, keys.backup);
+    return primary.ok && backup.ok ? success({ primary: primary.value, backup: backup.value }) : !primary.ok ? primary : backup;
+  };
+
+  return { load, save, retention, evidence };
 }

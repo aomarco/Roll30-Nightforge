@@ -1,5 +1,8 @@
 import { failure, success } from "../application/result.js";
 import { normalizeHeroRecord, normalizeSceneRecord } from "../domain/records.js";
+import { normalizeRollLog } from "../domain/rollLog.js";
+import { normalizeCampaignClock } from "../domain/time.js";
+import { normalizePendingResolutions } from "../domain/resolutionScheduler.js";
 import { NIGHTFORGE_SCHEMA_VERSION } from "./constants.js";
 
 const canonicalize = (value) => {
@@ -41,6 +44,19 @@ const uniqueRecords = (records, normalize) => {
   return normalized;
 };
 
+const normalizeCommandOutcomes = (records) => uniqueRecords(
+  Array.isArray(records) ? records.slice(-100) : [],
+  (entry) => ({
+    id: typeof entry.commandId === "string" && entry.commandId.trim() ? entry.commandId.trim().slice(0, 256) : String(entry.id || "").trim().slice(0, 256),
+    commandId: typeof entry.commandId === "string" ? entry.commandId.trim().slice(0, 256) : String(entry.id || "").trim().slice(0, 256),
+    payloadHash: typeof entry.payloadHash === "string" ? entry.payloadHash.slice(0, 128) : "",
+    value: entry.value === undefined ? null : entry.value,
+    events: Array.isArray(entry.events) ? entry.events.slice(0, 32) : [],
+    transcript: entry.transcript || null,
+    revision: nonNegativeSafeInteger(entry.revision),
+  }),
+);
+
 export function createEmptyEnvelope(now = new Date().toISOString()) {
   return {
     schemaVersion: NIGHTFORGE_SCHEMA_VERSION,
@@ -50,6 +66,10 @@ export function createEmptyEnvelope(now = new Date().toISOString()) {
     heroes: [],
     lastActiveSceneId: null,
     pendingArtworkDeletes: [],
+    rollLog: [],
+    commandOutcomes: [],
+    campaignClock: normalizeCampaignClock(),
+    pendingResolutions: [],
   };
 }
 
@@ -78,6 +98,10 @@ export function normalizeEnvelope(value = {}, now = new Date().toISOString()) {
           : [],
       ),
     ],
+    rollLog: normalizeRollLog(value.rollLog, { now }),
+    commandOutcomes: normalizeCommandOutcomes(value.commandOutcomes),
+    campaignClock: normalizeCampaignClock(value.campaignClock),
+    pendingResolutions: normalizePendingResolutions(value.pendingResolutions),
   };
 }
 

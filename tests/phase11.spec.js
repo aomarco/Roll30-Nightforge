@@ -12,8 +12,9 @@ import {
 } from "../src/domain/table.js";
 import { MONSTERS } from "../src/domain/monsters.generated.js";
 import { createEmptyEnvelope, sealEnvelope, serializeEnvelope } from "../src/storage/envelope.js";
-import { FORBIDDEN_LEGACY_STORAGE_IDENTIFIERS, STORAGE_KEYS } from "../src/storage/constants.js";
+import { FORBIDDEN_LEGACY_STORAGE_IDENTIFIERS, storageIdentity } from "../src/storage/constants.js";
 
+const STORAGE_KEYS = storageIdentity("development").keys;
 const NOW = "2026-08-17T12:00:00.000Z";
 const LONG_NAME = "The Last Sentinel of the Verdigris Archive and Keeper of the Unbroken Nightforge Oath";
 

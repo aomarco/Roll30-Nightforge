@@ -54,16 +54,20 @@ function harness({ artworkSeed = {}, artworkAdapter: suppliedArtworkAdapter, dec
   };
 }
 
-test("artwork replacement stages, verifies, commits, then removes the prior blob", async () => {
+test("artwork replacement retains the backup image until a later save releases it", async () => {
   const app = harness({ artworkSeed: { "art-old": oldArtwork() } });
-  app.sceneRepository.create({ name: "Painted", artworkKey: "art-old" });
-  app.commands.initialize();
+  (await app.sceneRepository.create({ name: "Painted", artworkKey: "art-old" }));
+  (await app.commands.initialize());
 
   const replaced = await app.commands.replaceSceneArtwork("scene-1", newArtwork());
 
   assert.equal(replaced.ok, true);
-  assert.equal(app.sceneRepository.get("scene-1").value.artworkKey, "art-new");
-  assert.equal(app.sceneRepository.get("scene-1").value.blankCanvas, false);
+  assert.equal((await app.sceneRepository.get("scene-1")).value.artworkKey, "art-new");
+  assert.equal((await app.sceneRepository.get("scene-1")).value.blankCanvas, false);
+  assert.deepEqual((await app.artworkRepository.keys()).value, ["art-old", "art-new"]);
+  assert.deepEqual(app.stateRepository.load().value.pendingArtworkDeletes, ["art-old"]);
+  (await app.sceneRepository.update("scene-1", { name: "New map confirmed" }));
+  await app.commands.cleanupPendingArtwork();
   assert.deepEqual((await app.artworkRepository.keys()).value, ["art-new"]);
   assert.deepEqual(app.stateRepository.load().value.pendingArtworkDeletes, []);
 });
@@ -79,37 +83,37 @@ test("a rejected image never stages data or changes the valid Scene", async () =
       retryable: true,
     }),
   });
-  app.sceneRepository.create({ artworkKey: "art-old" });
+  (await app.sceneRepository.create({ artworkKey: "art-old" }));
 
   const replaced = await app.commands.replaceSceneArtwork("scene-1", newArtwork());
 
   assert.equal(replaced.code, "artwork-decode-failed");
-  assert.equal(app.sceneRepository.get("scene-1").value.artworkKey, "art-old");
+  assert.equal((await app.sceneRepository.get("scene-1")).value.artworkKey, "art-old");
   assert.deepEqual((await app.artworkRepository.keys()).value, ["art-old"]);
 });
 
 test("a failed staged write preserves the previous artwork reference and blob", async () => {
   const app = harness({ artworkSeed: { "art-old": oldArtwork() } });
-  app.sceneRepository.create({ artworkKey: "art-old" });
+  (await app.sceneRepository.create({ artworkKey: "art-old" }));
   app.artworkAdapter.setFailureOperation("put");
 
   const replaced = await app.commands.replaceSceneArtwork("scene-1", newArtwork());
 
   assert.equal(replaced.code, "artwork-write-failed");
-  assert.equal(app.sceneRepository.get("scene-1").value.artworkKey, "art-old");
+  assert.equal((await app.sceneRepository.get("scene-1")).value.artworkKey, "art-old");
   assert.deepEqual((await app.artworkRepository.keys()).value, ["art-old"]);
 });
 
 test("a failed staged read deletes the orphan and preserves previous Scene data", async () => {
   const app = harness({ artworkSeed: { "art-old": oldArtwork() } });
-  app.sceneRepository.create({ artworkKey: "art-old" });
+  (await app.sceneRepository.create({ artworkKey: "art-old" }));
   app.artworkAdapter.setFailureOperation("get");
 
   const replaced = await app.commands.replaceSceneArtwork("scene-1", newArtwork());
 
   assert.equal(replaced.code, "artwork-read-failed");
   app.artworkAdapter.setFailureOperation(null);
-  assert.equal(app.sceneRepository.get("scene-1").value.artworkKey, "art-old");
+  assert.equal((await app.sceneRepository.get("scene-1")).value.artworkKey, "art-old");
   assert.deepEqual((await app.artworkRepository.keys()).value, ["art-old"]);
 });
 
@@ -122,38 +126,41 @@ test("a missing staged readback is treated as verification failure and cleaned",
     async keys() { return [...values.keys()]; },
   };
   const app = harness({ artworkAdapter });
-  app.sceneRepository.create({ artworkKey: "art-old" });
+  (await app.sceneRepository.create({ artworkKey: "art-old" }));
 
   const replaced = await app.commands.replaceSceneArtwork("scene-1", newArtwork());
 
   assert.equal(replaced.code, "artwork-verification-failed");
-  assert.equal(app.sceneRepository.get("scene-1").value.artworkKey, "art-old");
+  assert.equal((await app.sceneRepository.get("scene-1")).value.artworkKey, "art-old");
   assert.deepEqual((await app.artworkRepository.keys()).value, ["art-old"]);
 });
 
 test("a failed Scene save removes the staged orphan and retains prior valid data", async () => {
   const app = harness({ artworkSeed: { "art-old": oldArtwork() } });
-  app.sceneRepository.create({ artworkKey: "art-old" });
+  (await app.sceneRepository.create({ artworkKey: "art-old" }));
   app.local.setFailureMode("write");
 
   const replaced = await app.commands.replaceSceneArtwork("scene-1", newArtwork());
 
   assert.equal(replaced.code, "storage-write-failed");
   app.local.setFailureMode(null);
-  assert.equal(app.sceneRepository.get("scene-1").value.artworkKey, "art-old");
+  assert.equal((await app.sceneRepository.get("scene-1")).value.artworkKey, "art-old");
   assert.deepEqual((await app.artworkRepository.keys()).value, ["art-old"]);
 });
 
 test("failed old-art cleanup keeps the new reference and a durable retry key", async () => {
   const app = harness({ artworkSeed: { "art-old": oldArtwork() } });
-  app.sceneRepository.create({ artworkKey: "art-old" });
+  (await app.sceneRepository.create({ artworkKey: "art-old" }));
   app.artworkAdapter.setFailureOperation("remove");
 
   const replaced = await app.commands.replaceSceneArtwork("scene-1", newArtwork());
 
   assert.equal(replaced.ok, true);
-  assert.equal(replaced.issues[0].code, "artwork-delete-failed");
-  assert.equal(app.sceneRepository.get("scene-1").value.artworkKey, "art-new");
+  assert.deepEqual(replaced.issues, []);
+  (await app.sceneRepository.update("scene-1", { name: "Backup advanced" }));
+  const cleanup = await app.commands.cleanupPendingArtwork();
+  assert.equal(cleanup.issues[0].code, "artwork-delete-failed");
+  assert.equal((await app.sceneRepository.get("scene-1")).value.artworkKey, "art-new");
   assert.deepEqual(app.stateRepository.load().value.pendingArtworkDeletes, ["art-old"]);
   app.artworkAdapter.setFailureOperation(null);
   assert.deepEqual(new Set((await app.artworkRepository.keys()).value), new Set(["art-old", "art-new"]));
@@ -161,11 +168,11 @@ test("failed old-art cleanup keeps the new reference and a durable retry key", a
 
 test("startup retry removes pending artwork and acknowledges the cleanup durably", async () => {
   const app = harness({ artworkSeed: { "art-old": oldArtwork() } });
-  app.sceneRepository.create({ name: "Blank" });
+  (await app.sceneRepository.create({ name: "Blank" }));
   const loaded = app.stateRepository.load();
   app.stateRepository.save({ ...loaded.value, pendingArtworkDeletes: ["art-old"] });
 
-  const initialized = app.commands.initialize();
+  const initialized = (await app.commands.initialize());
   const cleanup = await initialized.cleanup;
 
   assert.equal(cleanup.ok, true);
@@ -174,25 +181,25 @@ test("startup retry removes pending artwork and acknowledges the cleanup durably
   assert.deepEqual(app.stateRepository.load().value.pendingArtworkDeletes, []);
 });
 
-test("startup reconciliation removes an unreferenced staged orphan", async () => {
+test("legacy startup retains unowned blobs that may be another tab's staged upload", async () => {
   const app = harness({ artworkSeed: { "art-orphan": newArtwork() } });
-  app.sceneRepository.create({ name: "No artwork", artworkKey: null });
+  (await app.sceneRepository.create({ name: "No artwork", artworkKey: null }));
 
-  const cleanup = await app.commands.initialize().cleanup;
+  const cleanup = await (await app.commands.initialize()).cleanup;
 
   assert.equal(cleanup.ok, true);
-  assert.deepEqual(cleanup.value, ["art-orphan"]);
-  assert.deepEqual((await app.artworkRepository.keys()).value, []);
+  assert.deepEqual(cleanup.value, []);
+  assert.deepEqual((await app.artworkRepository.keys()).value, ["art-orphan"]);
 });
 
 test("failed cleanup acknowledgement remains retryable after the blob is gone", async () => {
   const app = harness({ artworkSeed: { "art-old": oldArtwork() } });
-  app.sceneRepository.create({ name: "Blank" });
+  (await app.sceneRepository.create({ name: "Blank" }));
   const loaded = app.stateRepository.load();
   app.stateRepository.save({ ...loaded.value, pendingArtworkDeletes: ["art-old"] });
   app.local.setFailureMode("write");
 
-  const firstCleanup = await app.commands.initialize().cleanup;
+  const firstCleanup = await (await app.commands.initialize()).cleanup;
 
   assert.equal(firstCleanup.ok, true);
   assert.equal(firstCleanup.issues[0].code, "storage-write-failed");
@@ -207,44 +214,47 @@ test("failed cleanup acknowledgement remains retryable after the blob is gone", 
 
 test("white canvas commits first and retains cleanup work when blob deletion fails", async () => {
   const app = harness({ artworkSeed: { "art-old": oldArtwork() } });
-  app.sceneRepository.create({ artworkKey: "art-old", blankCanvas: false });
+  (await app.sceneRepository.create({ artworkKey: "art-old", blankCanvas: false }));
   app.artworkAdapter.setFailureOperation("remove");
 
   const blanked = await app.commands.useWhiteCanvas("scene-1");
 
   assert.equal(blanked.ok, true);
-  assert.equal(blanked.issues[0].code, "artwork-delete-failed");
-  assert.equal(app.sceneRepository.get("scene-1").value.artworkKey, null);
-  assert.equal(app.sceneRepository.get("scene-1").value.blankCanvas, true);
+  assert.deepEqual(blanked.issues, []);
+  (await app.sceneRepository.update("scene-1", { name: "White canvas confirmed" }));
+  const cleanup = await app.commands.cleanupPendingArtwork();
+  assert.equal(cleanup.issues[0].code, "artwork-delete-failed");
+  assert.equal((await app.sceneRepository.get("scene-1")).value.artworkKey, null);
+  assert.equal((await app.sceneRepository.get("scene-1")).value.blankCanvas, true);
   assert.deepEqual(app.stateRepository.load().value.pendingArtworkDeletes, ["art-old"]);
 });
 
 test("white canvas save failure does not delete or detach the prior artwork", async () => {
   const app = harness({ artworkSeed: { "art-old": oldArtwork() } });
-  app.sceneRepository.create({ artworkKey: "art-old", blankCanvas: false });
+  (await app.sceneRepository.create({ artworkKey: "art-old", blankCanvas: false }));
   app.local.setFailureMode("write");
 
   const blanked = await app.commands.useWhiteCanvas("scene-1");
 
   assert.equal(blanked.code, "storage-write-failed");
   app.local.setFailureMode(null);
-  assert.equal(app.sceneRepository.get("scene-1").value.artworkKey, "art-old");
-  assert.equal(app.sceneRepository.get("scene-1").value.blankCanvas, false);
+  assert.equal((await app.sceneRepository.get("scene-1")).value.artworkKey, "art-old");
+  assert.equal((await app.sceneRepository.get("scene-1")).value.blankCanvas, false);
   assert.deepEqual((await app.artworkRepository.keys()).value, ["art-old"]);
 });
 
-test("Battle to Play clears encounter physical items but preserves Scene assets", () => {
+test("Battle to Play clears encounter physical items but preserves Scene assets", async () => {
   const app = harness();
-  const original = app.sceneRepository.create({
+  const original = (await app.sceneRepository.create({
     kind: "battle",
     artworkKey: "art-map",
     tokens: [{ id: "token-1", inventory: [{ itemId: "dagger", quantity: 1 }] }],
     walls: [{ id: "wall-1", type: "full", points: [{ xPercent: 10, yPercent: 10 }, { xPercent: 90, yPercent: 90 }] }],
     chests: [{ id: "chest-1" }],
     encounter: { status: "active", battleItems: [{ id: "thrown-1" }] },
-  }).value;
+  })).value;
 
-  const changed = app.commands.updateScene("scene-1", { kind: "play" });
+  const changed = (await app.commands.updateScene("scene-1", { kind: "play" }));
 
   assert.equal(changed.ok, true);
   assert.equal(changed.value.kind, "play");
@@ -255,14 +265,14 @@ test("Battle to Play clears encounter physical items but preserves Scene assets"
   assert.deepEqual(changed.value.chests, original.chests);
 });
 
-test("Scene identity, Battle grid size, and Play to Battle changes persist", () => {
+test("Scene identity, Battle grid size, and Play to Battle changes persist", async () => {
   const app = harness();
-  app.sceneRepository.create({ name: "Old", kind: "play", gridSize: 44 });
+  (await app.sceneRepository.create({ name: "Old", kind: "play", gridSize: 44 }));
 
-  assert.equal(app.commands.updateScene("scene-1", { name: "New Name" }).value.name, "New Name");
-  assert.equal(app.commands.updateScene("scene-1", { kind: "battle" }).value.kind, "battle");
-  assert.equal(app.commands.updateScene("scene-1", { gridSize: 72 }).value.gridSize, 72);
-  assert.equal(app.sceneRepository.get("scene-1").value.gridSize, 72);
+  assert.equal((await app.commands.updateScene("scene-1", { name: "New Name" })).value.name, "New Name");
+  assert.equal((await app.commands.updateScene("scene-1", { kind: "battle" })).value.kind, "battle");
+  assert.equal((await app.commands.updateScene("scene-1", { gridSize: 72 })).value.gridSize, 72);
+  assert.equal((await app.sceneRepository.get("scene-1")).value.gridSize, 72);
 });
 
 test("browser artwork decoder rejects non-images and verifies decoded dimensions", async () => {

@@ -4043,6 +4043,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4060,6 +4061,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4077,6 +4079,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4094,6 +4097,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4111,6 +4115,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4128,6 +4133,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4145,6 +4151,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4162,6 +4169,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4179,6 +4187,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4196,6 +4205,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4213,6 +4223,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4230,6 +4241,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4247,6 +4259,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4264,6 +4277,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4281,6 +4295,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4298,6 +4313,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4315,6 +4331,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4332,6 +4349,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4349,6 +4367,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4366,6 +4385,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4383,6 +4403,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4400,6 +4421,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4417,6 +4439,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4434,6 +4457,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4451,6 +4475,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4468,6 +4493,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4485,6 +4511,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4502,6 +4529,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4517,8 +4545,9 @@ export const MAGIC_ITEMS = Object.freeze([
     "requiresAttunement": false,
     "attunementRequirement": null,
     "chargeMaximum": 3,
-    "chargeRecharge": "The cube has 3 charges. Each use of the cube expends 1 charge. The cube regains 1d3 expended charges daily at dawn.",
+    "chargeRecharge": "The cube regains 1d3 expended charges daily at dawn.",
     "chargeRechargeKind": "daily",
+    "chargeRechargeAmount": "1d3",
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4536,6 +4565,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4553,6 +4583,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4570,6 +4601,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4587,6 +4619,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4604,6 +4637,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4621,6 +4655,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4638,6 +4673,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4655,6 +4691,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4670,8 +4707,9 @@ export const MAGIC_ITEMS = Object.freeze([
     "requiresAttunement": true,
     "attunementRequirement": "requires attunement",
     "chargeMaximum": null,
-    "chargeRecharge": "These crystal lenses fit over the eyes. They have 3 charges. While wearing them, you can expend 1 charge as an action to cast the charm person spell (save DC 13) on a humanoid within 30 feet of you, provided that you and the target can see each other. The lenses regain all expended charges daily at dawn.",
+    "chargeRecharge": "The lenses regain all expended charges daily at dawn.",
     "chargeRechargeKind": "daily",
+    "chargeRechargeAmount": "all",
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4689,6 +4727,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4706,6 +4745,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4723,6 +4763,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4740,6 +4781,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4755,8 +4797,9 @@ export const MAGIC_ITEMS = Object.freeze([
     "requiresAttunement": false,
     "attunementRequirement": null,
     "chargeMaximum": 24,
-    "chargeRecharge": "The goat of traveling can become a Large goat with the same statistics as a riding horse. It has 24 charges, and each hour or portion thereof it spends in beast form costs 1 charge. While it has charges, you can use it as often as you wish. When it runs out of charges, it reverts to a figurine and can't be used again until 7 days have passed, when it regains all its charges.",
+    "chargeRecharge": "When it runs out of charges, it reverts to a figurine and can't be used again until 7 days have passed, when it regains all its charges.",
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": "all",
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4774,6 +4817,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4791,6 +4835,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": 3,
     "chargeRecharge": "The gem regains 1d3 expended charges daily at dawn.",
     "chargeRechargeKind": "daily",
+    "chargeRechargeAmount": "1d3",
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4808,6 +4853,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4825,6 +4871,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4842,6 +4889,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4859,6 +4907,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4876,6 +4925,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4893,6 +4943,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4910,6 +4961,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4925,8 +4977,9 @@ export const MAGIC_ITEMS = Object.freeze([
     "requiresAttunement": true,
     "attunementRequirement": "requires attunement",
     "chargeMaximum": 3,
-    "chargeRecharge": "This helm has 3 charges. While wearing it, you can use an action and expend 1 charge to cast the teleport spell from it. The helm regains 1d3",
-    "chargeRechargeKind": null,
+    "chargeRecharge": "The helm regains 1d3 expended charges daily at dawn.",
+    "chargeRechargeKind": "daily",
+    "chargeRechargeAmount": "1d3",
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4944,6 +4997,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4961,6 +5015,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4978,6 +5033,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -4995,6 +5051,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5012,6 +5069,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5027,8 +5085,9 @@ export const MAGIC_ITEMS = Object.freeze([
     "requiresAttunement": false,
     "attunementRequirement": null,
     "chargeMaximum": null,
-    "chargeRecharge": "This book contains health and diet tips, and its words are charged with magic. If you spend 48 hours over a period of 6 days or fewer studying the book's contents and practicing its guidelines, your Constitution score increases by 2, as does your maximum for that score. The manual then loses its magic, but regains it in a century.",
+    "chargeRecharge": "The manual then loses its magic, but regains it in a century.",
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5046,6 +5105,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5063,6 +5123,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5078,8 +5139,9 @@ export const MAGIC_ITEMS = Object.freeze([
     "requiresAttunement": false,
     "attunementRequirement": null,
     "chargeMaximum": null,
-    "chargeRecharge": "This book describes fitness exercises, and its words are charged with magic. If you spend 48 hours over a period of 6 days or fewer studying the book's contents and practicing its guidelines, your Strength score increases by 2, as does your maximum for that score. The manual then loses its magic, but regains it in a century.",
+    "chargeRecharge": "The manual then loses its magic, but regains it in a century.",
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5097,6 +5159,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5114,6 +5177,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5129,8 +5193,9 @@ export const MAGIC_ITEMS = Object.freeze([
     "requiresAttunement": false,
     "attunementRequirement": null,
     "chargeMaximum": null,
-    "chargeRecharge": "This book contains coordination and balance exercises, and its words are charged with magic. If you spend 48 hours over a period of 6 days or fewer studying the book's contents and practicing its guidelines, your Dexterity score increases by 2, as does your maximum for that score. The manual then loses its magic, but regains it in a century.",
+    "chargeRecharge": "The manual then loses its magic, but regains it in a century.",
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5148,6 +5213,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5165,6 +5231,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5180,8 +5247,9 @@ export const MAGIC_ITEMS = Object.freeze([
     "requiresAttunement": true,
     "attunementRequirement": "requires attunement",
     "chargeMaximum": 3,
-    "chargeRecharge": "The medallion has 3 charges. While wearing it, you can use an action and expend 1 charge to cast the detect thoughts spell (save DC 13) from it. The medallion regains 1d3 expended charges daily at dawn.",
+    "chargeRecharge": "The medallion regains 1d3 expended charges daily at dawn.",
     "chargeRechargeKind": "daily",
+    "chargeRechargeAmount": "1d3",
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5199,6 +5267,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5216,6 +5285,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5233,6 +5303,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5250,6 +5321,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5267,6 +5339,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5284,6 +5357,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5301,6 +5375,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5318,6 +5393,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5335,6 +5411,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5352,6 +5429,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5369,6 +5447,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5386,6 +5465,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5403,6 +5483,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5420,6 +5501,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5435,8 +5517,9 @@ export const MAGIC_ITEMS = Object.freeze([
     "requiresAttunement": false,
     "attunementRequirement": null,
     "chargeMaximum": null,
-    "chargeRecharge": "As an action, one dose of the ointment can be swallowed or applied to the skin. The creature that receives it regains 2d8 + 2 hit points, ceases to be poisoned, and is cured of any disease.",
+    "chargeRecharge": "The creature that receives it regains 2d8 + 2 hit points, ceases to be poisoned, and is cured of any disease.",
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5452,8 +5535,9 @@ export const MAGIC_ITEMS = Object.freeze([
     "requiresAttunement": false,
     "attunementRequirement": null,
     "chargeMaximum": 3,
-    "chargeRecharge": "This ring has 3 charges, and it regains 1d3 expended charges daily at dawn. While wearing the ring, you can use an action to expend 1 of its charges to cast one of the following spells:",
+    "chargeRecharge": "Ring, rare This ring has 3 charges, and it regains 1d3 expended charges daily at dawn.",
     "chargeRechargeKind": "daily",
+    "chargeRechargeAmount": "1d3",
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5471,6 +5555,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5488,6 +5573,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5505,6 +5591,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5522,6 +5609,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5539,6 +5627,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": true,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5556,6 +5645,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5573,6 +5663,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5590,6 +5681,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5607,6 +5699,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5624,6 +5717,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5641,6 +5735,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5656,8 +5751,9 @@ export const MAGIC_ITEMS = Object.freeze([
     "requiresAttunement": false,
     "attunementRequirement": null,
     "chargeMaximum": null,
-    "chargeRecharge": "For each hour spent in the paradise, a visitor regains hit points as if it had spent 1 Hit Die. Also, creatures don't age while in the paradise, although time passes normally. Visitors can remain in the paradise for up to 200 days divided by the number of creatures present (round down).",
+    "chargeRecharge": "For each hour spent in the paradise, a visitor regains hit points as if it had spent 1 Hit Die.",
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5673,8 +5769,9 @@ export const MAGIC_ITEMS = Object.freeze([
     "requiresAttunement": false,
     "attunementRequirement": null,
     "chargeMaximum": null,
-    "chargeRecharge": "The rope has AC 20 and 20 hit points. It regains 1 hit point every 5 minutes as long as it has at least 1 hit point. If the rope drops to 0 hit points, it is destroyed.",
+    "chargeRecharge": "It regains 1 hit point every 5 minutes as long as it has at least 1 hit point.",
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5692,6 +5789,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5709,6 +5807,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5726,6 +5825,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5743,6 +5843,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5760,6 +5861,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5777,6 +5879,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5792,8 +5895,9 @@ export const MAGIC_ITEMS = Object.freeze([
     "requiresAttunement": false,
     "attunementRequirement": null,
     "chargeMaximum": null,
-    "chargeRecharge": "This book contains memory and logic exercises, and its words are charged with magic. If you spend 48 hours over a period of 6 days or fewer studying the book's contents and practicing its guidelines, your Intelligence score increases by 2, as does your maximum for that score. The manual then loses its magic, but regains it in a century.",
+    "chargeRecharge": "The manual then loses its magic, but regains it in a century.",
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5809,8 +5913,9 @@ export const MAGIC_ITEMS = Object.freeze([
     "requiresAttunement": false,
     "attunementRequirement": null,
     "chargeMaximum": null,
-    "chargeRecharge": "This book contains guidelines for influencing and charming others, and its words are charged with magic. If you spend 48 hours over a period of 6 days or fewer studying the book's contents and practicing its guidelines, your Charisma score increases by 2, as does your maximum for that score. The manual then loses its magic, but regains it in a century.",
+    "chargeRecharge": "The manual then loses its magic, but regains it in a century.",
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5826,8 +5931,9 @@ export const MAGIC_ITEMS = Object.freeze([
     "requiresAttunement": false,
     "attunementRequirement": null,
     "chargeMaximum": null,
-    "chargeRecharge": "This book contains intuition and insight exercises, and its words are charged with magic. If you spend 48 hours over a period of 6 days or fewer studying the book's contents and practicing its guidelines, your Wisdom score increases by 2, as does your maximum for that score. The manual then loses its magic, but regains it in a century.",
+    "chargeRecharge": "The manual then loses its magic, but regains it in a century.",
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5845,6 +5951,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5862,6 +5969,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5877,8 +5985,9 @@ export const MAGIC_ITEMS = Object.freeze([
     "requiresAttunement": false,
     "attunementRequirement": null,
     "chargeMaximum": 3,
-    "chargeRecharge": "This wand has 3 charges. While holding it, you can expend 1 charge as an action to cast the detect magic spell from it. The wand regains 1d3 expended charges daily at dawn.",
+    "chargeRecharge": "The wand regains 1d3 expended charges daily at dawn.",
     "chargeRechargeKind": "daily",
+    "chargeRechargeAmount": "1d3",
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5894,8 +6003,9 @@ export const MAGIC_ITEMS = Object.freeze([
     "requiresAttunement": false,
     "attunementRequirement": null,
     "chargeMaximum": 3,
-    "chargeRecharge": "The wand has 3 charges. While holding it, you can use an action to expend 1 of its charges, and if a secret door or trap is within 30 feet of you, the wand pulses and points at the one nearest to you. The wand regains 1d3 expended charges daily at dawn.",
+    "chargeRecharge": "The wand regains 1d3 expended charges daily at dawn.",
     "chargeRechargeKind": "daily",
+    "chargeRechargeAmount": "1d3",
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5913,6 +6023,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5930,6 +6041,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": "The boots regain 2 hours of flying capability for every 12 hours they aren't in use.",
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5947,6 +6059,7 @@ export const MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": null,
     "source": "SRD 5.1"
@@ -5967,6 +6080,7 @@ export const WORN_MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": "ranged-damage-2",
     "source": "SRD 5.1"
@@ -5984,6 +6098,7 @@ export const WORN_MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": "unarmored-ac-2",
     "source": "SRD 5.1"
@@ -6001,6 +6116,7 @@ export const WORN_MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": "ac-and-saves-1",
     "source": "SRD 5.1"
@@ -6018,6 +6134,7 @@ export const WORN_MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": "ac-and-saves-1",
     "source": "SRD 5.1"
@@ -6035,6 +6152,7 @@ export const WORN_MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": "attack-1",
     "source": "SRD 5.1"
@@ -6052,6 +6170,7 @@ export const WORN_MAGIC_ITEMS = Object.freeze([
     "chargeMaximum": null,
     "chargeRecharge": null,
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": "ac-1",
     "source": "SRD 5.1"
@@ -6070,8 +6189,9 @@ export const HEALING_POTIONS = Object.freeze([
     "requiresAttunement": false,
     "attunementRequirement": null,
     "chargeMaximum": null,
-    "chargeRecharge": "You regain 2d4 + 2 hit points when you drink this potion. The potion's red liquid glimmers when agitated.",
+    "chargeRecharge": "Potion, common You regain 2d4 + 2 hit points when you drink this potion.",
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": "healing-potion",
     "source": "SRD 5.1",
@@ -6089,8 +6209,9 @@ export const HEALING_POTIONS = Object.freeze([
     "requiresAttunement": false,
     "attunementRequirement": null,
     "chargeMaximum": null,
-    "chargeRecharge": "You regain 4d4 + 4 hit points when you drink this potion. The potion's red liquid glimmers when agitated.",
+    "chargeRecharge": "Potion, uncommon You regain 4d4 + 4 hit points when you drink this potion.",
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": "healing-potion",
     "source": "SRD 5.1",
@@ -6108,8 +6229,9 @@ export const HEALING_POTIONS = Object.freeze([
     "requiresAttunement": false,
     "attunementRequirement": null,
     "chargeMaximum": null,
-    "chargeRecharge": "You regain 8d4 + 8 hit points when you drink this potion. The potion's red liquid glimmers when agitated.",
+    "chargeRecharge": "Potion, rare You regain 8d4 + 8 hit points when you drink this potion.",
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": "healing-potion",
     "source": "SRD 5.1",
@@ -6127,8 +6249,9 @@ export const HEALING_POTIONS = Object.freeze([
     "requiresAttunement": false,
     "attunementRequirement": null,
     "chargeMaximum": null,
-    "chargeRecharge": "You regain 10d4 + 20 hit points when you drink this potion. The potion's red liquid glimmers when agitated.",
+    "chargeRecharge": "Potion, very rare You regain 10d4 + 20 hit points when you drink this potion.",
     "chargeRechargeKind": null,
+    "chargeRechargeAmount": null,
     "destroyOnLastCharge": false,
     "implementedEffect": "healing-potion",
     "source": "SRD 5.1",

@@ -10,6 +10,10 @@
     "preview": "vite preview",
     "catalog:generate": "node scripts/generate-phase5-catalogs.mjs",
     "monsters:generate": "node scripts/generate-monsters.mjs",
+    "content:generate": "node scripts/generate-content-manifests.mjs",
+    "verify:content": "node scripts/verify-content.mjs",
+    "verify:plan-4-6": "npm run verify:content && node --test src/phase-plan-4-6.test.js",
+    "verify:plan-7-10": "node --test src/phase-plan-7-10.test.js",
     "test": "node --test \"src/**/*.test.js\"",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
@@ -51,6 +55,7 @@
     "verify": "npm run lint && npm run typecheck && npm test && npm run test:library:render && npm run test:artwork:render && npm run test:heroes:render && npm run test:equipment:render && npm run test:map:render && npm run test:setup:render && npm run test:turns:render && npm run test:combat:render && npm run test:encounter:render && npm run test:hardening:render && npm run test:rules:render && npm run test:reactions:render && npm run test:expansion:render && npm run test:workflow-features:render && npm run verify:foundation && npm run verify:library && npm run verify:artwork && npm run verify:heroes && npm run verify:equipment && npm run verify:map && npm run verify:setup && npm run verify:turns && npm run verify:combat && npm run verify:encounter && npm run test:browser && npm run verify:hardening && npm run verify:release && npm run verify:rules && npm run verify:reactions && npm run verify:dependencies && npm run build"
   },
   "dependencies": {
+    "fflate": "0.8.3",
     "lucide-react": "1.31.0",
     "react": "19.2.8",
     "react-dom": "19.2.8"
@@ -66,6 +71,7 @@
     "@vitejs/plugin-react": "6.0.5",
     "eslint": "10.9.1",
     "eslint-plugin-react-hooks": "7.1.1",
+    "fake-indexeddb": "6.2.5",
     "globals": "17.11.0",
     "typescript": "7.0.2",
     "vite": "8.2.1"

@@ -138,11 +138,13 @@ to do instead.
   name a scene and pick its kind.
 - **Rename, open, and delete** any scene from the ledger. Deleting also sweeps
   the scene's artwork out of image storage so it doesn't accumulate.
-- **Scene settings** cover the name, the grid size, and the map artwork.
-- **The grid is fixed at 20 columns by 12 rows.** Changing "grid size" changes
-  how large each cell is drawn (24–80 pixels), not how many cells exist. The
-  board is always the same board; you're changing the zoom of the ruling, not
-  the size of the field.
+- **Scene settings** cover the name, rendered cell size, board columns, board
+  rows, feet per cell, and map artwork. Old scenes default to 20 columns by 12
+  rows and five feet per cell.
+- **Board size and rendered size are separate.** Changing cell size changes
+  pixels and camera framing. Changing columns, rows, or feet per cell changes
+  the rules board. A shrink that would strand a token, wall, terrain entry, or
+  pending target stops for review instead of deleting it silently.
 - **Grid size drives the world size.** Cell size determines the pixel size of
   the whole map, which is what the camera pans around inside.
 
@@ -197,7 +199,8 @@ to do instead.
 ## The ruler
 
 - **Measure between two points** on the map.
-- **Distance counts crossed squares, then converts at 5 feet per square.**
+- **Distance counts crossed squares, then converts at the Scene's feet-per-cell
+  value.**
 - **A diagonal step costs one square**, matching movement, attack range, and
   adjacency exactly. A target three squares diagonally reads 15 ft on the ruler
   and is 15 ft to everything else in the app. The ruler used to sum the two
@@ -241,7 +244,11 @@ to do instead.
   Level field is always a deliberate act.
 - **Armour class** accounts for the armour worn, its Dexterity cap, a shield,
   and any magic bonuses from worn items.
-- **Rests** live on the Hero sheet. A short rest spends the selected number of
+- **Rests** live on the Hero sheet with a preview step. A short rest previews
+  healing and dice spend before you confirm; a long rest previews the full
+  restore and dice recovery. Confirming uses one stable event id, so a
+  double-click cannot apply the same rest twice. A short rest spends the
+  selected number of
   available class hit dice and heals by the rolled die plus Constitution
   modifier. A long rest restores HP, recovers half the spent dice (minimum one
   when any were spent), and refreshes long-rest racial uses and catalogued item
@@ -251,6 +258,10 @@ to do instead.
   keeping the old ones would silently produce an illegal character.
 - **The sheet keeps Identity, Abilities and Gear on one continuous record**, so
   every part of the Hero remains reachable without a hidden chapter switch.
+- **New Heroes show their next steps.** The creation work area has a checklist
+  for identity, class/race, abilities, skills, and equipment, sticky section
+  links, and an autosave status. Class features that are not automated are
+  labelled as notes instead of being presented as working rules.
 - **Hero portraits** upload per-hero.
 - **Retire hero** deletes one from the roster.
 
@@ -262,13 +273,21 @@ to do instead.
 - **Search and filter** the whole catalogue by kind, and by the properties that
   matter for each kind.
 - **Inventory is quantity-based.** You own N of a thing; adding and removing
-  adjusts the count.
+  adjusts the count. This remains the compatibility view for old saves.
+- **Durable item instances are available for new state.** Individually
+  enchanted, identified, attuned, or charged objects keep stable IDs and one
+  location. Ammunition and other fungible goods stay stacks; splitting and
+  merging are restricted to compatible stacks. Old item-ID inventories have an
+  explicit materialization adapter so ambiguous holdings are not silently
+  assigned separate charge pools.
 - **Equipment legality is enforced, with reasons.** You cannot equip what you
   don't own, cannot put a two-handed weapon in one hand while holding
   something else, cannot equip a shield alongside a two-handed weapon. Each
   refusal names the rule it broke rather than just greying out.
 - **Weapon properties are honoured** — Light (required for dual wielding),
-  Two-Handed, Versatile, Finesse, Thrown, Ammunition, Reach.
+  Two-Handed, Versatile, Finesse, Thrown, Ammunition, Reach, Special (lance:
+  disadvantage at 5 ft, two hands on foot). Monk is tagged reference-only until
+  the Monk class lands and changes nothing mechanical.
 - **Enchantments from +0 to +3** can be applied to eligible weapons and armour,
   and they feed through to attack rolls, damage, and AC.
 - **Worn magic items** apply passive bonuses while worn.
@@ -283,6 +302,10 @@ to do instead.
   charge use, and short/long rests restore the matching pools. The special
   action behind an otherwise inert magic item remains reference-only until its
   bespoke item feature is built.
+- **Charge state can follow an instance.** Spending the last charge is an
+  explicit zero balance, and a charged item recovers independently from another
+  copy. Retry-safe rest and dawn events prevent a recharge from being applied
+  twice.
 - **The catalogue is generated, not hand-written.** `catalog.generated.js` is
   built by `npm run catalog:generate` from three SRD files. Never edit it
   directly — edit the generator in `scripts/` and re-run.
@@ -326,6 +349,10 @@ to do instead.
   the stats drawer because a hero snapshot has no stats drawer, and no token
   should be unable to reach the field that ends the battle.
 - **Six sizes:** tiny, small, medium, large, huge, gargantuan.
+- **Footprints follow size.** Large and larger tokens occupy their full
+  footprint for collision, movement, range, adjacency, and area queries. The
+  board geometry service returns exact included cells and target reasons for
+  point, line, cone, circle, rectangle, and cube templates.
 - **Manual tokens have an editable AC** rather than a derived one, because
   there's no character sheet underneath to derive it from.
 - **Tokens snap to cell centres** and cannot be dropped onto an occupied cell.
@@ -335,11 +362,17 @@ to do instead.
   Every token loaded from storage passes through `normalizeTableToken`, which
   fills in anything missing. This makes adding a field backwards-compatible
   with every existing save, with no migration and no schema bump.
+- **Token effects are durable and inspectable.** Effect instances keep source,
+  provenance, definition version, duration, stacking status, and condition
+  sources. Removing one source leaves an independent manual or spell source
+  active.
 
 ## Monsters
 
-- **334 monster stat blocks** imported from the SRD, with 324 of them carrying
-  at least one authored attack.
+- **334 monster stat blocks** imported from the SRD, with 329 of them carrying
+  at least one authored attack. The generated records retain edition, source
+  hash, source ID, parser/definition versions, authored save and skill totals,
+  passive senses, attack variants, and a capability status for every action.
 - **The Monster browser** is a searchable, filterable picker — by name, creature
   type, size, and challenge rating band, with sorting.
 - **Summoning creates an ordinary token** pre-filled from the stat block: HP,
@@ -353,7 +386,11 @@ to do instead.
   than a progression that produces them.
 - **Read-only stat block notes** are preserved and displayed: traits, non-attack
   actions, legendary actions, reactions, senses, and languages. These are prose
-  for you to read and apply yourself; the app does not enforce them.
+  for you to read and apply yourself when their generated capability is
+  assisted or reference-only; the inspector shows why a rule is not automated.
+- **Source updates are reviewable.** Summoned monsters store a source snapshot
+  and explicit override fields. The Setup inspector can show a catalogue diff,
+  keep edited fields, and apply only the unedited source fields.
 - **Damage defences are the exception, and they say which half is which.** The
   plain single types out of a monster's resistance, immunity and vulnerability
   lines are imported as real data and applied by the rules engine. Anything
@@ -366,12 +403,13 @@ to do instead.
   A Goblin arrives carrying its Scimitar and Shortbow; a Wolf's Bite creates no
   item. Natural attacks, armour, coins, and treasure are never inferred or
   generated.
-- **The monster catalogue is lazy-loaded.** At 599KB it would outweigh
-  everything else, so it is fetched as a separate chunk the first time the
-  monster browser is opened. The initial download is 369KB of application code
-  plus a 204KB vendor chunk; the monsters arrive only if you ask for them.
+- **The monster catalogue is lazy-loaded** as a separate chunk the first time
+  the monster browser is opened, so the initial application does not pay the
+  full cost of the imported stat blocks.
 - **Generated by `npm run monsters:generate`** from the SRD monster file. Like
-  the item catalogue, never hand-edit the output.
+  the item catalogue, never hand-edit the output. `npm run verify:content`
+  checks source/emitted counts, parent and variant links, numeric stat facts,
+  mixed weapon ranges, and capability coverage before generated data is used.
 
 ## Attacks — how they're defined
 
@@ -534,6 +572,10 @@ split is the single most important design decision in the combat code.
 
 - **Every token can roll all six saves and all 18 skills**, from the battle
   inspector. Click the number and it becomes a d20.
+- **Checks also work before initiative.** Play can roll a selected scene token,
+  and the roster can roll a Hero even when no scene exists. Each panel offers
+  ability, skill, or save context, an optional DC, advantage/disadvantage, and
+  a visible modifier-source breakdown.
 - **Any token, at any point in the battle** — not only the one whose turn it is.
   A saving throw is nearly always demanded on somebody else's turn, so limiting
   this to the active token would make it useless.
@@ -556,6 +598,10 @@ split is the single most important design decision in the combat code.
 - **The check cinematic** is a sibling of the attack one, not the same
   component. An attack always resolves against an armour class and always has
   damage to tell; a check may have neither, and may never roll at all.
+- **Campaign and scene checks leave a bounded roll log.** Entries retain the
+  context, total, DC result, source breakdown, and public/private visibility;
+  encounter rolls continue to use the encounter log and do not create turn or
+  resource changes.
 
 ## Hit points, healing, and temporary hit points
 
@@ -640,6 +686,11 @@ split is the single most important design decision in the combat code.
   whose contested check they just resolved.
 - **Conditions can be permanent or timed.** The inspector offers 1, 2, 3, 5,
   and 10 rounds; the chip shows its expiry and the round transition removes it.
+- **Effects can use explicit boundaries and campaign time.** Round, turn,
+  elapsed-game-time, source-valid, event, and explicit-end durations are saved
+  with monotonic boundary IDs. The campaign clock advances only through an
+  explicit command; browser suspension never advances it, and a combat round
+  contributes six seconds.
 - **Condition immunity is enforced.** An immune chip is locked and even a
   direct domain call is refused, so UI state cannot bypass the rule.
 - **The mechanical ones actually work:**
@@ -798,6 +849,11 @@ split is the single most important design decision in the combat code.
   forbidden and scanned for, so Nightforge can never read or overwrite a save
   from the app it replaced. Both can be installed side by side.
 - **Changes sync across tabs** — two windows on the same scene stay consistent.
+- **Commands are replay-safe.** Typed move, attack, hit-point, XP, and check
+  commands validate their payloads, carry a payload hash, reject stale
+  revisions, and retain bounded outcomes by command ID. Duplicate retries return
+  the original result; a reused ID with different input is refused. Dice used by
+  command-backed resolution are recorded in a replayable random transcript.
 
 ## Interface and accessibility
 

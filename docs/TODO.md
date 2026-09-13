@@ -20,26 +20,26 @@ anything you decide against to the bottom **with the reason**.
 | 3 | Races and subraces | All 9 + 4 | Bonuses, speed, size, and the 38-rules racial trait catalog |
 | 4 | Backgrounds | All 13 | Grant their two skills, tool proficiencies, and catalog-backed starting equipment |
 | 5 | Feats | No | — |
-| 6 | Character creation | Yes | Point buy, skills, saves, languages |
-| 7 | Skills and ability checks | All 18 | Rollable, with advantage and a DC |
+| 6 | Character creation | Yes | Point buy, skills, saves, languages, creation checklist, equipment selection, autosave status |
+| 7 | Skills and ability checks | All 18 | Rollable from Battle, Play, and roster with advantage/disadvantage, optional DC, and modifier sources |
 | 8 | Saving throws | Yes | Rollable; four conditions auto-fail STR and DEX; cover applies to sourced DEX saves |
 | 9 | Spells | No | Save DC and attack bonus computed, nothing uses them |
-| 10 | Weapons | All 36 | Yes, incl. properties except Special and Monk |
+| 10 | Weapons | All 36 | Yes, incl. Light, Two-Handed, Versatile, Finesse, Thrown, Ammunition, Reach, and Special (lance). Monk is tagged reference-only until the Monk class lands |
 | 11 | Armor and shields | All 13 | Yes |
 | 12 | Magic weapons and armor | Yes | +1 to +3 enchantments work |
-| 13 | Magic items | 123 | Attunement and charge pools are tracked; 10 have active effects and 113 remain reference-only |
-| 14 | Monsters | All 334 | Yes. Traits, reactions, legendary actions are text only |
+| 13 | Magic items | 123 | Attunement and legacy charge pools are tracked; shared instance and per-instance charge contracts are now available, while 10 have active effects and 113 remain reference-only |
+| 14 | Monsters | All 334 | Generated metadata, authored totals, mixed attack variants, source review, and explicit capability statuses; prose mechanics remain reference-only |
 | 15 | Conditions | All 15 | Permanent or timed; immunity enforced. Exhaustion is tracked, not laddered — decided against |
 | 16 | Attack rolls | Yes | Advantage, crits, multiattack, two-weapon, thrown, ammo |
 | 17 | Damage | Yes | Typed. Resistance, immunity and vulnerability all apply |
 | 18 | Healing, temp HP, death saves | Yes | Heroes must roll once on their dying turn; healing raises them; adjacent allies can stabilise with Medicine |
 | 19 | Initiative and turns | Yes | Editable scores, reroll-all, and manual tie ordering |
 | 20 | Movement | Yes | Walking, flying, swimming, climbing, difficult terrain, and manual forced movement |
-| 21 | Reactions | Yes | Opportunity attacks interrupt movement; Ready uses the same reaction resource |
+| 21 | Reactions | Partial | Opportunity attacks interrupt movement; typed durable frames preserve the queue and resume state, while the richer prompt and nested consumers remain |
 | 22 | Other actions | Partly | Unarmed strikes, Dodge, Disengage, Help, Hide, Stabilise, Grapple, and Shove |
 | 23 | Vision | Partly | Cover and racial darkvision are surfaced; there is no light-level model |
 | 24 | Concentration | No | — |
-| 25 | Rests | Yes | Hero sheet short/long rests spend hit dice, restore HP, and refresh racial/item uses |
+| 25 | Rests | Yes | Hero sheet short/long rests preview healing and dice recovery before commit, spend hit dice, restore HP, refresh racial/item uses, and accept idempotent recovery event IDs |
 | 26 | Loot and chests | Yes | Yes |
 | 27 | Money | Yes | Five coin purses and loot transfers; no shopping |
 | 28 | XP | Yes | Awarded at battle end by hand. Only defeated foes count |
@@ -48,9 +48,36 @@ anything you decide against to the bottom **with the reason**.
 | 31 | Languages, alignment, CR | Yes | Reference only — correct as is |
 | 32 | Sides | Yes | Ally or foe per token; a Battle ends when one side stands |
 
+The P07–P10 core contracts are present behind the existing journeys: scenes have
+configurable board geometry, tokens can carry source-aware effects, campaign time
+and pending resolution frames are normalized durably, and resources/items expose
+shared reservation and instance operations. The focused gate is
+`npm run verify:plan-7-10`; the remaining UI work is called out above instead of
+being presented as complete.
+
 A standing turn offers Attack, Dash, Swap, Tactics and Bonus Action — plus move
 and End Turn. Tactics contains Dodge, Disengage, Help and adjacent Stabilise
 options. A dying turn shows only its required death save and End Turn.
+
+## Plan P04–P06 delivery record
+
+The current implementation includes the core P04–P06 contracts and their focused
+verification. The content pipeline is generated from explicit `DND 5E Data/`
+inputs; manifests report **1,350 emitted records with zero unresolved
+relationships**, and monster generation emits all **334 source records**. The
+command boundary covers validated move, attack, hit-point, XP, and check
+commands with revision checks, idempotent durable outcomes, and random
+transcripts. Play and roster checks use typed contexts and a bounded visible
+roll log, while Hero creation exposes its checklist and save status.
+
+Run the focused gate with:
+
+```text
+npm run verify:plan-4-6
+```
+
+Content manifests describe unsupported class, spell, feat, item, and monster
+behaviour honestly; they do not claim those future rule systems are automated.
 
 ---
 

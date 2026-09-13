@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
+import { itemRechargeMetadata } from "./item-recharge.mjs";
 
 const sourceDirectory = process.argv[2];
 const outputFile = process.argv[3] || path.resolve("src/domain/catalog.generated.js");
@@ -153,22 +154,10 @@ const chargeMaximum = (description) => {
   const match = description.match(/(?:starts with|has|contains)\s+(\d+)\s+charges?/i);
   return match ? Number(match[1]) : null;
 };
-const chargeRecharge = (description) => description
-  .split(/\n\n+/)
-  .find((paragraph) => /regain|regains|recharge/i.test(paragraph)) || null;
-const chargeRechargeKind = (recharge) => {
-  if (!recharge) return null;
-  if (/short or long rest/i.test(recharge)) return "short-rest";
-  if (/long rest/i.test(recharge)) return "long-rest";
-  if (/short rest/i.test(recharge)) return "short-rest";
-  if (/daily|dawn/i.test(recharge)) return "daily";
-  return null;
-};
 
 const magicShape = (entry, implementedEffect = null) => {
   const description = magicDescription(entry);
   const attunementRequirement = attunementText(description);
-  const recharge = chargeRecharge(description);
   return {
     id: entry.index,
     name: entry.name,
@@ -180,8 +169,7 @@ const magicShape = (entry, implementedEffect = null) => {
     requiresAttunement: Boolean(attunementRequirement),
     attunementRequirement,
     chargeMaximum: chargeMaximum(description),
-    chargeRecharge: recharge,
-    chargeRechargeKind: chargeRechargeKind(recharge),
+    ...itemRechargeMetadata(description),
     destroyOnLastCharge: /last charge/i.test(description),
     implementedEffect,
     source: "SRD 5.1",

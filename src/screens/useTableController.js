@@ -41,6 +41,8 @@ import {
   swapAvailability,
 } from "../domain/combat.js";
 import { performAbilityCheck, performSavingThrow } from "../domain/checks.js";
+import { createPendingResolution, normalizePendingResolutions } from "../domain/resolutionScheduler.js";
+import { loadMonsters, monsterRefreshDiff, refreshedMonsterToken } from "../domain/monsters.js";
 import { coinsAreEmpty, formatCoins } from "../domain/money.js";
 import {
   rollDeathSave,
@@ -110,8 +112,48 @@ import {
 } from "../domain/table.js";
 
 const okay = () => ({ ok: true });
+const MONSTER_SOURCE_FIELDS = new Set([
+  "name", "creatureType", "challengeRating", "xp", "hp", "maxHp", "ac", "baseSpeed", "speeds", "initiativeBonus",
+  "strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma", "saveProficiencies",
+  "skillProficiencies", "saveTotals", "skillTotals", "skillExpertise", "passivePerception", "damageResistances",
+  "damageImmunities", "damageVulnerabilities", "conditionImmunities", "attacks", "attacksPerAction",
+  "actionCapabilities", "capabilityStatus", "sourceDatasetHash",
+]);
 const initials = (name) => String(name || "?").slice(0, 2).toUpperCase();
 const errorText = (error) => error ? `${error.message} ${error.recovery || "Retry the change."}` : "";
+
+const reactionType = (entry) => entry?.type === "ready" ? "ready-trigger" : "opportunity-attack";
+
+const reactionEntriesFromFrames = (frames) => normalizePendingResolutions(frames)
+  .filter((frame) => ["pending", "active"].includes(frame.status) && frame.payload?.reactionRuntime && frame.payload.reaction)
+  .map((frame) => frame.payload.reaction);
+
+const reactionFramesForEntries = (entries, encounter = {}) => {
+  const existing = normalizePendingResolutions(encounter.pendingResolutions);
+  const retained = existing.filter((frame) => !frame.payload?.reactionRuntime);
+  const frames = (Array.isArray(entries) ? entries : []).map((entry, index) => {
+    const created = createPendingResolution({
+      id: entry.resolutionId || `${reactionType(entry)}-${entry.reactorId}-${entry.targetId}-${entry.departureIndex ?? index}`,
+      type: reactionType(entry),
+      window: entry.type === "ready" ? "target-selected" : entry.trigger === "target-ends-turn" ? "turn-end" : "movement-boundary",
+      priority: entry.type === "ready" ? 20 : 10,
+      initiativeSnapshot: encounter.initiatives?.[entry.reactorId] || 0,
+      sequence: index + 1,
+      parentId: entry.parentResolutionId || null,
+      depth: entry.depth || 0,
+      createdBoundaryId: encounter.lastBoundaryId || null,
+      requiredResponderIds: [entry.reactorId],
+      payload: {
+        reactionRuntime: true,
+        reaction: entry,
+        path: entry.path || [],
+        cursor: entry.departureIndex || 0,
+      },
+    });
+    return created.ok ? created.value : null;
+  }).filter(Boolean);
+  return normalizePendingResolutions([...retained, ...frames]);
+};
 
 /**
  * Refusals during play get a short line you can read at a glance. Anything that
@@ -247,6 +289,7 @@ export function useTableController({
   setMode = okay,
   onUpdate = okay,
   onAwardExperience = okay,
+  onRollCheck = okay,
   heroes = [],
   artworkRepository = null,
   persistence = { status: "idle", error: null },
@@ -291,6 +334,7 @@ export function useTableController({
   const [selectedId, setSelectedId] = useState(() => initialSelectedId === undefined ? scene?.tokens?.[0]?.id || null : initialSelectedId);
   const [selectedChestId, setSelectedChestId] = useState(initialSelectedChestId);
   const [summonChoice, setSummonChoice] = useState("");
+  const [monsterReview, setMonsterReview] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(initialDrawerOpen);
   const [activeTool, setActiveTool] = useState(initialTool);
   const [interaction, setInteraction] = useState(null);
@@ -308,7 +352,12 @@ export function useTableController({
   const [specialDraft, setSpecialDraft] = useState(null);
   // Opportunity attacks pause movement at the departure boundary and resolve
   // one at a time through the ordinary attack cinematic.
-  const [reactionQueue, setReactionQueue] = useState([]);
+  const persistedReactionQueue = useMemo(
+    () => reactionEntriesFromFrames(scene?.encounter?.pendingResolutions),
+    [scene?.encounter?.pendingResolutions],
+  );
+  const reactionSceneRef = useRef(null);
+  const [reactionQueue, setReactionQueue] = useState(() => persistedReactionQueue);
   const [pendingMovement, setPendingMovement] = useState(null);
   const [cinematic, setCinematic] = useState(initialCinematic);
   const [checkCinematic, setCheckCinematic] = useState(initialCheckCinematic);
@@ -339,12 +388,21 @@ export function useTableController({
   const lootChest = chests.find((chest) => chest.id === lootChestId) || null;
   const lootBody = tableTokens.find((token) => token.id === lootTokenId) || null;
   const visibleError = localError || persistence.error || artworkError;
+
+  useEffect(() => {
+    if (!scene?.id) return;
+    if (reactionSceneRef.current !== scene.id || (!reactionQueue.length && persistedReactionQueue.length)) {
+      reactionSceneRef.current = scene.id;
+      setReactionQueue(persistedReactionQueue);
+    }
+  }, [scene?.id, persistedReactionQueue, reactionQueue.length]);
+
   const walls = scene?.walls || [];
   const wallsVisible = scene?.wallsVisible !== false;
   const canAdjustArtwork = Boolean(artworkUrl || scene?.blankCanvas);
-  const sceneSize = sceneWorldSize(scene?.gridSize);
+  const sceneSize = sceneWorldSize(scene?.gridSize, scene?.board);
   const rulerFeet = rulerDraft
-    ? rulerDistanceFeet(rulerDraft.start, rulerDraft.end, sceneViewport(scene?.gridSize))
+    ? rulerDistanceFeet(rulerDraft.start, rulerDraft.end, sceneViewport(scene?.gridSize, scene?.board))
     : 0;
 
   // The result is already saved before the animation starts, so skipping only
@@ -403,6 +461,7 @@ export function useTableController({
     setLootChestId(null);
     setLootTokenId(null);
     setMonsterBrowserOpen(false);
+    setMonsterReview(null);
     setImpact(null);
     clearCinematicTimers();
     clearRetrievalTimers();
@@ -423,6 +482,10 @@ export function useTableController({
     setInteraction((current) => current?.kind === "movement" ? null : current);
   }, [activeId]);
 
+  useEffect(() => {
+    setMonsterReview(null);
+  }, [selectedId]);
+
   // Short refusals clear themselves; anything that risks losing work stays until
   // it is read and dismissed.
   useEffect(() => {
@@ -431,14 +494,31 @@ export function useTableController({
     return () => clearTimeout(timer);
   }, [localError]);
 
-  const savePatch = (patch) => {
+  const savePatch = async (patch) => {
     if (!scene?.id) return { ok: false, message: "No active Scene is available." };
-    const result = onUpdate(scene.id, patch) || okay();
+    const result = (await onUpdate(scene.id, patch)) || okay();
     setLocalError(result.ok ? null : result);
     return result;
   };
 
-  const finishWall = () => {
+  const persistReactionQueue = async (entries, encounter = scene?.encounter) => {
+    if (!encounter) return { ok: false, message: "No active encounter is available." };
+    const pendingResolutions = reactionFramesForEntries(entries, encounter);
+    const result = await savePatch({
+      encounter: {
+        ...encounter,
+        pendingResolutions,
+        resolutionSequence: Math.max(
+          Math.floor(Number(encounter.resolutionSequence) || 0),
+          ...pendingResolutions.map((frame) => Math.floor(Number(frame.sequence) || 0)),
+        ),
+      },
+    });
+    if (result.ok) setReactionQueue(entries);
+    return result;
+  };
+
+  const finishWall = async () => {
     if (!wallDraft?.points || wallDraft.points.length < 2) {
       setWallDraft(null);
       setWallHover(null);
@@ -450,7 +530,7 @@ export function useTableController({
       return wallId;
     }
     const wall = createWall({ id: wallId.value, type: wallDraft.type, points: wallDraft.points });
-    const result = savePatch({ walls: [...walls, wall] });
+    const result = (await savePatch({ walls: [...walls, wall] }));
     if (result.ok) {
       setWallDraft(null);
       setWallHover(null);
@@ -471,7 +551,7 @@ export function useTableController({
   };
 
   useEffect(() => {
-    const onKeyDown = (event) => {
+    const onKeyDown = async (event) => {
       if (event.key !== "Escape") return;
       if (combatLocked) return;
       if (attackDraft) {
@@ -500,7 +580,7 @@ export function useTableController({
         return;
       }
       if (activeTool?.startsWith("wall-") && wallDraft?.points?.length) {
-        finishWall();
+        (await finishWall());
         return;
       }
       if (drawerOpen) setDrawerOpen(false);
@@ -517,7 +597,11 @@ export function useTableController({
    */
   const healedSceneRef = useRef(null);
   useEffect(() => {
-    if (!scene?.id || busy || healedSceneRef.current === scene.id) return;
+    // Active Battles are durable snapshots. A legacy percentage position may
+    // be intentionally authored there, so do not write an implicit
+    // normalization while a Battle is open; the geometry adapter measures it
+    // without changing the saved encounter.
+    if (!scene?.id || busy || isActiveBattle || healedSceneRef.current === scene.id) return;
     const strayTokens = tableTokens.some((token) => !isOnCellCentre(token.position));
     const strayChests = chests.some((chest) => !isOnCellCentre(chest.position));
     healedSceneRef.current = scene.id;
@@ -530,14 +614,14 @@ export function useTableController({
       patch.chests = chests.map((chest) => ({ ...chest, position: snapScenePosition(chest.position) }));
     }
     savePatch(patch);
-  }, [scene?.id, busy]);
+  }, [scene?.id, busy, isActiveBattle]);
 
   const localPoint = (event) => {
     const rect = planeRef.current?.getBoundingClientRect();
     return rect ? clientPointToPercent({ x: event.clientX, y: event.clientY }, rect) : { xPercent: 50, yPercent: 50 };
   };
 
-  const setupViewport = () => sceneViewport(scene?.gridSize);
+  const setupViewport = () => sceneViewport(scene?.gridSize, scene?.board);
 
   const setupCollisionFailure = (entity) => ({
     ok: false,
@@ -551,14 +635,14 @@ export function useTableController({
     try { mapRef.current?.setPointerCapture?.(pointerId); } catch { /* pointer capture is optional */ }
   };
 
-  const onMapPointerDown = (event) => {
+  const onMapPointerDown = async (event) => {
     if (event.button !== 0 || combatLocked || attackDraft || helpDraft || readyDraft || specialDraft) return;
     const point = localPoint(event);
     if (activeTool === "terrain") {
       const cell = setupCellForPosition(point, setupViewport());
       const key = `${cell.column}:${cell.row}`;
       const current = scene?.difficultTerrain || [];
-      savePatch({ difficultTerrain: current.includes(key) ? current.filter((entry) => entry !== key) : [...current, key] });
+      (await savePatch({ difficultTerrain: current.includes(key) ? current.filter((entry) => entry !== key) : [...current, key] }));
       return;
     }
     if (["wall-full", "wall-half", "wall-three-quarters"].includes(activeTool)) {
@@ -635,7 +719,7 @@ export function useTableController({
     });
   };
 
-  const onTokenKeyDown = (event, token) => {
+  const onTokenKeyDown = async (event, token) => {
     const delta = ARROW_DELTAS[event.key];
     const canMove = !activeTool && !attackDraft && !helpDraft && !readyDraft && !specialDraft && !combatLocked &&
       (isPlay || isSetup || (isActiveBattle && token.id === active?.id));
@@ -657,7 +741,7 @@ export function useTableController({
     if (destinationCell.column === currentCell.column && destinationCell.row === currentCell.row) return;
 
     if (isPlay) {
-      savePatch({ tokens: updateToken(playTokens, token.id, { position: destination }) });
+      (await savePatch({ tokens: updateToken(playTokens, token.id, { position: destination }) }));
       return;
     }
 
@@ -665,17 +749,18 @@ export function useTableController({
       if (!canOccupySetupPosition(destination, {
         tokens: tableTokens,
         chests,
+        size: token.size,
         exclude: { kind: "token", id: token.id },
         viewport,
       })) {
         setLocalError(setupCollisionFailure("token or chest"));
         return;
       }
-      savePatch({ tokens: updateToken(tableTokens, token.id, { position: destination }) });
+      (await savePatch({ tokens: updateToken(tableTokens, token.id, { position: destination }) }));
       return;
     }
 
-    commitMovement(token.id, destination, viewport);
+    (await commitMovement(token.id, destination, viewport));
   };
 
   /**
@@ -687,7 +772,7 @@ export function useTableController({
    * against the board as it stood before the step — the reactors have not moved,
    * and the mover's path is the plan's own list of squares.
    */
-  const commitMovement = (tokenId, destination, viewport) => {
+  const commitMovement = async (tokenId, destination, viewport) => {
     const planned = planActiveMovement(scene, tokenId, destination, viewport);
     if (!planned.ok) {
       setLocalError(planned);
@@ -699,11 +784,11 @@ export function useTableController({
       const interrupting = reactions
         .filter((reaction) => reaction.departureIndex === departureIndex)
         .map((reaction) => ({ ...reaction, landingPosition: planned.value.route[departureIndex] }));
-      setPendingMovement({ tokenId, destination, viewport });
       if (departureIndex === 0) {
-        setReactionQueue(interrupting);
+        const queued = await persistReactionQueue(interrupting, scene.encounter);
+        if (queued.ok) setPendingMovement({ tokenId, destination, viewport });
         setLocalError(null);
-        return { ok: true };
+        return queued.ok ? { ok: true } : queued;
       }
       const partial = moveActiveToken(scene, tokenId, destination, viewport, { landingIndex: departureIndex });
       if (!partial.ok) {
@@ -711,9 +796,11 @@ export function useTableController({
         setLocalError(partial);
         return partial;
       }
-      const partialSaved = savePatch(partial.value);
-      if (partialSaved.ok) setReactionQueue(interrupting);
-      else setPendingMovement(null);
+      const partialSaved = (await savePatch(partial.value));
+      if (partialSaved.ok) {
+        const queued = await persistReactionQueue(interrupting, partial.value.encounter);
+        if (queued.ok) setPendingMovement({ tokenId, destination, viewport });
+      }
       return partialSaved;
     }
     const moved = moveActiveToken(scene, tokenId, destination, viewport);
@@ -724,17 +811,17 @@ export function useTableController({
     const readyReactions = isActiveBattle
       ? readiedAttacksFor(scene, "target-moves", tokenId).map((entry) => ({ ...entry, landingPosition: moved.plan.landing }))
       : [];
-    const saved = savePatch(moved.value);
+    const saved = (await savePatch(moved.value));
     if (saved.ok) {
       setArrivalId(tokenId);
       if (arrivalTimerRef.current) clearTimeout(arrivalTimerRef.current);
       arrivalTimerRef.current = setTimeout(() => setArrivalId(null), 520);
-      if (readyReactions.length) setReactionQueue(readyReactions);
+      if (readyReactions.length) await persistReactionQueue(readyReactions, moved.value.encounter);
     }
     return saved;
   };
 
-  const onChestKeyDown = (event, chest) => {
+  const onChestKeyDown = async (event, chest) => {
     const delta = ARROW_DELTAS[event.key];
     if (!delta || !isSetup || activeTool || combatLocked) return;
     event.preventDefault();
@@ -758,7 +845,7 @@ export function useTableController({
       setLocalError(setupCollisionFailure("token or chest"));
       return;
     }
-    savePatch({ chests: updateChest(chests, chest.id, { position }) });
+    (await savePatch({ chests: updateChest(chests, chest.id, { position }) }));
   };
 
   const onMapPointerMove = (event) => {
@@ -795,6 +882,7 @@ export function useTableController({
       const blocked = isSetup && !canOccupySetupPosition(position, {
         tokens: tableTokens,
         chests,
+        size: tableTokens.find((entry) => entry.id === interaction.tokenId)?.size,
         exclude: { kind: "token", id: interaction.tokenId },
         viewport: setupViewport(),
       });
@@ -824,25 +912,25 @@ export function useTableController({
     }
   };
 
-  const onMapPointerUp = (event) => {
+  const onMapPointerUp = async (event) => {
     if (!interaction || interaction.pointerId !== event.pointerId) return;
     const point = localPoint(event);
     if (interaction.kind === "artwork") {
       const finalView = adjustArtworkBy(interaction.mapView, { x: event.clientX - interaction.client.x, y: event.clientY - interaction.client.y }, camera.zoom);
       setMapView(finalView);
-      savePatch({ mapView: finalView });
+      (await savePatch({ mapView: finalView }));
     }
     if (interaction.kind === "artwork-scale") {
       const next = artworkScaleFrom(interaction, event);
       setMapView(next);
-      savePatch({ mapView: next });
+      (await savePatch({ mapView: next }));
     }
     if (interaction.kind === "delete") {
       // A short press is a click on one object; anything longer is a box.
       const dragged = Math.abs(point.xPercent - interaction.start.xPercent) > 0.8
         || Math.abs(point.yPercent - interaction.start.yPercent) > 1.3;
-      if (dragged) deleteSceneObjectsWithin({ start: interaction.start, end: point });
-      else deleteSceneObject(sceneObjectAt(interaction.start, { tokens: tableTokens, chests, walls }));
+      if (dragged) (await deleteSceneObjectsWithin({ start: interaction.start, end: point }));
+      else (await deleteSceneObject(sceneObjectAt(interaction.start, { tokens: tableTokens, chests, walls })));
       setDeleteMarquee(null);
     }
     if (interaction.kind === "ruler") setRulerDraft({ start: interaction.start, end: point });
@@ -852,10 +940,11 @@ export function useTableController({
       if (isSetup && !canOccupySetupPosition(position, {
         tokens: tableTokens,
         chests,
+        size: tableTokens.find((entry) => entry.id === interaction.tokenId)?.size,
         exclude: { kind: "token", id: interaction.tokenId },
         viewport: setupViewport(),
       })) setLocalError(setupCollisionFailure("token or chest"));
-      else savePatch({ tokens: updateToken(tableTokens, interaction.tokenId, { position }) });
+      else (await savePatch({ tokens: updateToken(tableTokens, interaction.tokenId, { position }) }));
       setTokenPreview(null);
     }
     if (interaction.kind === "chest") {
@@ -867,7 +956,7 @@ export function useTableController({
         exclude: { kind: "chest", id: interaction.chestId },
         viewport: setupViewport(),
       })) setLocalError(setupCollisionFailure("token or chest"));
-      else savePatch({ chests: updateChest(chests, interaction.chestId, { position }) });
+      else (await savePatch({ chests: updateChest(chests, interaction.chestId, { position }) }));
       setChestPreview(null);
     }
     if (interaction.kind === "movement") {
@@ -875,7 +964,7 @@ export function useTableController({
         xPercent: point.xPercent + interaction.offset.xPercent,
         yPercent: point.yPercent + interaction.offset.yPercent,
       };
-      commitMovement(interaction.tokenId, destination, setupViewport());
+      (await commitMovement(interaction.tokenId, destination, setupViewport()));
       setMovementPreview(null);
     }
     setInteraction(null);
@@ -954,34 +1043,34 @@ export function useTableController({
     });
   };
 
-  const scaleArtwork = (delta) => {
+  const scaleArtwork = async (delta) => {
     const next = setArtworkScale(mapView, mapView.scale + delta);
     setMapView(next);
-    savePatch({ mapView: next });
+    (await savePatch({ mapView: next }));
   };
 
-  const resetArtwork = () => {
+  const resetArtwork = async () => {
     const next = { ...DEFAULT_MAP_VIEW };
     setMapView(next);
-    savePatch({ mapView: next });
+    (await savePatch({ mapView: next }));
   };
 
-  const addPlayToken = () => {
+  const addPlayToken = async () => {
     const tokenId = generatedId("token", tokenIdFactory, playTokens);
     if (!tokenId.ok) {
       setLocalError(tokenId);
       return tokenId;
     }
     const token = createPlayToken({ id: tokenId.value, ordinal: playTokens.length });
-    const result = savePatch({ tokens: [...playTokens, token] });
+    const result = (await savePatch({ tokens: [...playTokens, token] }));
     if (result.ok) setSelectedId(token.id);
     return result;
   };
 
-  const removeSelectedPlayToken = () => {
+  const removeSelectedPlayToken = async () => {
     if (!selected) return;
     const next = removeToken(playTokens, selected.id);
-    const result = savePatch({ tokens: next });
+    const result = (await savePatch({ tokens: next }));
     if (result.ok) setSelectedId(next[0]?.id || null);
   };
 
@@ -989,10 +1078,12 @@ export function useTableController({
    * Places a token built by `build`, once a free cell and a stable id exist.
    * Heroes, blank tokens and monsters differ only in what they are built from.
    */
-  const placeSetupToken = (build) => {
+  const placeSetupToken = async (build) => {
+    const previewToken = build({ id: "preview", ordinal: tableTokens.length, position: { xPercent: 50, yPercent: 50 } });
     const position = findOpenSetupPosition({ xPercent: 50, yPercent: 50 }, {
       tokens: tableTokens,
       chests,
+      size: previewToken?.size,
       viewport: setupViewport(),
     });
     if (!position) {
@@ -1012,7 +1103,7 @@ export function useTableController({
     }
     const id = tokenId.value;
     const token = build({ id, ordinal: tableTokens.length, position });
-    const result = savePatch({ tokens: [...tableTokens, token] });
+    const result = (await savePatch({ tokens: [...tableTokens, token] }));
     if (result.ok) {
       setSelectedId(token.id);
       setSelectedChestId(null);
@@ -1020,20 +1111,20 @@ export function useTableController({
     return result;
   };
 
-  const addSetupToken = (heroChoice = summonChoice) => {
+  const addSetupToken = async (heroChoice = summonChoice) => {
     const hero = heroes.find((entry) => entry.id === heroChoice);
-    return placeSetupToken((placement) => hero
+    return (await placeSetupToken((placement) => hero
       ? createHeroTokenSnapshot(hero, placement)
-      : createManualToken(placement));
+      : createManualToken(placement)));
   };
 
-  const summonMonsterToken = (monster) => {
-    const result = placeSetupToken((placement) => createMonsterToken(monster, placement));
+  const summonMonsterToken = async (monster) => {
+    const result = (await placeSetupToken((placement) => createMonsterToken(monster, placement)));
     if (!result || result.ok) setMonsterBrowserOpen(false);
     return result;
   };
 
-  const placeSetupChest = () => {
+  const placeSetupChest = async () => {
     const position = findOpenSetupPosition({ xPercent: 50, yPercent: 50 }, {
       tokens: tableTokens,
       chests,
@@ -1055,7 +1146,7 @@ export function useTableController({
       return chestId;
     }
     const chest = createChest({ id: chestId.value, position });
-    const result = savePatch({ chests: [...chests, chest] });
+    const result = (await savePatch({ chests: [...chests, chest] }));
     if (result.ok) {
       setSelectedChestId(chest.id);
       setSelectedId(null);
@@ -1063,54 +1154,89 @@ export function useTableController({
     return result;
   };
 
-  const saveSelectedSetupToken = (patch) => {
+  const saveSelectedSetupToken = async (patch) => {
     if (!selected || !isSetup) return { ok: false, message: "Select an editable Setup token." };
-    return savePatch({ tokens: updateToken(tableTokens, selected.id, patch) });
+    const overrideFields = Object.keys(patch || {}).filter((field) => MONSTER_SOURCE_FIELDS.has(field));
+    const nextPatch = selected.monsterId && overrideFields.length
+      ? {
+        ...patch,
+        overrides: {
+          ...(selected.overrides || {}),
+          ...Object.fromEntries(overrideFields.map((field) => [field, true])),
+        },
+      }
+      : patch;
+    return (await savePatch({ tokens: updateToken(tableTokens, selected.id, nextPatch) }));
   };
 
-  const applySelectedTokenEquipment = (equipmentState) => {
+  const reviewSelectedMonster = async () => {
+    if (!selected?.monsterId || !isSetup) return { ok: false, message: "Source review is available for monsters in Setup." };
+    try {
+      const catalog = await loadMonsters();
+      const source = catalog.find((monster) => monster.id === selected.monsterId);
+      const diff = monsterRefreshDiff(selected, source);
+      if (!diff) return { ok: false, message: "The source record for this monster is no longer available." };
+      setMonsterReview({ source, diff });
+      return { ok: true, value: diff };
+    } catch (error) {
+      const failed = { ok: false, code: "MONSTER_SOURCE_UNAVAILABLE", message: error?.message || "The monster source could not be loaded.", recovery: "Close this panel and retry.", retryable: true };
+      setLocalError(failed);
+      return failed;
+    }
+  };
+
+  const applySelectedMonsterSource = async () => {
+    if (!selected?.monsterId || !monsterReview?.source || !isSetup) return { ok: false, message: "Source refresh is available for monsters in Setup." };
+    const refreshed = refreshedMonsterToken(selected, monsterReview.source);
+    if (!refreshed) return { ok: false, message: "The monster source could not be applied." };
+    const result = await savePatch({ tokens: updateToken(tableTokens, selected.id, refreshed) });
+    if (result.ok) setMonsterReview(null);
+    return result;
+  };
+
+  const applySelectedTokenEquipment = async (equipmentState) => {
     if (!selected || !isSetup) return { ok: false, message: "Setup editing is unavailable during Battle." };
-    return savePatch({ tokens: applySetupTokenEquipment(tableTokens, selected.id, equipmentState) });
+    return (await savePatch({ tokens: applySetupTokenEquipment(tableTokens, selected.id, equipmentState) }));
   };
 
-  const removeSelectedSetupToken = () => {
+  const removeSelectedSetupToken = async () => {
     if (!selected || !isSetup) return;
     const next = removeToken(tableTokens, selected.id);
-    const result = savePatch({ tokens: next });
+    const result = (await savePatch({ tokens: next }));
     if (result.ok) setSelectedId(next[0]?.id || null);
   };
 
-  const changeSelectedChestItem = (itemId, direction) => {
+  const changeSelectedChestItem = async (itemId, direction) => {
     if (!selectedChest || !isSetup) return { ok: false, message: "Select an editable Setup chest." };
     const changed = changeChestInventory(chests, selectedChest.id, itemId, direction);
     if (!changed.ok) {
       setLocalError(changed);
       return changed;
     }
-    return savePatch({ chests: changed.value });
+    return (await savePatch({ chests: changed.value }));
   };
 
-  const changeSelectedChestCoins = (coins) => {
+  const changeSelectedChestCoins = async (coins) => {
     if (!selectedChest || !isSetup) return { ok: false, message: "Select an editable Setup chest." };
-    return savePatch({ chests: updateChest(chests, selectedChest.id, { coins }) });
+    return (await savePatch({ chests: updateChest(chests, selectedChest.id, { coins }) }));
   };
 
-  const removeSelectedSetupChest = () => {
+  const removeSelectedSetupChest = async () => {
     if (!selectedChest || !isSetup) return;
-    removeSetupChestById(selectedChest.id);
+    (await removeSetupChestById(selectedChest.id));
   };
 
-  const removeSetupTokenById = (tokenId) => {
+  const removeSetupTokenById = async (tokenId) => {
     if (!isSetup) return;
     const next = removeToken(tableTokens, tokenId);
-    const result = savePatch({ tokens: next });
+    const result = (await savePatch({ tokens: next }));
     if (result.ok && selectedId === tokenId) setSelectedId(next[0]?.id || null);
   };
 
-  const removeSetupChestById = (chestId) => {
+  const removeSetupChestById = async (chestId) => {
     if (!isSetup) return;
     const next = removeChest(chests, chestId);
-    const result = savePatch({ chests: next });
+    const result = (await savePatch({ chests: next }));
     if (result.ok && selectedChestId === chestId) {
       setSelectedChestId(null);
       setSelectedId(tableTokens[0]?.id || null);
@@ -1122,14 +1248,14 @@ export function useTableController({
    * removes everything the box catches. Walls are included, which is the only
    * way to take one off the board — they could previously only be added.
    */
-  const deleteSceneObject = (target) => {
+  const deleteSceneObject = async (target) => {
     if (!target || !isSetup) return;
-    if (target.kind === "token") removeSetupTokenById(target.id);
-    else if (target.kind === "chest") removeSetupChestById(target.id);
-    else if (target.kind === "wall") savePatch({ walls: walls.filter((wall) => wall.id !== target.id) });
+    if (target.kind === "token") (await removeSetupTokenById(target.id));
+    else if (target.kind === "chest") (await removeSetupChestById(target.id));
+    else if (target.kind === "wall") (await savePatch({ walls: walls.filter((wall) => wall.id !== target.id) }));
   };
 
-  const deleteSceneObjectsWithin = (rectangle) => {
+  const deleteSceneObjectsWithin = async (rectangle) => {
     if (!isSetup) return;
     const caught = sceneObjectsWithin(rectangle, { tokens: tableTokens, chests, walls });
     const total = caught.tokenIds.length + caught.chestIds.length + caught.wallIds.length;
@@ -1138,19 +1264,19 @@ export function useTableController({
     if (caught.tokenIds.length) patch.tokens = tableTokens.filter((token) => !caught.tokenIds.includes(token.id));
     if (caught.chestIds.length) patch.chests = chests.filter((chest) => !caught.chestIds.includes(chest.id));
     if (caught.wallIds.length) patch.walls = walls.filter((wall) => !caught.wallIds.includes(wall.id));
-    const result = savePatch(patch);
+    const result = (await savePatch(patch));
     if (!result.ok) return;
     if (caught.tokenIds.includes(selectedId)) setSelectedId(null);
     if (caught.chestIds.includes(selectedChestId)) setSelectedChestId(null);
   };
 
-  const beginBattle = () => {
+  const beginBattle = async () => {
     const prepared = prepareBattleStart(scene, { viewport: setupViewport(), random });
     if (!prepared.ok) {
       setLocalError(prepared);
       return prepared;
     }
-    const result = savePatch(prepared.value);
+    const result = (await savePatch(prepared.value));
     if (result.ok) {
       setSelectedId(prepared.value.encounter.initiativeOrder[0] || prepared.value.tokens[0]?.id || null);
       setSelectedChestId(null);
@@ -1164,11 +1290,11 @@ export function useTableController({
    * full HP, no conditions and the square it stood on in Setup, so nothing a
    * battle did to a token can leak into the next one.
    */
-  const abandonBattle = () => {
-    const result = savePatch({
+  const abandonBattle = async () => {
+    const result = (await savePatch({
       encounter: null,
       tokens: restoreSetupTokens(tableTokens, scene?.encounter?.setupTokens),
-    });
+    }));
     if (result.ok) {
       setMovementPreview(null);
       setAttackDraft(null);
@@ -1177,40 +1303,40 @@ export function useTableController({
     return result;
   };
 
-  const useDash = () => {
+  const useDash = async () => {
     const dashed = activateDash(scene);
     if (!dashed.ok) {
       setLocalError(dashed);
       return dashed;
     }
-    return savePatch(dashed.value);
+    return (await savePatch(dashed.value));
   };
 
-  const useDodge = () => {
+  const useDodge = async () => {
     const dodged = activateDodge(scene);
     if (!dodged.ok) {
       setLocalError(dodged);
       return dodged;
     }
-    return savePatch(dodged.value);
+    return (await savePatch(dodged.value));
   };
 
-  const useDisengage = () => {
+  const useDisengage = async () => {
     const disengaged = activateDisengage(scene);
     if (!disengaged.ok) {
       setLocalError(disengaged);
       return disengaged;
     }
-    return savePatch(disengaged.value);
+    return (await savePatch(disengaged.value));
   };
 
-  const useHide = () => {
+  const useHide = async () => {
     const hidden = activateHide(scene, setupViewport(), { random });
     if (!hidden.ok) {
       setLocalError(hidden);
       return hidden;
     }
-    return savePatch(hidden.value);
+    return (await savePatch(hidden.value));
   };
 
   /**
@@ -1230,7 +1356,7 @@ export function useTableController({
     return available;
   };
 
-  const confirmHelp = (targetTokenId) => {
+  const confirmHelp = async (targetTokenId) => {
     if (!helpDraft) return { ok: false, message: "No Help is waiting for a target." };
     const helped = activateHelp(scene, helpDraft.allyTokenId, targetTokenId, setupViewport());
     if (!helped.ok) {
@@ -1238,7 +1364,7 @@ export function useTableController({
       return helped;
     }
     setHelpDraft(null);
-    return savePatch(helped.value);
+    return (await savePatch(helped.value));
   };
 
   const startReady = (specification) => {
@@ -1255,7 +1381,7 @@ export function useTableController({
     return available;
   };
 
-  const confirmReady = (targetTokenId) => {
+  const confirmReady = async (targetTokenId) => {
     if (!readyDraft) return { ok: false, message: "No Ready Action is waiting for a target." };
     const readied = activateReady(scene, { ...readyDraft, targetTokenId });
     if (!readied.ok) {
@@ -1263,7 +1389,7 @@ export function useTableController({
       return readied;
     }
     setReadyDraft(null);
-    return savePatch(readied.value);
+    return (await savePatch(readied.value));
   };
 
   const startSpecialAttack = (kind) => {
@@ -1275,7 +1401,7 @@ export function useTableController({
     return { ok: true };
   };
 
-  const confirmSpecialAttack = (targetTokenId) => {
+  const confirmSpecialAttack = async (targetTokenId) => {
     if (!specialDraft) return { ok: false, message: "No special attack is waiting for a target." };
     const viewport = setupViewport();
     const resolved = specialDraft.kind === "grapple"
@@ -1286,62 +1412,62 @@ export function useTableController({
       return resolved;
     }
     setSpecialDraft(null);
-    return savePatch(resolved.value);
+    return (await savePatch(resolved.value));
   };
 
-  const tryEscapeGrapple = () => {
+  const tryEscapeGrapple = async () => {
     const escaped = escapeGrapple(scene, { random });
     if (!escaped.ok) {
       setLocalError(escaped);
       return escaped;
     }
-    return savePatch(escaped.value);
+    return (await savePatch(escaped.value));
   };
 
-  const letGoOfGrapple = (targetTokenId) => {
+  const letGoOfGrapple = async (targetTokenId) => {
     const released = releaseGrapple(scene, targetTokenId);
     if (!released.ok) {
       setLocalError(released);
       return released;
     }
-    return savePatch(released.value);
+    return (await savePatch(released.value));
   };
 
-  const drinkPotion = (itemId, targetTokenId) => {
+  const drinkPotion = async (itemId, targetTokenId) => {
     const used = consumeHealingPotion(scene, itemId, targetTokenId, setupViewport(), { random });
     if (!used.ok) {
       setLocalError(used);
       return used;
     }
-    return savePatch(used.value);
+    return (await savePatch(used.value));
   };
 
-  const changeMovementMode = (mode) => {
+  const changeMovementMode = async (mode) => {
     const selectedMode = selectMovementMode(scene, mode);
     if (!selectedMode.ok) {
       setLocalError(selectedMode);
       return selectedMode;
     }
-    return savePatch(selectedMode.value);
+    return (await savePatch(selectedMode.value));
   };
 
-  const rollTokenDeathSave = (tokenId) => {
+  const rollTokenDeathSave = async (tokenId) => {
     if (!isActiveBattle || combatLocked) return { ok: false, message: "Death saving throws need an active unlocked Battle." };
-    return presentCheck(rollDeathSave(scene, tokenId, { random }));
+    return (await presentCheck(rollDeathSave(scene, tokenId, { random })));
   };
 
-  const stabilizeToken = (tokenId) => {
+  const stabilizeToken = async (tokenId) => {
     if (!isActiveBattle || combatLocked) return { ok: false, message: "Stabilising needs an active unlocked Battle." };
-    return presentCheck(stabilizeCreature(scene, tokenId, setupViewport(), { random }));
+    return (await presentCheck(stabilizeCreature(scene, tokenId, setupViewport(), { random })));
   };
 
-  const useWeaponSwap = (loadout) => {
+  const useWeaponSwap = async (loadout) => {
     const swapped = performWeaponSwap(scene, loadout);
     if (!swapped.ok) {
       setLocalError(swapped);
       return swapped;
     }
-    return savePatch(swapped.value);
+    return (await savePatch(swapped.value));
   };
 
   const startAttack = (specification) => {
@@ -1366,8 +1492,8 @@ export function useTableController({
    * has been decided upon, and giving it its own animation would tell the table
    * that something different happened when nothing did.
    */
-  const presentAttack = (resolved, targetId) => {
-    const saved = savePatch(resolved.value);
+  const presentAttack = async (resolved, targetId) => {
+    const saved = (await savePatch(resolved.value));
     if (!saved.ok) return saved;
     clearCinematicTimers();
     setSelectedId(targetId);
@@ -1414,50 +1540,69 @@ export function useTableController({
    * the second reactor might be swinging at a creature the first one downed.
    */
   useEffect(() => {
-    if (!reactionQueue.length || cinematic || checkCinematic) return;
-    const [next, ...rest] = reactionQueue;
-    // The parent can persist one render after this component queues the swing.
-    // Wait until the mover is on the accepted landing cell so resolving from a
-    // stale scene can never snap it back to where the route began.
-    const viewport = setupViewport();
-    const currentTarget = tableTokens.find((token) => token.id === next.targetId);
-    if (!currentTarget) {
-      setReactionQueue(rest);
-      return;
-    }
-    if (next.landingPosition) {
-      const currentCell = setupCellForPosition(currentTarget.position, viewport);
-      const landingCell = setupCellForPosition(next.landingPosition, viewport);
-      if (currentCell.column !== landingCell.column || currentCell.row !== landingCell.row) return;
-    }
-    const resolved = performWeaponAttack(
-      scene,
-      {
-        kind: ATTACK_KIND_REACTION,
-        reactorId: next.reactorId,
-        targetId: next.targetId,
-        weaponId: next.weaponId,
-        hand: next.hand,
-        attackId: next.attackId,
-        targetPosition: next.departurePosition,
-        reactionType: next.type === "ready" ? "ready" : "opportunity",
-        readyTrigger: next.trigger,
-        viewport,
-      },
-      { random, battleItemIdFactory },
-    );
-    setReactionQueue(rest);
-    // A refusal here is not a mistake to report. The reactor may have been
-    // downed by the attack before it, or lost the weapon it was going to use;
-    // either way the swing simply does not happen.
-    if (resolved.ok) presentAttack(resolved, next.targetId);
-  }, [reactionQueue, cinematic, checkCinematic, scene, tableTokens]);
+    if (!reactionQueue.length || cinematic || checkCinematic || busy) return;
+    let cancelled = false;
+    const resolveNext = async () => {
+      const [next, ...rest] = reactionQueue;
+      // The parent can persist one render after this component queues the swing.
+      // Wait until the mover is on the accepted landing cell so resolving from a
+      // stale scene can never snap it back to where the route began.
+      const viewport = setupViewport();
+      const currentTarget = tableTokens.find((token) => token.id === next.targetId);
+      if (!currentTarget) {
+        await persistReactionQueue(rest, scene.encounter);
+        return;
+      }
+      if (next.landingPosition) {
+        const currentCell = setupCellForPosition(currentTarget.position, viewport);
+        const landingCell = setupCellForPosition(next.landingPosition, viewport);
+        if (currentCell.column !== landingCell.column || currentCell.row !== landingCell.row) return;
+      }
+      const resolved = performWeaponAttack(
+        scene,
+        {
+          kind: ATTACK_KIND_REACTION,
+          reactorId: next.reactorId,
+          targetId: next.targetId,
+          weaponId: next.weaponId,
+          hand: next.hand,
+          attackId: next.attackId,
+          targetPosition: next.departurePosition,
+          reactionType: next.type === "ready" ? "ready" : "opportunity",
+          readyTrigger: next.trigger,
+          viewport,
+        },
+        { random, battleItemIdFactory },
+      );
+      // A refusal here is not a mistake to report. The reactor may have been
+      // downed by the attack before it, or lost the weapon it was going to use;
+      // either way the swing simply does not happen, but its frame is closed.
+      if (!resolved.ok) {
+        await persistReactionQueue(rest, scene.encounter);
+        return;
+      }
+      const pendingResolutions = reactionFramesForEntries(rest, resolved.value.encounter);
+      const nextResolved = {
+        ...resolved,
+        value: { ...resolved.value, encounter: { ...resolved.value.encounter, pendingResolutions } },
+      };
+      if (!cancelled) {
+        const presented = await presentAttack(nextResolved, next.targetId);
+        // The attack save has already replaced the current frame with the
+        // remaining frames. Advance the local presentation queue only after
+        // that durable write succeeds, so a failed save retries the same frame.
+        if (presented.ok) setReactionQueue(rest);
+      }
+    };
+    resolveNext();
+    return () => { cancelled = true; };
+  }, [reactionQueue, cinematic, checkCinematic, scene, tableTokens, busy]);
 
   // A voluntary move pauses on the last safe square, lets every reaction at
   // that boundary resolve, then plans the remaining route from the persisted
   // board. A lethal or immobilising reaction cancels the continuation.
   useEffect(() => {
-    if (!pendingMovement || reactionQueue.length || cinematic || checkCinematic) return;
+    if (!pendingMovement || reactionQueue.length || cinematic || checkCinematic || busy) return;
     const mover = tableTokens.find((token) => token.id === pendingMovement.tokenId);
     if (!isActiveBattle || !mover || mover.hp <= 0 || mover.dead || activeId !== mover.id) {
       setPendingMovement(null);
@@ -1466,9 +1611,9 @@ export function useTableController({
     const continuation = pendingMovement;
     setPendingMovement(null);
     commitMovement(continuation.tokenId, continuation.destination, continuation.viewport);
-  }, [pendingMovement, reactionQueue, cinematic, checkCinematic, scene, tableTokens, activeId, isActiveBattle]);
+  }, [pendingMovement, reactionQueue, cinematic, checkCinematic, scene, tableTokens, activeId, isActiveBattle, busy]);
 
-  const resolveAttackTarget = (targetId) => {
+  const resolveAttackTarget = async (targetId) => {
     if (!attackDraft || combatLocked) return { ok: false, message: "No attack is ready." };
     const resolved = performWeaponAttack(scene, { ...attackDraft, targetId }, { random, battleItemIdFactory });
     if (!resolved.ok) {
@@ -1476,11 +1621,12 @@ export function useTableController({
       return resolved;
     }
     const readyReactions = readiedAttacksFor(scene, "target-attacks", active.id);
-    if (readyReactions.length) setReactionQueue((current) => [...current, ...readyReactions]);
-    return presentAttack(resolved, targetId);
+    const presented = await presentAttack(resolved, targetId);
+    if (presented.ok && readyReactions.length) await persistReactionQueue(readyReactions, resolved.value.encounter);
+    return presented;
   };
 
-  const openBattleChest = (chestId) => {
+  const openBattleChest = async (chestId) => {
     if (!isActiveBattle || combatLocked) return { ok: false, message: "Chest interaction requires an active unlocked Battle." };
     const opened = openAdjacentChest(scene, chestId, setupViewport());
     if (!opened.ok) {
@@ -1492,7 +1638,7 @@ export function useTableController({
       setLocalError(null);
       return opened;
     }
-    const saved = savePatch(opened.value);
+    const saved = (await savePatch(opened.value));
     if (saved.ok) {
       setLootChestId(chestId);
       setSelectedChestId(chestId);
@@ -1501,27 +1647,27 @@ export function useTableController({
     return saved;
   };
 
-  const takeChestItem = (itemId) => {
+  const takeChestItem = async (itemId) => {
     if (!lootChestId || combatLocked) return { ok: false, message: "No opened chest is ready." };
     const taken = takeOneFromOpenChest(scene, lootChestId, itemId, setupViewport());
     if (!taken.ok) {
       setLocalError(taken);
       return taken;
     }
-    return savePatch(taken.value);
+    return (await savePatch(taken.value));
   };
 
-  const takeChestCoin = (denominationId) => {
+  const takeChestCoin = async (denominationId) => {
     if (!lootChestId || combatLocked) return { ok: false, message: "No opened chest is ready." };
     const taken = takeCoinFromOpenChest(scene, lootChestId, denominationId, setupViewport());
     if (!taken.ok) {
       setLocalError(taken);
       return taken;
     }
-    return savePatch(taken.value);
+    return (await savePatch(taken.value));
   };
 
-  const searchBattleBody = (tokenId) => {
+  const searchBattleBody = async (tokenId) => {
     if (!isActiveBattle || combatLocked) return { ok: false, message: "Searching a body requires an active unlocked Battle." };
     const opened = searchDefeatedToken(scene, tokenId, setupViewport());
     if (!opened.ok) {
@@ -1533,7 +1679,7 @@ export function useTableController({
       setLocalError(null);
       return opened;
     }
-    const saved = savePatch(opened.value);
+    const saved = (await savePatch(opened.value));
     if (saved.ok) {
       setLootTokenId(tokenId);
       setLootChestId(null);
@@ -1541,27 +1687,27 @@ export function useTableController({
     return saved;
   };
 
-  const takeBodyItem = (itemId) => {
+  const takeBodyItem = async (itemId) => {
     if (!lootTokenId || combatLocked) return { ok: false, message: "No searched body is ready." };
     const taken = takeOneFromDefeatedToken(scene, lootTokenId, itemId, setupViewport());
     if (!taken.ok) {
       setLocalError(taken);
       return taken;
     }
-    return savePatch(taken.value);
+    return (await savePatch(taken.value));
   };
 
-  const takeBodyCoin = (denominationId) => {
+  const takeBodyCoin = async (denominationId) => {
     if (!lootTokenId || combatLocked) return { ok: false, message: "No searched body is ready." };
     const taken = takeCoinFromDefeatedToken(scene, lootTokenId, denominationId, setupViewport());
     if (!taken.ok) {
       setLocalError(taken);
       return taken;
     }
-    return savePatch(taken.value);
+    return (await savePatch(taken.value));
   };
 
-  const resolveRetrieval = (battleItemId) => {
+  const resolveRetrieval = async (battleItemId) => {
     if (!isActiveBattle || combatLocked) return { ok: false, message: "Weapon retrieval requires an active unlocked Battle." };
     const resolved = retrieveBattleItem(scene, battleItemId, setupViewport(), { random });
     if (!resolved.ok) {
@@ -1572,14 +1718,14 @@ export function useTableController({
     setLootTokenId(null);
     setLocalError(null);
     if (!resolved.outcome.requiresRoll) {
-      const saved = savePatch(resolved.value);
+      const saved = (await savePatch(resolved.value));
       if (saved.ok) {
         setSelectedId(resolved.outcome.actorId);
         setSelectedChestId(null);
       }
       return saved;
     }
-    const saved = savePatch(resolved.value);
+    const saved = (await savePatch(resolved.value));
     if (!saved.ok) return saved;
     clearRetrievalTimers();
     setRetrievalCinematic({ outcome: resolved.outcome, stage: "spin", error: null });
@@ -1606,14 +1752,14 @@ export function useTableController({
     return resolved;
   };
 
-  const restartBattle = () => {
+  const restartBattle = async () => {
     if (!isCompleteBattle || combatLocked) return { ok: false, message: "Only a completed Battle can restart." };
     const restarted = restartCompletedBattle(scene, { random });
     if (!restarted.ok) {
       setLocalError(restarted);
       return restarted;
     }
-    const saved = savePatch(restarted.value);
+    const saved = (await savePatch(restarted.value));
     if (saved.ok) {
       setSelectedId(restarted.activeTokenId);
       setSelectedChestId(null);
@@ -1626,17 +1772,17 @@ export function useTableController({
     return saved;
   };
 
-  const changeSelectedCondition = (conditionId, options = {}) => {
+  const changeSelectedCondition = async (conditionId, options = {}) => {
     if (!selected || !isActiveBattle || combatLocked) return { ok: false, message: "Select an active Battle token before changing conditions." };
     const changed = toggleBattleCondition(scene, selected.id, conditionId, options);
     if (!changed.ok) {
       setLocalError(changed);
       return changed;
     }
-    return savePatch(changed.value);
+    return (await savePatch(changed.value));
   };
 
-  const applyVitality = (operation) => {
+  const applyVitality = async (operation) => {
     if (!isActiveBattle || combatLocked) return { ok: false, message: "Hit points can be changed only during an active unlocked Battle." };
     const changed = operation();
     if (!changed.ok) {
@@ -1644,25 +1790,27 @@ export function useTableController({
       return changed;
     }
     setLocalError(null);
-    return savePatch(changed.value);
+    return (await savePatch(changed.value));
   };
 
-  const healSelected = (tokenId, amount) => applyVitality(() => healToken(scene, tokenId, amount));
-  const damageSelected = (tokenId, amount, damageType = null) => applyVitality(() => damageToken(scene, tokenId, amount, damageType));
-  const setSelectedTempHp = (tokenId, amount) => applyVitality(() => setTemporaryHp(scene, tokenId, amount));
+  const healSelected = async (tokenId, amount) => (await applyVitality(() => healToken(scene, tokenId, amount)));
+  const damageSelected = async (tokenId, amount, damageType = null) => (await applyVitality(() => damageToken(scene, tokenId, amount, damageType)));
+  const setSelectedTempHp = async (tokenId, amount) => (await applyVitality(() => setTemporaryHp(scene, tokenId, amount)));
 
   /**
    * Saves and checks share one presentation path. Neither spends a turn
    * resource and neither is restricted to the active token, because a save is
    * nearly always demanded on somebody else's turn.
    */
-  const presentCheck = (rolled) => {
+  const presentCheck = async (rolled, { persist = true } = {}) => {
     if (!rolled.ok) {
       setLocalError(rolled);
       return rolled;
     }
-    const saved = savePatch(rolled.value);
-    if (!saved.ok) return saved;
+    if (persist) {
+      const saved = (await savePatch(rolled.value));
+      if (!saved.ok) return saved;
+    }
     clearCinematicTimers();
     setLocalError(null);
     setCheckCinematic({ outcome: rolled.outcome, stage: "spin", error: null });
@@ -1681,30 +1829,39 @@ export function useTableController({
     return rolled;
   };
 
-  const rollTokenSave = (tokenId, ability, options = {}) => {
+  const rollTokenSave = async (tokenId, ability, options = {}) => {
     if (!isActiveBattle || combatLocked) return { ok: false, message: "Saving throws need an active unlocked Battle." };
-    return presentCheck(performSavingThrow(scene, {
+    return (await presentCheck(performSavingThrow(scene, {
       tokenId,
       ability,
       sourceTokenId: active?.id === tokenId ? null : active?.id,
       viewport: setupViewport(),
       ...options,
-    }, { random }));
+    }, { random })));
   };
 
-  const rollTokenCheck = (tokenId, target = {}, options = {}) => {
+  const rollTokenCheck = async (tokenId, target = {}, options = {}) => {
+    if (isPlay && !combatLocked) {
+      const persisted = await onRollCheck(scene?.id || null, {
+        kind: "ability",
+        tokenId,
+        ...target,
+        ...options,
+      });
+      return presentCheck(persisted, { persist: false });
+    }
     if (!isActiveBattle || combatLocked) return { ok: false, message: "Ability checks need an active unlocked Battle." };
-    return presentCheck(performAbilityCheck(scene, { tokenId, ...target, ...options }, { random }));
+    return (await presentCheck(performAbilityCheck(scene, { tokenId, ...target, ...options }, { random })));
   };
 
-  const awardBattleExperience = (award) => {
+  const awardBattleExperience = async (award) => {
     if (!isCompleteBattle || !scene?.id) return { ok: false, message: "Only a completed Battle awards experience." };
-    const result = onAwardExperience(scene.id, award);
+    const result = (await onAwardExperience(scene.id, award));
     setLocalError(result?.ok === false ? result : null);
     return result || { ok: true };
   };
 
-  const finishTurn = () => {
+  const finishTurn = async () => {
     if (combatLocked) return { ok: false, code: "ATTACK_RESOLVING", message: "Finish resolving the current attack before ending the turn." };
     const readyReactions = readiedAttacksFor(scene, "target-ends-turn", active.id);
     const ended = endTurn(scene);
@@ -1712,7 +1869,7 @@ export function useTableController({
       setLocalError(ended);
       return ended;
     }
-    const result = savePatch(ended.value);
+    const result = (await savePatch(ended.value));
     if (result.ok) {
       setSelectedId(ended.activeTokenId);
       setSelectedChestId(null);
@@ -1722,39 +1879,39 @@ export function useTableController({
       setLootTokenId(null);
       setImpact(null);
       setInteraction(null);
-      if (readyReactions.length) setReactionQueue((current) => [...current, ...readyReactions]);
+      if (readyReactions.length) await persistReactionQueue(readyReactions, result.value?.encounter || ended.value.encounter);
     }
     return result;
   };
 
-  const editInitiative = (tokenId, score) => {
+  const editInitiative = async (tokenId, score) => {
     const changed = setEncounterInitiative(scene, tokenId, score);
     if (!changed.ok) { setLocalError(changed); return changed; }
-    return savePatch(changed.value);
+    return (await savePatch(changed.value));
   };
 
-  const rerollInitiative = () => {
+  const rerollInitiative = async () => {
     const changed = rerollEncounterInitiatives(scene, { random });
     if (!changed.ok) { setLocalError(changed); return changed; }
-    return savePatch(changed.value);
+    return (await savePatch(changed.value));
   };
 
-  const reorderTiedInitiative = (tokenId, direction) => {
+  const reorderTiedInitiative = async (tokenId, direction) => {
     const changed = moveTiedInitiative(scene, tokenId, direction);
     if (!changed.ok) { setLocalError(changed); return changed; }
-    return savePatch(changed.value);
+    return (await savePatch(changed.value));
   };
 
-  const forceSelected = (tokenId, specification) => {
+  const forceSelected = async (tokenId, specification) => {
     if (!isActiveBattle || combatLocked) return { ok: false, message: "Forced movement needs an active unlocked Battle." };
     const moved = forceMoveToken(scene, tokenId, specification, setupViewport());
     if (!moved.ok) { setLocalError(moved); return moved; }
-    return savePatch(moved.value);
+    return (await savePatch(moved.value));
   };
 
-  const changeBattleCoins = (tokenId, coins) => {
+  const changeBattleCoins = async (tokenId, coins) => {
     if (!isActiveBattle || combatLocked) return { ok: false, message: "Money can be changed only during an active unlocked Battle." };
-    return savePatch({ tokens: updateToken(tableTokens, tokenId, { coins }) });
+    return (await savePatch({ tokens: updateToken(tableTokens, tokenId, { coins }) }));
   };
 
   const toolLabel = activeTool === "artwork"
@@ -1917,6 +2074,9 @@ export function useTableController({
     setSummonPickerOpen,
     monsterBrowserOpen,
     setMonsterBrowserOpen,
+    monsterReview,
+    reviewSelectedMonster,
+    applySelectedMonsterSource,
     artworkRef,
     artworkUrl,
     artworkError,

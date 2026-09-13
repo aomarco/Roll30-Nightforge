@@ -345,7 +345,7 @@ function ItemDrawer({ hero, item, run, close, error, busy }) {
           {(item.implementedEffect || item.requiresAttunement) && <section className="nf-state-hero-panel"><div className="unit-top"><span className="unit-label">{item.implementedEffect ? "Implemented magic" : "Attunement"}</span><span className="tag tag-brass">{item.rarity}</span></div><p className="note">{item.implementedEffect ? EFFECT_LABELS[item.implementedEffect] : "This magic item is tracked in the three-item attunement pool. Its special action is still reference-only."}</p><button className={`attune${worn ? " on" : ""}`} onClick={() => run(item.requiresAttunement ? toggleAttunedItem(hero, item.id) : toggleWornItem(hero, item.id))}>{item.requiresAttunement ? (attuned ? "Attuned" : "Attune") : (worn ? "Worn" : "Wear")}</button></section>}
           {item.kind === "magic-item" && <section className="nf-state-hero-panel"><div className="unit-top"><span className="unit-label">SRD rule</span><span className="tag">{item.requiresAttunement ? (attuned ? "Attuned" : "Requires attunement") : "No attunement"}</span></div><p className="note">{item.description || "No description supplied."}</p></section>}
         </div>
-        <div className="drawer-foot"><button className="btn btn-hazard" onClick={() => { const result = run(removeInventoryItem(hero, item.id)); if (result?.ok !== false) close(); }} disabled={busy}><Trash2 size={15} /> Remove all</button><button className="btn btn-line" onClick={close}>Close</button></div>
+        <div className="drawer-foot"><button className="btn btn-hazard" onClick={async () => { const result = await run(removeInventoryItem(hero, item.id)); if (result?.ok !== false) close(); }} disabled={busy}><Trash2 size={15} /> Remove all</button><button className="btn btn-line" onClick={close}>Close</button></div>
       </aside>
     </PortalLayer>
   );
@@ -366,12 +366,12 @@ export default function GearChapter({
     .map((entry) => ({ entry, item: getItem(entry.itemId) }))
     .filter(({ item }) => item && (!search.trim() || item.name.toLowerCase().includes(search.trim().toLowerCase()))), [hero.inventory, search]);
 
-  const run = (result) => {
+  const run = async (result) => {
     if (!result?.ok) {
       setGearError(result?.message || "That equipment change is not legal.");
       return result;
     }
-    const saved = apply(result.value);
+    const saved = await apply(result.value);
     if (saved?.ok !== false) setGearError("");
     return saved;
   };

@@ -1,0 +1,1641 @@
+ROLL30 / NIGHTFORGE - COMPLETE APP ANALYSIS AND INVESTIGATION RECORD
+=================================================================
+
+Analysis date: 6 September 2026
+Workspace: C:\Users\Marcelo\Documents\Roll30 UI Rebuild
+Inspected commit: ef268d40178bdd726136a84ddff0efc6e3942996
+Commit subject: feat: implement hide racial rests and attunement
+
+This file consolidates what I learned from the repository, documentation,
+generated catalogues, local SRD monster input, automated checks, a local browser
+walkthrough, and isolated reproductions of suspected problems. It includes
+facts, conclusions, limitations, and recommendations. Recommendations are not
+implemented changes.
+
+The working tree was clean during the investigation. I made no application
+source changes. This report is a new deliverable requested after the analysis.
+I did not inspect the original Roll30 application or its user saves, promote a
+release, or establish that either hosted website currently matches this commit.
+
+
+1. OVERALL ASSESSMENT
+---------------------
+
+Nightforge is a substantial, functioning browser-based tactical tabletop for
+Dungeons & Dragons. Its interface is visually coherent, its physical-combat
+engine is unusually extensive for a small frontend application, and the
+repository contains considerable verification infrastructure.
+
+It is best understood as a GM-operated board with rules assistance. The person
+running the game prepares scenes, places creatures, controls their turns, and
+adjudicates unsupported effects. It can support local tactical play, a shared
+screen, encounter preparation, and battle experimentation.
+
+Its rules and data target 2014-era D&D 5e / SRD 5.1. It is not a complete
+implementation of that game. Character progression, spellcasting, and many
+monster and item abilities are unfinished.
+
+The greatest immediate concerns are correctness and preservation of existing
+work. Passing tests do not currently catch several consequential issues:
+
+* Damaged-save recovery can remove stored map artwork.
+* Preview and production builds use the same browser-storage namespace.
+* Imported monsters lose authored skill and saving-throw bonuses.
+* Some ordinary monster attacks disappear during generation.
+* An interrupted XP award can double-pay an earlier recipient on retry.
+* Hit Dice and item-charge recovery contain errors.
+* Documentation overstates visual-regression and some architectural guarantees.
+
+The best next development phase would make current behavior trustworthy before
+substantially increasing the number of rules systems.
+
+
+2. PRODUCT IDENTITY, AUDIENCE, AND SCOPE
+--------------------------------------
+
+Visible branding: Roll30 - Nightforge.
+Package name: roll30-nightforge.
+Package version: 1.0.0.
+The package is marked private.
+
+The README calls Nightforge a clean-room rebuild of the Roll30 tabletop
+interface. Documentation says the old source, styling, layouts, navigation,
+and data were not reused. The repository contains legacy-storage boundary
+checks supporting separation from old save identifiers. Those checks do not
+independently establish the complete historical provenance of every line of
+code; the broader clean-room claim remains a documented project claim.
+
+The intended operator is principally the GM. I found no application backend,
+user accounts, authentication layer, remote multiplayer transport, cloud save
+service, payment system, or AI service integration in the inspected application.
+There is no evidence here of independently connected player clients or player
+permissions. Synchronization between browser tabs is local-origin storage
+synchronization, not remote multiplayer.
+
+The application is centered on scenes and encounters rather than a broader
+campaign-management database. The UI uses campaign language, but the inspected
+state envelope contains scenes and Heroes rather than a separate campaign
+entity with chapters, participants, or a campaign hierarchy.
+
+
+3. THE CORE CONCEPTUAL MODEL
+----------------------------
+
+Scene:
+  One map and its related state. It contains identity, map artwork reference,
+  grid settings, map view, walls, terrain, tokens, chests, and an encounter.
+
+Hero:
+  A persistent roster character independent of any individual scene. Heroes
+  have identity, character-building choices, derived statistics, equipment,
+  money, XP, portrait references, and mutable rest/resource state.
+
+Token:
+  A creature placed on a map. It can come from a Hero snapshot, an imported
+  monster record, or a manually configured blank token. All use the common
+  normalized token model.
+
+Encounter:
+  A fight attached to a Battle scene. It stores initiative, the active turn,
+  round, turn resources, reactions and movement-related state, physical battle
+  items, ammunition bookkeeping, event log, completion state, and XP status.
+
+Item:
+  A catalogue-backed possession held by Heroes, tokens, or chests. Inventory
+  generally tracks quantities by catalogue item ID.
+
+Typical workflow:
+  Create Heroes -> Forge a scene -> Configure artwork and grid -> Place
+  creatures, walls, terrain, and treasure -> Start Battle -> Resolve turns ->
+  Complete the encounter -> Recover/loot items and award XP.
+
+Scene types:
+  Play: freeform display and positioning without the Battle grid/encounter.
+  Battle: grid-based setup followed by tactical combat.
+
+The scene kind is chosen at creation. The documentation says it cannot be
+changed afterwards.
+
+Battle has a Setup phase and a Battle phase. Internally, normalized encounter
+status accepts "active" and "complete". "completed" is not a valid persisted
+status and normalizes to no encounter. A completed encounter is therefore a
+state within the overall Battle workflow, not a third scene kind.
+
+
+4. SCREENS AND NAVIGATION
+-------------------------
+
+The main managed screens are Library, Heroes, Scene settings/workbench, and
+Table. Routing is held in application state. App.jsx recognizes routes such as
+home, characters, settings, and board; the inspected navigation does not use a
+separate routing-library dependency.
+
+Library:
+* Home screen and scene collection.
+* A large prominent scene card supports returning to a scene.
+* Additional scenes are represented in a more compact collection/ledger.
+* Forge a scene opens the creation dialog/panel.
+* Create, open, rename/configure, and delete are wired to persistence.
+* Scene deletion includes artwork cleanup.
+* Empty state explains the next action rather than merely saying "empty".
+
+Forge:
+* Asks for a name and Play versus Battle.
+* Describes Play as open roleplay without grid or initiative.
+* Describes Battle as supporting grid, initiative, movement, and attacks.
+* Successful creation opens the scene on the table.
+
+Heroes:
+* Roster selection and a continuous character sheet.
+* Identity, abilities, skills, saves, and gear remain on one scrolling record.
+* New hero immediately creates an editable default Hero.
+* Portrait upload and retirement are available.
+* Changes save automatically to the browser.
+
+Scene workbench:
+* Name and grid-size editing.
+* Artwork upload/replacement/removal and alignment.
+* Grid preview over artwork.
+* Draft changes are debounced and flushed around navigation/page lifecycle.
+
+Table:
+* Map is the dominant surface.
+* Setup tools include tokens, chests, walls, cover, ruler, terrain, backdrop,
+  wall visibility, deletion, and camera controls.
+* A selected-object inspector exposes creature or chest details.
+* An object list supports finding/selecting map contents.
+* Battle adds initiative and the command/action interface.
+* Attack, check, retrieval, and completion presentations provide feedback.
+
+The current App.jsx command deck contains brand, Library, and Heroes. A
+documented standing "Enter the table" action across the command deck is not
+present there; the Library scene card exposes that action.
+
+
+5. MAP, ARTWORK, AND SPATIAL RULES
+---------------------------------
+
+The grid is fixed at 20 columns by 12 rows: 240 cells. Changing grid size
+changes the drawn cell size, not the number of cells. Cell size is clamped to
+24-80 pixels. At five feet per square, the board represents 100 by 60 feet.
+
+Camera zoom is documented as clamped to 0.35x-3x. Zoom is pointer-anchored,
+and camera reset restores the default view. Coordinate helpers convert between
+screen and world positions.
+
+Artwork transformations are separate from camera transformations. The image
+can be moved and scaled to align its contents with the grid. Non-uniform
+horizontal/vertical scaling is supported. Documented artwork scale bounds are
+0.2x-5x. Explicitly removing artwork produces a white canvas. A newly created
+scene need not visually match a scene where "white canvas" was explicitly set;
+the fresh demonstration Battle used the dark map surface.
+
+Artwork validation limits read from application/artwork.js:
+* Map image: at most 25 MiB.
+* Map image: at most 16,384 pixels on either side.
+* Map image: at most 40,000,000 decoded pixels.
+* Hero portrait: at most 6 MiB.
+* Hero portrait: at most 4,096 pixels on either side.
+* Hero portrait: at most 8,000,000 decoded pixels.
+* File must be a non-empty Blob with an image MIME type.
+* Browser decoding must produce usable dimensions.
+
+Images are kept as blobs in IndexedDB. They are not serialized into the
+LocalStorage envelope. Validation uses createImageBitmap when available,
+with a browser Image/object-URL fallback. Bitmaps and temporary object URLs
+are released after validation.
+
+Walls and cover:
+* Half cover blocks movement and adds +2 AC against crossing attacks.
+* Three-quarters/high cover blocks movement and adds +5 AC.
+* Full walls provide total cover and block attacks across them.
+* Sourced Dexterity saves can receive cover bonuses.
+* Hiding wall visuals does not disable the wall's mechanical effect.
+* Movement checks whether a step crosses a wall segment.
+* Attack line of sight uses attacker-center to target-center intersections.
+
+Distance and movement:
+* A diagonal step counts as one square, or five feet.
+* The ruler uses the larger axis rather than summing axes.
+* The ruler, attack distance, and adjacency conventions are intended to agree.
+* Tokens snap to cell centers.
+* Occupied cells prevent ordinary placement; placement can search for the
+  nearest available square.
+* Movement is collision-aware and uses bounded pathfinding.
+* The documented A* search bound is 4,000 cells/search steps.
+* Difficult terrain is painted/erased during Setup and increases entry cost.
+* Flying ignores difficult terrain under the implemented rules.
+* Walking, flying, swimming, and climbing modes are supported.
+* The monster generator preserves burrow speed as data/reference, but burrow
+  is not one of the four implemented movement modes reviewed here.
+
+This remains a flat, two-dimensional board. There is no full elevation or
+lighting model. A size label exists for six creature sizes; this review did not
+prove complete rules-correct multi-square footprints for every size.
+
+
+6. HERO CREATION AND PROGRESSION
+-------------------------------
+
+Supported classes: Fighter and Wizard only.
+Supported level range: 1-20.
+
+Class records provide scaffolding such as hit die, saves, and skill guidance.
+They do not supply a complete implementation of class features, subclasses,
+or spellcasting. Increasing level chiefly changes numerical progression such
+as HP and proficiency. It does not make a high-level Fighter or Wizard fully
+rules-complete.
+
+Nine races:
+  Dwarf, Elf, Halfling, Human, Dragonborn, Gnome, Half-Elf, Half-Orc, Tiefling.
+
+Four subraces are documented. The racial system includes ability bonuses,
+speed, size, languages, and a catalogue of 38 racial traits.
+
+Other catalogue sizes:
+* 13 backgrounds.
+* 9 alignments.
+* 16 languages.
+* 18 skills.
+* 20 XP thresholds.
+
+Point buy:
+* 27-point budget.
+* Purchased scores run from 8 to 15 before racial bonuses.
+* Cost curve: 0, 1, 2, 3, 4, 5, 7, 9.
+* Overspending is refused rather than silently accepted.
+
+Derived values include ability modifiers, proficiency, armour class,
+initiative, saves, and skill modifiers. The proficiency formula is
+2 + floor((level - 1) / 4), with level bounded to 1-20.
+
+Mutable play state is stored separately: current HP, spent Hit Dice, racial
+uses, item charges, and similar resources. New optional fields are normalized
+with backward-compatible defaults.
+
+Backgrounds grant skills, tools, and catalogue-backed starting equipment.
+Changing a background removes its previous grants without intentionally
+erasing unrelated choices or equipment. Narrative keepsakes are outside the
+implemented equipment grants.
+
+Race-related choices include dragon ancestry, dwarf tools, Half-Elf skill
+choices, and High-Elf language/cantrip notes. Derived or enforced traits include
+racial proficiencies, darkvision metadata, resistances, save advantages,
+conditional expertise, Hill Dwarf HP, Lucky, Relentless Endurance, and Savage
+Attacks. Racial spells and breath-weapon profiles can be recorded without a
+general spell/area-action execution system.
+
+Changing class resets save proficiencies and selected skills. The UI allows
+manual proficiency adjustment and gives class skill guidance. Its presence
+should not be mistaken for an exhaustive legal-character validator.
+
+XP is recorded, not spent. The sheet indicates progress or eligibility for
+another level; the user deliberately changes level.
+
+The observed default new Hero was an unnamed level-1 Human Fighter, with
+27 point-buy points unspent, all six final abilities at 9, 9/9 HP, AC 9,
+initiative -1, speed 30 feet, and an empty pack. These are editable starting
+values, not a completed recommended build.
+
+Rests are available on the Hero sheet:
+* Short rest spends a selected number of available class Hit Dice.
+* Each die contributes its roll plus Constitution modifier, bounded so an
+  individual die does not produce negative healing.
+* Healing is capped at maximum HP.
+* Long rest restores HP and refreshes supported resources.
+* Hit Dice and charge-recovery bugs are detailed later in this report.
+
+
+7. ITEMS, INVENTORY, MONEY, AND MAGIC
+------------------------------------
+
+Verified catalogue total: 359 items.
+* 36 weapons.
+* 13 armour/shield entries.
+* 183 gear entries.
+* 4 ammunition entries.
+* 123 magic-item entries.
+
+The 123 magic-item entries consist of 113 primarily reference-only items,
+6 with implemented worn effects, and 4 healing potions.
+
+Inventory tracks quantity by item ID. The catalogue can be searched and
+filtered by relevant properties. Equipment must be owned before it is used
+in an equipment slot.
+
+Equipment restrictions include:
+* Two-Handed weapons require both hands to be available.
+* Shields conflict with an off-hand weapon and with a Two-Handed weapon.
+* The implemented dual-wield setup requires two Light melee weapons.
+* Equipping two copies of the same weapon requires quantity two.
+* The UI exposes reasons for illegal options.
+* Main hand, off hand, armour, and shield state are represented explicitly.
+* Off-hand UI combines a shield or weapon choice while stored fields remain
+  separate.
+
+Weapon properties recognized by the systems include Light, Two-Handed,
+Versatile, Finesse, Thrown, Ammunition, Reach, and Loading. Special and Monk
+properties are documented as not fully implemented.
+
+Enchantments of +0 through +3 apply to eligible weapons and armour. Bonuses
+feed attacks, damage, and AC. Enchantments are keyed by catalogue item ID,
+which suggests limitations if the product later needs differently enchanted
+physical copies of the same catalogue weapon. That is a model implication,
+not a reproduced UI defect in this investigation.
+
+Implemented worn effects include AC, saves, attacks, ranged damage, and an
+unarmoured AC bonus. Magic-item attunement uses a three-item pool, checks
+ownership, and enforces supported spellcaster/Wizard restrictions. It is not
+an exhaustive implementation of every possible item's eligibility text.
+
+Legacy wornItemIds state is accepted as old attunement state and normalized
+without a schema-version bump. Items requiring attunement must be attuned
+before their implemented worn effects become active.
+
+Only eight catalogue entries currently contain a generated charge maximum.
+Charge state is stored as a current/max pool per Hero and item ID. Charge use
+can be adjusted from inventory. Tracking charges does not execute the item's
+otherwise unimplemented special effect.
+
+All four healing-potion tiers are implemented. They roll the stored healing
+formula, heal the active or an adjacent eligible creature, consume one item,
+and spend an Action. Healing a dying Hero can raise that Hero.
+
+Money has five denominations: CP, SP, EP, GP, PP. Heroes, tokens, and chests
+carry coin purses. Loot transfers exact coins. There is no merchant, shopping,
+or purchase/sale transaction workflow.
+
+
+8. TOKENS AND MONSTERS
+----------------------
+
+Hero tokens are deliberate snapshots, not live links. A snapshot includes the
+Hero's current HP, derived maximum HP/AC/speed/abilities, saves, skills,
+equipment, coins, racial information, attunement, charges, and uses.
+
+Editing the roster Hero after import does not update the token. Resting the
+Hero does not automatically rest a previously placed token. Battle HP, loot,
+equipment changes, and resource use should not be assumed to write back to the
+roster. XP has a specific cross-collection command, but the snapshot model is
+otherwise important to the experience.
+
+Manual tokens allow direct stat editing, including AC, because no full Hero
+sheet determines those values. Monster imports populate the same underlying
+model and can be edited.
+
+Token fields include name, color, faction, position, HP/max HP/temp HP, AC,
+speeds, six abilities, save and skill proficiency information, level, size,
+conditions/immunities/expiry, inventory, coins, attacks, damage defenses,
+death-save state, reaction availability, Dodge, Disengage, Help, Ready,
+racial data, and per-enemy hidden state.
+
+Faction is ally or foe. Hero-derived tokens default to ally; other tokens
+default to foe. The side can be edited in Setup and is displayed in Battle.
+This default is also how old saves receive faction information.
+
+Monster catalogue:
+* 334 generated records, including some form variants.
+* 324 have at least one generated authored attack.
+* Search includes name and relevant creature/attack fields.
+* Filters include creature type, size, and challenge band.
+* Challenge bands are 0-1, 2-4, 5-10, 11-16, and 17+.
+* Sorting supports name, ascending/descending CR, and descending HP.
+* The corpus is dynamically imported when required and cached afterward.
+* A failed import clears the pending promise so another load can be attempted.
+
+Monster attacks carry their own attack bonus, primary damage definition,
+damage type, range/reach, optional damage riders, and reference prose. The
+generator parses direct dice expressions such as N, NdN, NdN+N, and NdN-N.
+
+Multiattack count is extracted from prose using a small set of patterns and
+number words. Unrecognized forms fall back to one attack while preserving
+the Multiattack description. A count is not a complete rule for prescribed
+combinations such as one bite and two claws; the detailed sequence should not
+be assumed to be enforced simply because Multiattack is present.
+
+Legendary actions, traits, reactions from stat-block prose, and many special
+actions remain reference text. Qualified damage-defense descriptions that
+cannot safely reduce to a simple damage type also remain reference-only.
+An example is nonmagical damage from weapons that are not silvered, because
+the equipment model does not record all such qualifications.
+
+Monster inventories include exact catalogue weapons named by generated
+attacks, added once. They do not invent natural-attack items, armour,
+ammunition stocks, coins, or treasure from the stat block.
+
+Ten monster records have no generated attack lines:
+  Druid; Frog; Guard; Merfolk; Rug of Smothering; Sea Horse; Shrieker;
+  Vampire, Mist Form; Tribal Warrior; Werewolf, Human Form.
+
+Some of those absences are expected for the creature/form. Others are caused
+by dropped nested attack data, as demonstrated later.
+
+A consistency check comparing generated attack bonuses with matching
+"+N to hit" prose inside those same generated records found no mismatches.
+That check proves internal agreement with the imported prose, not that the
+external source itself is correct in every case.
+
+
+9. INITIATIVE, TURNS, MOVEMENT, AND REACTIONS
+-------------------------------------------
+
+Starting a Battle validates setup and creates persisted initiative state.
+Initiative scores can be edited; the order can be rerolled; equal-score ties
+can be manually ordered. Rerolling is intended to preserve the active turn.
+
+A normal standing turn provides movement, one Action, a Bonus Action, and
+the token's reaction state. The UI exposes Attack, Dash, Swap, Tactics,
+Bonus Action, movement, and End Turn, with other tactical operations available
+through the relevant controls.
+
+Movement is spent by distance, not by trips. Moving does not automatically
+end the turn. A creature can move, attack, and move again with its remaining
+allowance. Dash uses the selected movement mode's speed. Forced movement
+does not spend ordinary speed or provoke the normal opportunity attack.
+
+The implementation includes push, pull, and directional slide with board,
+wall, and collision checks. Shove shares this forced-movement machinery.
+
+Opportunity attacks:
+* Leaving an enemy's reach can trigger an attack.
+* Disengage prevents the relevant opportunity attack.
+* Movement pauses at the departure boundary.
+* Reactions are resolved one at a time.
+* The route resumes only if the mover remains able to move.
+* Range is measured from the departure position, avoiding a previously fixed
+  bug where the destination made a valid reaction appear out of range.
+
+Ready:
+* Spends the Action.
+* Selects an equipped or authored attack and a named enemy.
+* Supported triggers include that enemy moving, attacking, or ending a turn.
+* Firing the readied action spends the ordinary reaction resource.
+* The intent expires by the creature's next turn if unused.
+
+Surprise is configured during Setup. Surprised creatures lose their first
+turn and cannot react before the relevant skipped turn has passed.
+
+Dodge, Disengage, Help, and reactions live on tokens because their lifetime
+can extend beyond the active turn-resource record. Their reset logic follows
+the creature's turn boundaries.
+
+End Turn is always deliberate. The app does not advance automatically merely
+because no ordinary resources remain. Dying Heroes have a special required
+death-save step before ending their turn.
+
+
+10. ATTACKS, CONDITIONS, CHECKS, AND HEALTH
+-----------------------------------------
+
+The attack engine handles melee, Reach, ranged normal/long distance, thrown
+attacks, advantage, disadvantage, cancellation, natural 1 misses, natural 20
+hits, critical damage dice, off-hand attacks, and ammunition consumption.
+
+Loading closes the relevant attack Action after its first shot even if an
+attack-count allowance would otherwise permit more. The documented affected
+weapons are the crossbows and blowgun.
+
+Unarmed strikes use fixed 1 + Strength damage and five-foot reach. The
+documented UI offers them when nothing is equipped; this is a product limit
+and should not be confused with every circumstance in which 5e permits an
+unarmed strike.
+
+Damage is typed. Immunity can zero it, resistance halves with rounding down,
+and vulnerability doubles it. Unsupported qualified defenses remain visible
+reference information rather than being guessed from incomplete data.
+
+There are 15 conditions. They can be applied manually, with immunity enforced
+both in the UI and domain. Durations can be permanent or use supplied round
+choices of 1, 2, 3, 5, or 10. Expiry is processed at round transitions.
+
+Grapple and Shove are explicit rule actions, distinct from manually applying
+ordinary descriptive attack riders. They use Athletics versus the defender's
+better applicable Athletics/Acrobatics result. Grapple includes escape,
+release, immobilization, and dragging behavior; Shove supports prone or a
+five-foot push.
+
+Hide:
+* Requires concealment from total cover or invisibility under the implemented
+  eligibility model.
+* Spends an Action and rolls Stealth.
+* Compares against enemy passive Perception separately.
+* Persists which enemy token IDs did not notice the creature.
+* A hidden attacker can receive advantage against those enemies.
+* Moving or attacking clears the hidden state.
+* Imported-monster Perception loss makes this system unreliable against many
+  monsters until authored skill values are preserved.
+
+Checks:
+* All 18 skills, bare abilities, and saving throws can be rolled.
+* They require an active Battle in the current domain entry points.
+* The selected token need not be the active creature.
+* A DC is optional; supplied DCs normalize to the range 1-40.
+* Advantage/disadvantage and discarded dice are represented in outcomes.
+* They do not spend normal turn resources.
+* Four helpless-condition cases automatically fail Strength/Dexterity saves.
+* Certain racial modifiers/advantages are incorporated.
+
+Health:
+* Manual damage and healing are available from the token inspector.
+* Damage can be typed or left untyped for direct GM adjudication.
+* Untyped damage bypasses typed resistance processing.
+* Healing is capped at max HP and can raise a dying Hero.
+* Temporary HP is a separate buffer before real HP.
+* Temporary HP does not stack; the larger grant is retained.
+* Manual damage can trigger encounter completion and its related processing.
+
+Death:
+* Heroes use death saves; ordinary monsters at zero HP generally die.
+* Three successes stabilize, three failures kill.
+* Natural 1 counts as two failures; natural 20 raises the Hero to 1 HP.
+* A dying Hero must roll once on the active turn and cannot repeatedly roll.
+* An adjacent eligible ally can spend an Action on a DC 10 Medicine attempt
+  to stabilize the Hero. Failure still spends the Action.
+* Dying Hero handling keeps rescue opportunities meaningful during completion
+  checks rather than simply treating every zero-HP Hero as immediately dead.
+
+Attack, retrieval, and check cinematics provide feedback. Saving an attack
+before its cinematic starts is explicitly covered by browser/contract checks.
+The UI presentation is therefore intended to reveal an already-persisted
+outcome rather than defer the game-state commit until the animation ends.
+
+
+11. LOOT, PHYSICAL ITEMS, COMPLETION, AND RESTART
+------------------------------------------------
+
+Chests can be created, filled from the catalogue, moved, and deleted in Setup.
+Loot flows enforce adjacency and resource requirements. Contents deplete as
+items or coins are taken.
+
+Defeated creatures can be looted. Living creatures and self-looting are
+refused. Monster inventory generation is intentionally conservative so that
+ordinary loot corresponds to actual named equipment rather than invented
+treasure.
+
+Thrown weapons become physical battle items:
+* Throwing removes the item from the appropriate hand/inventory state.
+* Certain weapons embed in a target on a hit.
+* Other weapons hit and fall rather than embedding.
+* Misses use a deterministic nearby landing location.
+* Ground recovery requires adjacency and a Bonus Action.
+* Recovery from a defeated carrier is adjacent and free.
+* Recovery from a living carrier requires adjacency, a Bonus Action, and a roll.
+* Authored thrown attacks can have owner-only recovery that restores the
+  attack rather than manufacturing a catalogue item.
+
+Ammunition:
+* Seven supported weapons use four ammunition types.
+* Bows use arrows; crossbows use bolts; slings use bullets; blowguns use needles.
+* A shot consumes ammunition and zero stock refuses the attack.
+* Recovery is tracked so ammunition cannot be recovered repeatedly.
+
+Completion:
+* Battles resolve based on surviving sides and death-state handling.
+* If everyone began on one side, a last-creature-standing fallback keeps a
+  monster brawl from completing immediately.
+* A lone winner can be named; multiple survivors can yield a winning side.
+* XP totals use defeated opposition rather than rewarding defeated allies.
+* The UI offers an explicit Award XP action.
+* Eligible surviving roster Heroes receive shares.
+* The encounter records whether XP has been awarded.
+* Partial failure in that award operation is not currently safe.
+
+Restart and Abandon:
+* Restart resets combat state such as HP, initiative, resources, conditions,
+  temporary HP, death saves, and reaction-related state.
+* The documented behavior preserves depleted chests and looted bodies.
+* Spent ammunition remains spent across Restart under the documented model.
+* Abandon returns to Setup and removes the encounter while retaining placed
+  board assets.
+* Documentation sometimes uses broad phrases such as an abandoned battle
+  "did not happen"; users should not infer a complete transactional rollback
+  of every inventory or scene change from that wording.
+
+Encounter logs are bounded to 500 entries, each at most 500 characters.
+Normalization keeps the most recent valid string entries. This limits one
+source of unbounded LocalStorage growth.
+
+
+12. STORAGE AND APPLICATION STATE
+---------------------------------
+
+LocalStorage keys:
+  roll30-nightforge-v1:state
+  roll30-nightforge-v1:state-backup
+
+SessionStorage key:
+  roll30-nightforge-v1:session
+
+Map-image IndexedDB:
+  Database: roll30-nightforge-assets
+  Store: scene-artwork
+
+Portrait IndexedDB:
+  Database: roll30-nightforge-portraits
+  Store: hero-portrait
+
+Portraits are intentionally separate from scene artwork so that scene orphan
+cleanup cannot delete a Hero portrait merely because no scene references it.
+The shared artwork-repository implementation accepts different labels and
+error-code prefixes for these two uses.
+
+State envelope fields include:
+  schemaVersion, revision, savedAt, scenes, heroes, lastActiveSceneId,
+  pendingArtworkDeletes, and checksum on the serialized sealed envelope.
+
+Schema version and encounter version are currently 1.
+
+Envelope validation:
+* Parses JSON and checks outer shape.
+* Requires the expected schema version.
+* Validates a checksum over a canonicalized payload.
+* Normalizes records and drops duplicate IDs.
+* Rejects malformed envelopes through structured failure results.
+* The checksum is a compact FNV-style integer hash, not encryption or a
+  cryptographic authenticity mechanism.
+
+Loading:
+* Reads primary and backup.
+* Inspects both.
+* Chooses a valid candidate with the highest revision.
+* If neither is valid, returns an empty envelope with recovery diagnostics.
+* Loading by itself does not replace damaged raw JSON strings.
+
+Saving:
+* Checks that the proposed revision matches the loaded revision.
+* Increments revision and seals the normalized state.
+* When the existing primary is valid, copies it to the backup first.
+* Writes the new primary and reads it back for verification.
+* Attempts restoration on verification/write failures.
+* Reports quota and other storage failures with recovery guidance.
+
+The backup is generally the previous valid primary, not a second identical
+copy of the newest state. Both copies live within the same browser origin.
+Map/portrait blobs are outside that JSON backup.
+
+Entity repositories accept patches, merge them onto existing records, and
+normalize the result. The actual persistence write serializes the full state
+envelope; it is not a partial database-record write. The backup roughly doubles
+structured-state storage demand, and repeated normalization/checksumming can
+grow more expensive as the entire collection grows.
+
+Cross-tab synchronization listens for the main state storage event and refreshes
+scenes/Heroes in application state. Revision checks detect many stale-edit
+cases. They are not an atomic compare-and-swap transaction across independently
+executing browser contexts. Simultaneous writes should not be assumed fully
+serializable merely because revision checks exist.
+
+Draft editing:
+* Hero and Scene drafts are debounced.
+* Navigation attempts to flush pending edits and can refuse to leave if the
+  flush fails.
+* pagehide flushes the active managed-screen draft.
+* Tests specifically exercise the final queued Hero draft on pagehide.
+
+Recovery limitations:
+* Browser/site-data clearing can remove primary, backup, and images together.
+* I found no user-facing export/import or portable campaign-backup workflow.
+* Images have no equivalent complete history bundled with the JSON backup.
+* A schema-version mismatch is not migrated; it is rejected and may lead to
+  an empty recovery view. Loading does not itself erase the raw old envelope,
+  but later operations and cleanup create additional risks.
+* The schema is deliberately held at 1, with defaults preferred for new fields.
+* Recovery text in one exceptional revision-exhaustion branch recommends
+  exporting even though no normal export UI was found.
+
+Legacy keys explicitly forbidden in runtime usage:
+  roll30-maps
+  roll30-active-map
+  roll30-characters
+  roll30-assets
+
+Tests verify that normal Nightforge operations leave those legacy identifiers
+untouched. This is separate from preview/production isolation.
+
+
+13. TECHNICAL STACK AND ORGANIZATION
+------------------------------------
+
+Runtime dependencies in package.json:
+  react 19.2.8
+  react-dom 19.2.8
+  lucide-react 1.31.0
+
+Development dependencies include:
+  vite 8.2.1
+  @vitejs/plugin-react 6.0.5
+  @playwright/test 1.62.1
+  typescript 7.0.2
+  eslint 10.9.1
+  @eslint/js 10.0.1
+  eslint-plugin-react-hooks 7.1.1
+  globals 17.11.0
+  @types/react 19.2.18
+  @types/react-dom 19.2.5
+  @fontsource-variable/fraunces 5.3.0
+  @fontsource-variable/plus-jakarta-sans 5.3.0
+  @fontsource/ibm-plex-mono 5.3.0
+
+There is an override for nanoid 3.3.18. These are the checked-in package
+versions, not a claim that each is the latest available release.
+
+Node reported v24.11.1 in the local investigation. CI requests Node 24.
+
+Primary directories:
+  src/domain       Rules, normalization, catalogues, mechanics.
+  src/application  Commands, reducer state, browser runtime, result helpers.
+  src/storage      Envelopes, LocalStorage, session and artwork repositories.
+  src/screens      React screens, inspectors, browser/pickers, controller.
+  src/styles       Core design and screen/state stylesheets.
+  src/ui           Shared dialogs, glyphs, error boundary.
+  tests            Playwright tests and browser harnesses.
+  scripts          Data generation, render smoke, contract and release checks.
+  docs             Product features, backlog, release evidence.
+  public           Includes third-party font notices.
+  DND 5E Data       Local external SRD input; gitignored.
+
+State management uses React useReducer at the app boundary and hooks for
+screen/controller state. No Redux/Zustand or router dependency is present.
+The browser runtime wires LocalStorage, SessionStorage, and two IndexedDB
+repositories into application commands.
+
+Domain operations commonly return structured results:
+  Success: { ok: true, value, ...metadata }
+  Refusal: { ok: false, code, message, recovery, retryable, ...metadata }
+
+This is useful for explaining why an attack or operation was refused and
+testing exact branches. Not every helper returns that envelope; record
+constructors and derivation helpers can return records or throw for invalid
+required inputs. Documentation saying "every domain function" returns the
+same envelope is an overgeneralization.
+
+Architectural strengths:
+* Substantial separation of calculation, persistence, and rendering.
+* Random inputs can be supplied for deterministic rule tests.
+* Browser storage can be replaced by in-memory adapters.
+* Record normalizers support adding fields compatibly.
+* Saving-before-cinematic separates outcome durability from presentation.
+* Monster data is lazy-loaded rather than forcing the entire corpus into
+  first paint.
+
+Architectural qualifications:
+* Some domain modules import application result helpers.
+* Several domain functions default to Math.random.
+* Record functions can default timestamps from new Date().
+* Therefore the strict prose claim of no domain clock/random access is
+  stronger than the implementation, even though injection remains available.
+* Some success/failure helper shapes are repeated in domain modules.
+* The tabletop interaction state remains large and highly concentrated.
+
+Measured physical line counts during review:
+  src/screens/useTableController.js: 2,061
+  src/screens/TableScreen.jsx: 1,075
+  src/styles/table-states.css: 2,747
+
+Other sizeable areas include table.js, attacks.js, combat.js, encounter.js,
+HeroesScreen.jsx, BattleSetupInspector.jsx, and CommandBar.jsx. The generated
+item catalogue is large; monster records are stored compactly one per line.
+
+Typing configuration:
+* allowJs: true
+* checkJs: false
+* strict: false
+* noEmit: true
+* JSX configured for React.
+* Tests and generated catalogues excluded from the TypeScript project check.
+
+The project check passes, but it is not strong static validation of JavaScript
+rules, props, or save shapes. That limitation matters when interpreting the
+"typecheck" gate.
+
+Lint checks React hook rules as errors and exhaustive dependencies as warnings.
+Unused variables are generally warnings. TableScreen disables unused-variable
+checking for its broad controller contract. Generated data is excluded.
+
+
+14. DESIGN LANGUAGE AND ACCESSIBILITY
+-------------------------------------
+
+Documented visual direction:
+* Near-black, green-shifted slate substrate: approximately #05080a to #1f363c.
+* Verdigris/teal primary: #2fd3b4.
+* Antique brass accent: #e0b055.
+* Ally blue: #5fa8f5.
+* Foe pink/red: #f2617a.
+* Layered translucent/glass surfaces, gradients, and restrained texture.
+
+Fonts:
+* Fraunces for display/headings.
+* Plus Jakarta Sans for interface text.
+* IBM Plex Mono for numbers/technical details.
+* Fonts are bundled locally in both development and production.
+* core.css owns font-face declarations and shared primitives.
+
+Styles are divided between core/screen sheets and scoped nf-state-* sheets.
+The intention is that state rules handle behavior and hardening without
+colliding with visual styles. The size of table-states.css suggests that this
+division has become harder to maintain than the original explanation implies.
+
+Observed strengths:
+* A recognizable visual identity across Library, Hero sheet, and tabletop.
+* Strong hierarchy for page titles and major actions.
+* Map-centered composition fits tactical use.
+* Explicit next steps in empty states.
+* Useful searchable catalogue filters.
+* Disabled-state explanations and plain-language rule refusals.
+* Text/symbol support alongside faction and status colors.
+
+Accessibility implementation and evidence:
+* Shared dialog-stack/focus-management hook.
+* Nine managed modal dialogs are expected by a contract verifier.
+* Tab and Shift-Tab trapping.
+* Escape closes the active dialog.
+* Focus returns to the invoker.
+* Global visible focus styling.
+* Accessible names for enabled form controls in tested surfaces.
+* Keyboard opening of owned equipment records.
+* Arrow-key movement for focused Play, Setup, and Battle pieces.
+* Reduced-motion rules checked through computed animation durations.
+* Responsive/zoom and long-content checks.
+
+These are meaningful accessibility features, but they do not constitute a
+complete WCAG audit. This investigation did not independently validate all
+contrast ratios, every screen-reader journey, touch interactions, or behavior
+across Safari and Firefox.
+
+Concrete UX concerns:
+1. New-Hero essentials are far below large introductory/header panels. At the
+   observed 1280x720 viewport, the initial view was dominated by page/roster/
+   identity summary and stat tiles before editable identity fields.
+2. Rests appear before identity and ability setup even for a newly created,
+   unconfigured Hero. This gives recovery more prominence than the user's
+   immediate creation task.
+3. Setup exposes every condition-immunity control even when the creature has
+   none. This consumes scarce inspector space with exceptional configuration.
+4. The selected-token inspector is tall and occupies a substantial part of
+   the map at compact sizes. Stronger collapse/resize behavior would help.
+5. Some narrow select controls visually truncate their chosen text. This is
+   not necessarily hard clipping, but users must work harder to read options.
+6. Hero/token snapshot boundaries are easy to misunderstand without explicit
+   copy when importing, resting, or expecting post-battle synchronization.
+7. A Wizard choice and levels through 20 imply mechanics beyond what exists.
+8. Autosave messages do not give users a portable backup or an obvious view
+   of the browser-local nature of their campaign.
+9. Some empty-state text still contains implementation-oriented phrasing such
+   as "persisted Nightforge hero" rather than purely player-facing language.
+
+Suggested UI changes are to prioritize identity/abilities during creation,
+reduce recovery prominence until useful, collapse rare defense editors, retain
+visible map space, explain snapshots, disclose class limits, and expose a
+backup/export destination once implemented. These are assessment proposals,
+not changes made to the app.
+
+
+15. LOCAL BROWSER WALKTHROUGH
+-----------------------------
+
+I opened a temporary background browser tab against a local development server
+at http://127.0.0.1:5312/. It initially showed an empty Library.
+
+Observed and exercised:
+* Fresh Library and its creation guidance.
+* Forge dialog, scene-name entry, and Play/Battle selection.
+* Creation of a local Battle named "Analysis demo".
+* Setup tool rail and empty selected-object inspector.
+* Add-token menu with Blank token, Monster, and Hero-roster guidance.
+* Bestiary loading state and full 334-record loaded collection.
+* Search for "Goblin", which returned three matching names including related
+  names such as Hobgoblin/Bugbear matching the implemented search terms.
+* Summoning the exact Goblin record and inspecting its HP, AC, side, defenses,
+  immunities, and attacks.
+* Return to Library and navigation to Heroes.
+* Creation and examination of a default Hero and its continuous sheet.
+* Screenshots of the fresh Library, selected Goblin on the tabletop, and the
+  initial Hero-sheet view for visual assessment.
+
+The full combat UI was additionally exercised by the existing 30 Playwright
+journeys. The manual browser pass was not an exhaustive manual run through
+every combat branch.
+
+The temporary browser tab was closed and the local review server stopped.
+The separate Playwright-managed server used port 5311 and stopped with its
+test run. Demonstration records were created only in the fresh local review
+origin, not on either hosted site. I did not deliberately erase browser storage
+afterward, so that local-origin demo data may remain if the same browser
+context persists. No real campaign data was used for destructive reproductions.
+
+
+16. TESTS AND VERIFICATION ACTUALLY RUN
+--------------------------------------
+
+Results:
+  Unit/domain/repository tests: 365 passed, 0 failed, 0 skipped.
+  Chromium browser journeys: 30 passed.
+  Additional render/contract scripts: 28 passed.
+  ESLint: 0 errors, 30 warnings.
+  TypeScript project check: passed under the limited configuration above.
+  npm dependency audit: 0 info/low/moderate/high/critical vulnerabilities reported.
+  Production build: passed, with chunk-size warnings.
+
+Unit test runner reported approximately 4.86 seconds for its tests. The
+browser suite reported approximately 3.6 minutes. The production build reported
+27.39 seconds. These are local observations under the investigation's workload,
+not controlled benchmarks or reliable expectations for other machines.
+
+The full verification command was not invoked as one monolithic npm run verify.
+Its major constituent checks were run independently, including all unit tests,
+the browser suite, lint, typecheck, audit, the production build, and all 28
+node-script render/contract entries selected from package.json. This avoided
+rerunning already completed suites merely for the aggregate command name.
+
+The 28 additional script checks were:
+  verify:foundation
+  verify:library
+  test:library:render
+  verify:artwork
+  test:artwork:render
+  verify:heroes
+  test:heroes:render
+  verify:equipment
+  test:equipment:render
+  verify:map
+  test:map:render
+  verify:setup
+  test:setup:render
+  verify:turns
+  test:turns:render
+  verify:combat
+  test:combat:render
+  verify:encounter
+  test:encounter:render
+  test:hardening:render
+  verify:hardening
+  verify:release
+  test:rules:render
+  verify:rules
+  test:reactions:render
+  verify:reactions
+  test:expansion:render
+  test:workflow-features:render
+
+Playwright configuration:
+* Chromium only in the configured suite.
+* Test files: phase11.spec.js and expansion.spec.js.
+* One worker; fullyParallel false.
+* Default viewport 1440x900.
+* Locale en-AU and timezone Australia/Sydney.
+* Dark color scheme.
+* 45-second test timeout and 8-second expectation timeout.
+* Local server at 127.0.0.1:5311 with strict port.
+* Does not reuse an existing server.
+
+Browser journeys cover:
+* Condition immunity, surprise, and terrain painting.
+* Ready targeting and persistence.
+* Potion consumption/healing/action spending.
+* Movement-mode selection and Grapple.
+* Managed-screen and tabletop layout journeys.
+* Modal focus trap, Escape, and focus restoration.
+* Keyboard-reachable Library actions and visible focus.
+* Accessible form names and keyboard equipment access.
+* Arrow-key movement.
+* Help targeting through map pointer capture.
+* Knight opportunity attacks from the departure square.
+* Stabilization and required/single death saves.
+* Attack persistence before interruptible cinematics.
+* Hero draft pagehide flush.
+* Cross-tab state synchronization.
+* Local fonts and no Google Fonts requests.
+* Top-level error-boundary recovery.
+* Exact-target destructive confirmations.
+* Fresh launch and successful Forge.
+* Corrupt JSON recovery without overwriting the raw strings.
+* Visible quota failure and prior-save preservation.
+* Legacy-key preservation.
+* Responsive viewport and zoom-emulation layouts.
+* Compact Table controls and dock layering.
+* Complete-inventory searching and large token lists.
+* Reduced motion.
+
+The error-boundary browser test intentionally logs a child render error. That
+expected console output was not a failing application journey.
+
+The lint warnings include unused imports/variables and React effect dependency
+warnings, particularly in the tabletop controller and managed screens. They
+should be reviewed for intent rather than blindly suppressed or mechanically
+"fixed" by adding every dependency.
+
+Historical documentation claims 21 deterministic screenshot baselines per
+platform. The active tests do not use screenshot-comparison assertions.
+Existing screenshots live under tests/__screenshots__/_archive, including a
+Linux archive. Tests retaining "visual baseline" in their names currently
+settle layouts and assert structural/behavioral properties instead.
+
+Responsive tests include six documented desktop viewport sizes from 1024x768
+through 1920x1080, plus zoom and compact-table cases. Passing them does not
+establish full small-phone/touch usability or broad browser compatibility.
+
+Contract verifiers frequently inspect literal source text. They can enforce
+specific patterns and boundaries, but passing a string check is not the same
+as proving the associated runtime property. Refactoring correct code can also
+break such checks without changing behavior.
+
+Examples of source-contract checks include legacy-key/path scans, managed
+dialog count, focus-hook tokens, scoped state CSS, specific breakpoint strings,
+bounded pointer listeners, saving-before-cinematic source ordering, absence
+of certain deferred/no-op markers, and required release configuration.
+
+
+17. BUILD OUTPUT, PERFORMANCE, AND DEPLOYMENT
+--------------------------------------------
+
+Observed production output:
+  index.html: 0.73 kB, 0.40 kB gzip.
+  CSS: 107.41 kB, 19.81 kB gzip.
+  Vendor JS: 204.65 kB, 65.15 kB gzip.
+  Main application JS: 592.28 kB, 145.10 kB gzip.
+  Lazy monster JS: 599.46 kB, 83.86 kB gzip.
+
+Initial main-plus-vendor JavaScript is approximately 796.93 kB before gzip,
+or 210.25 kB gzipped. That excludes the lazily requested monster chunk.
+
+Observed font files:
+  IBM Plex Mono 400: 14.70 kB.
+  IBM Plex Mono 500: 14.88 kB.
+  IBM Plex Mono 600: 15.62 kB.
+  Plus Jakarta Sans variable: 27.34 kB.
+  Fraunces variable: 121.01 kB.
+
+Vite warned about chunks over 500 kB. The existing lazy monster import is a
+good decision. Further splitting should be driven by measured startup and
+interaction performance rather than treating every size warning as a defect.
+
+Performance-conscious implementation choices include bounded encounter logs,
+bounded pathfinding, keeping images out of LocalStorage, local transient
+pointer handling, debounced draft writes, and avoiding a save on each map
+pointer movement.
+
+Potential scaling costs remain full-envelope loading, normalization, checksum
+calculation, serialization, and backup writes on state changes. Large
+collections have tests, including a 180-token fixture, but the review did not
+measure frame rate, input latency, memory ceilings, or storage throughput on
+low-end devices.
+
+Build commands:
+  npm run dev
+  npm run build             -> Vite base /Roll30/
+  npm run build:preview     -> Vite base /Roll30-Nightforge/
+  npm run preview
+
+Vite separates node_modules into a vendor group. The default development base
+is root; release commands supply the GitHub Pages base explicitly.
+
+GitHub workflow: .github/workflows/deploy-pages.yml.
+* Triggers on pushes and pull requests to main, plus manual dispatch.
+* Uses Node 24 and npm ci.
+* Installs Chromium and its platform dependencies.
+* Runs npm run verify before building the repository-specific artifact.
+* Uses the production build for repository aomarco/Roll30, otherwise preview.
+* Pull requests verify/build without the Pages publishing steps.
+* Deployment requires the verification job.
+* Action versions are pinned to commit hashes.
+* A pages concurrency group is configured with cancel-in-progress false.
+* Workflow permissions are split between read-only verification and the
+  Pages/id-token deployment permissions.
+
+The verify chain includes a production build, then CI builds the
+repository-specific artifact afterward. This means some build work is
+duplicated in CI; it is visible workflow behavior rather than a reproduced
+deployment failure.
+
+Release documentation records:
+  Production URL: https://aomarco.github.io/Roll30/
+  Preview URL: https://aomarco.github.io/Roll30-Nightforge/
+  Rollback tag: pre-nightforge-2026-08-17
+  Release evidence identifier: 32019078653
+  Phase 12 status: complete.
+
+Those are repository records. I did not query live CI/deployment status or
+prove that the rollback tag currently resolves as documented. Production
+promotion is documented as requiring separate explicit authorization.
+
+The current implementation is a static hosted frontend. Gameplay mutations
+are local browser operations. Initial asset loading, later lazy chunk loading,
+and development HMR still use the network as applicable; documentation saying
+"no network calls" should not be interpreted as literally no network traffic.
+
+No deliberate service-worker/PWA caching path was found. An already loaded
+application can perform local operations without a gameplay server, but that
+does not guarantee successful offline reopening or first-time bestiary loading.
+
+
+18. CONFIRMED FINDING: RECOVERY DELETES ARTWORK
+----------------------------------------------
+
+Priority: high, because it can destroy the images associated with damaged or
+recoverable campaign data.
+
+Relevant code:
+  src/application/commands.js: cleanupPendingArtwork, approximately line 43.
+  src/application/commands.js: initialize, unconditional cleanup launch near 94.
+  src/storage/stateRepository.js: load fallback to an empty envelope.
+
+Mechanism:
+1. Primary and backup JSON fail inspection.
+2. Repository load returns a successful empty envelope plus recovery metadata.
+3. Initialization invokes cleanupPendingArtwork regardless of recovery source.
+4. Cleanup collects image references from the empty scene list.
+5. Every stored scene-artwork key appears orphaned.
+6. The sweep deletes those image blobs.
+
+Isolated reproduction used createMemoryStorage and createMemoryArtworkAdapter,
+not the user's browser storage. It seeded damaged primary/backup strings and
+an existing map blob. After initialize and awaiting its cleanup result:
+  recoveredSceneCount: 0
+  imagesRemaining: []
+  primaryPreserved: true
+
+Thus "the corrupt JSON was not overwritten" is true but insufficient: related
+artwork can still be removed. The passing browser recovery test only protects
+the raw LocalStorage evidence it checks.
+
+Recommended correction:
+Treat unreadable/recovered-empty state as non-authoritative for garbage
+collection. Preserve images until an explicit trustworthy collection is loaded
+or the user deliberately resolves recovery. Also review artwork references in
+backup states and concurrent staged uploads before defining orphanhood.
+
+
+19. CONFIRMED FINDING: PREVIEW/PRODUCTION SHARE STORAGE
+-------------------------------------------------------
+
+Priority: high for anyone using preview alongside production.
+
+Relevant code:
+  src/storage/constants.js, approximately lines 4-18.
+  src/application/browserRuntime.js.
+  vite.config.js and package.json build bases.
+  docs/RELEASE.md claims separate storage identifiers.
+
+Both build targets use identical state keys and IndexedDB database/store names.
+No build-base-derived storage namespace is supplied by the runtime.
+
+The documented URLs share protocol, host, and port. Only their paths differ.
+LocalStorage and IndexedDB are scoped by origin rather than pathname.
+
+Conclusion from source plus browser-platform behavior:
+Deployments built from this configuration share a browser-profile save area.
+Preview can read and modify the same Nightforge records as production. Different
+asset bases do not provide storage isolation.
+
+This is not a claim that I deliberately edited a live production save through
+preview. No live save was used to demonstrate it.
+
+Recommended correction:
+Separate preview namespaces or host preview on a different origin, with a
+careful compatibility plan for existing production saves. Do not casually
+change all identifiers without addressing the already-saved data.
+
+Platform source:
+  https://developer.mozilla.org/en-US/docs/Web/API/Web_Storage_API
+
+
+20. CONFIRMED FINDING: MONSTER MODIFIERS ARE LOST
+------------------------------------------------
+
+Priority: high for rules accuracy; affects many ordinary rolls and Hide.
+
+Relevant code:
+  scripts/generate-monsters.mjs: proficiency extraction and generated shape.
+  src/domain/table.js: createMonsterToken.
+  src/domain/table.js: token level default, approximately line 512.
+  src/domain/table.js: tokenSaveModifier, approximately line 815.
+  src/domain/table.js: tokenSkillModifier, approximately line 838.
+  src/domain/attacks.js: passivePerception, approximately line 349.
+
+Mechanism:
+* Source proficiency records include authored numeric bonuses.
+* Generation retains save proficiency ability names but discards their values.
+* Skill modifiers/proficiencies are not retained for monster tokens.
+* Imported monsters do not receive a suitable authored proficiency modifier;
+  the token's level defaults to 1.
+* Saves add the Hero-style level-1 proficiency bonus of +2.
+* Skills usually fall back to the raw governing ability modifier.
+
+I compared all 334 generated monster tokens against the actual local
+DND 5E Data/5e-SRD-Monsters.json proficiency entries. Skill names were resolved
+against the application's SKILLS catalogue; none were unrecognized.
+
+Results:
+  Saving-throw discrepancies: 262
+  Skill discrepancies: 393
+  Total: 655
+  Affected monster records: 217
+
+Adult Red Dragon example:
+                    Authored   App
+  Dexterity save       +6      +2
+  Constitution save   +13      +9
+  Wisdom save          +7      +3
+  Charisma save       +11      +7
+  Perception          +13      +1
+  Passive Perception   23       11 in Hide's calculation
+
+The generated monster still stores senses.passive_perception = 23 as reference
+data, but Hide recomputes 10 + tokenSkillModifier rather than using the authored
+number. The mismatch therefore influences targeting/stealth outcomes.
+
+Other sampled differences included Aboleth Constitution +4 instead of +6,
+Intelligence save +6 instead of +8, History +4 instead of +12, and Perception
++2 instead of +10. Acolyte Medicine and Religion also lose skill proficiency.
+
+Recommended correction:
+Preserve authored monster save and skill totals (including expertise and
+exceptional bonuses) separately from Hero derivation. Preserve authored
+passive senses where relevant. Add corpus-level comparisons so imports are
+checked against their input rather than only against generated self-consistency.
+
+Official corroborating legacy stat block:
+  https://www.dndbeyond.com/monsters/16771-adult-red-dragon
+
+
+21. CONFIRMED FINDING: GENERATED ATTACKS ARE DROPPED
+---------------------------------------------------
+
+Priority: significant functional/data completeness issue.
+
+Relevant code: scripts/generate-monsters.mjs, attackLines and otherActions.
+
+The generator reads action.damage[*].damage_dice directly. Some source attacks
+represent damage as nested choices, including one-handed/two-handed alternatives.
+Those entries produce no parsed primary damage and the attack is skipped.
+
+The reference-action filter excludes actions with a finite attack_bonus. That
+means some skipped attack entries are absent from both generated attacks and
+otherActions, even though their prose could have been preserved.
+
+Comparison against the local input found 20 attack-bonus-bearing source
+actions missing across 20 monster records. Some are unsupported special
+effects; the count is not a claim that all 20 are ordinary damage attacks.
+
+Examples of missing entries:
+  Drider - Longsword
+  Druid - Quarterstaff
+  Ettercap - Web
+  Giant Spider - Web
+  Gladiator - Spear
+  Gnoll - Spear
+  Guard - Spear
+  Guardian Naga - Spit Poison
+  Half-Red Dragon Veteran - Longsword
+  Hobgoblin - Longsword
+  Lamia - Intoxicating Touch
+  Merfolk - Spear
+
+Guard's source Spear contains nested 1d6+1 one-handed and 1d8+1 two-handed
+damage options. Druid's source Quarterstaff contains 1d6, 1d8, and a Shillelagh
+alternative. Neither creature has any generated attack line.
+
+Recommended correction:
+Handle nested damage-choice structures explicitly. Preserve unsupported
+attack prose as reference rather than silently losing it. Add source-to-output
+completeness tests that distinguish deliberately unsupported mechanics from
+accidental omission.
+
+
+22. CONFIRMED FINDING: XP AWARDS CAN PARTIALLY COMMIT
+----------------------------------------------------
+
+Priority: significant state-integrity issue.
+
+Relevant code: src/application/commands.js, awardExperience near line 219.
+
+Despite a comment suggesting all-or-nothing behavior, the command writes each
+Hero separately in a loop and only afterward saves xpAwarded on the encounter.
+Failure at a later recipient or the final scene write leaves earlier updates
+durable without a completed-award flag.
+
+An isolated reproduction used real state/entity repositories with an injected
+failure for the second Hero update. A final reproduction used a valid encounter
+with status "complete" and two surviving Hero snapshots.
+
+Award requested: 50 XP to Hero A and 50 XP to Hero B.
+  Before:                  A = 0,   B = 0
+  Second save fails:       A = 50,  B = 0; command returns failure.
+  Retry succeeds:          A = 100, B = 50; xpAwarded = true.
+
+The issue is independent of visual animation or double-click prevention.
+It is a partial-transaction problem.
+
+Recommended correction:
+Update all recipients and the encounter flag in one state-envelope operation,
+or use an equivalently durable idempotent transaction design. Since both
+collections already share one envelope, a single save is a natural boundary.
+Add failure injection at each recipient and the final flag-write point.
+
+
+23. CONFIRMED FINDING: REST AND CHARGE ERRORS
+-------------------------------------------
+
+Hit Dice recovery:
+  src/domain/rest.js, longRest near line 68, uses
+  Math.ceil(hitDiceTotal(hero) / 2).
+
+A level-3 Hero with all three dice spent recovers two and retains one spent.
+The 2014 rule regains up to half the total Hit Dice, with the normal round-down
+rule and a minimum of one. The correct recovery in that example is one.
+
+Documentation/UI say "half your spent hit dice" in places, which is also
+different from the underlying total-pool rule. Code, player-facing explanation,
+and tests need to agree with the selected ruleset.
+
+Item charge execution:
+  src/domain/items.js, restoreItemCharges near line 356, fills matching charge
+  pools to maximum. For a long rest it matches long-rest, short-rest, and daily.
+
+This conflates a long rest with dawn/daily recovery and ignores variable
+recharge dice. Cubic Gate's stored description says it recovers 1d3 at dawn;
+the app always refills its three charges on a long rest.
+
+Item charge parsing:
+  scripts/generate-phase5-catalogs.mjs, chargeRecharge near line 156, splits
+  description paragraphs and keeps the first one containing regain/recharge.
+  chargeRechargeKind then looks for rest/daily/dawn wording in that fragment.
+
+Helm of Teleportation has a paragraph break between "regains 1d3" and the
+remaining daily-at-dawn text. It gets chargeRechargeKind = null.
+
+Isolated observed results starting from zero charges:
+  Cubic Gate: classified daily; after long rest current 3, max 3.
+  Helm of Teleportation: classification null; after long rest current 0, max 3.
+
+The source text itself contains enough information to identify the discrepancy.
+Tracking an otherwise inert item's charges is an implemented feature even when
+its teleportation or other special action is still unimplemented.
+
+Recommended correction:
+Fix odd-level Hit Dice rounding; accurately state the total-pool rule; parse
+recharge sentences across paragraph boundaries; represent recharge quantity
+and trigger independently; preserve deliberate GM control of time when no
+campaign clock exists.
+
+Official rules used for the Hit Dice comparison:
+  https://www.dndbeyond.com/sources/dnd/basic-rules-2014/adventuring
+  https://www.dndbeyond.com/sources/dnd/basic-rules-2014/introduction
+
+
+24. DOCUMENTATION, WORKFLOW, AND OTHER MAINTENANCE FINDINGS
+---------------------------------------------------------
+
+Maintained documents:
+  README.md - setup, commands, and catalogue maintenance.
+  docs/FEATURES.md - intended master product description.
+  docs/TODO.md - open backlog, completed fixes, and closed decisions.
+  docs/RELEASE.md - release evidence record.
+  WORKFLOW.md - development/delivery workflow.
+  PARITY_REGISTER.md - 47 historical acceptance journeys.
+
+The parity register lists all 47 journeys as PASS and zero open Phase 11
+entries. This describes its acceptance register, not the absence of all bugs
+or completion of all D&D features. It retains old references such as a
+355-entry catalogue and half-wall disadvantage, despite current 359-item
+catalogue and +2/+5 cover rules.
+
+Important documentation corrections:
+* Unit tests are currently 365, not 360.
+* Active tests do not compare the archived screenshot baselines.
+* Preview and production do not use separate storage identifiers.
+* Strict domain purity wording overstates actual clock/random defaults.
+* Not every domain function returns the common result envelope.
+* "Every write goes to primary and backup" omits first-write and previous-state
+  semantics.
+* "No network calls" should mean no gameplay backend/data transmission, not
+  no static-asset or lazy-module requests.
+* The monster generation command requires an explicit source directory.
+* Some generator comments predate the current damage-defense, save, and
+  reaction systems and describe them as future work.
+* Documentation can overstate a full character or monster implementation when
+  the data/UI scaffold exists but mechanics remain reference-only.
+
+Catalogue generation:
+  npm run catalog:generate -- <source-directory>
+  requires 5e-SRD-Equipment.json, 5e-SRD-Magic-Items.json, and
+  MAGIC_ITEM_FILE_SYSTEM.txt.
+
+Monster generation:
+  npm run monsters:generate -- <source-directory>
+  underlying script also accepts an optional output file.
+  Running npm run monsters:generate with no directory fails with usage guidance.
+
+Generated files are intended to be regenerated, not manually edited. The item
+pipeline has a checked-in manifest of source hashes. Local SRD inputs are
+gitignored and are not intended to be bundled as raw source files. Generated
+catalogue content and reference prose are, of course, shipped with the app.
+
+The local data directory is available in this workspace. I used only its
+monster JSON for the corpus comparison; I did not comprehensively analyze
+every external SRD source file or certify that "all D&D data is imported."
+
+A source-notice search found public/THIRD_PARTY_FONTS.txt and SRD 5.1 source
+labels in generated records. That narrow search is not a completed licensing
+review; I did not establish the adequacy or inadequacy of all SRD attribution
+and redistribution requirements. No legal-compliance conclusion is claimed.
+
+WORKFLOW.md favors a fast lane for narrow changes and focused verification,
+with CI performing the broad gate. Its full-safety lane covers storage,
+security, dependencies, deployment, generated catalogues, destructive work,
+and broad refactors. It warns against casual schema bumps and documents
+separate authorization for production promotion. Those instructions describe
+future implementation work; this analysis did not publish or commit fixes.
+
+Recent visible history indicates development beyond the original staged rebuild:
+* ef268d4 - hide, racial traits, rests, attunement.
+* a7c8163 - housekeeping cleanup.
+* 1cbc584 - editable combat economy and movement rules.
+* 6cec7be - merged rules-expansion work.
+* 014d063 - tactical rules expansion.
+
+This is evidence of the local repository's recent evolution, not evidence of
+current production deployment or development speed.
+
+
+25. OPEN SYSTEMS VERSUS DELIBERATE EXCLUSIONS
+--------------------------------------------
+
+Substantial open systems identified in the maintained backlog:
+* Remaining ten character classes.
+* Class features and subclasses.
+* Feats.
+* Spell selection/preparation, slots, casting, areas, and effects.
+* Concentration and effect-source relationships.
+* Full lighting and darkvision mechanics on the map.
+* Bespoke magic-item actions for the 113 inert/reference items.
+* Automated monster traits and special/legendary behavior.
+* Shopping/merchant transactions, distinct from implemented money purses.
+
+Broader product capabilities not found in the inspected app:
+* Remote multiplayer and player-specific permissions.
+* Accounts and cloud synchronization.
+* Portable scene/campaign export/import.
+* Deliberate offline install/reopening support.
+
+These are scope observations, not an instruction to add them all. The best
+choice depends on whether the product should remain a local GM instrument or
+become a general multiplayer virtual tabletop.
+
+Documented closed decisions to respect:
+* Falling/hazard damage is applied manually on the flat board.
+* Exhaustion's six-level ladder is not automated.
+* Languages and alignment remain reference/roleplay information.
+* CR remains a selection aid rather than automated encounter balancing.
+* Monsters do not need character-like level progression.
+* Turns never end automatically.
+* Descriptive monster/attack conditions are generally adjudicated manually;
+  explicit actions such as Grapple/Shove can apply their resolved condition.
+* Raw SRD source inputs stay external/gitignored.
+
+Preserving authored monster bonuses does not require reopening the decision
+against monster character levels. It should use the finished stat-block values.
+
+
+26. RECOMMENDED ORDER OF WORK
+-----------------------------
+
+First, protect existing user work:
+1. Disable destructive image cleanup when recovery has no authoritative scene
+   collection, and cover the complete JSON-plus-artwork lifecycle in tests.
+2. Separate preview storage from production without making current production
+   saves disappear through a careless namespace change.
+3. Design a portable export/import format that includes both structured state
+   and images, with validation and a clear restore workflow.
+
+Second, correct mechanics already presented as working:
+4. Preserve monster authored saves, skills, expertise, and passive senses.
+5. Handle nested attack damage and keep unsupported source prose visible.
+6. Commit XP recipients and the encounter flag atomically.
+7. Correct Hit Dice rounding and recharge parsing/execution.
+
+Third, improve the evidence and maintainability:
+8. Add failure-injection tests for the reproduced edge cases.
+9. Add source-to-generated-corpus comparisons instead of relying only on
+   generated output counts and self-consistency.
+10. Restore real screenshot comparisons or rename/document existing checks
+    accurately.
+11. Update stale documentation and remove misleading absolutes.
+12. Review hook dependency warnings by behavior, and gradually strengthen
+    checking around persisted state and cross-layer contracts.
+13. Split the tabletop controller along actual independent lifecycles when
+    future changes justify it; avoid a broad refactor merely for file size.
+
+Fourth, improve the most frequent user flows:
+14. Put editable character identity and ability setup earlier in creation.
+15. Reduce recovery and exceptional-defense clutter when it is not relevant.
+16. Make snapshot and supported-class boundaries explicit.
+17. Keep the map visible while inspecting/editing complex creatures.
+
+Finally, expand capabilities according to product direction:
+18. Choose between deep local tactical support and broader multiplayer/campaign
+    management rather than assuming both must arrive together.
+19. Prioritize class/spell systems if the goal is running ordinary complete
+    D&D parties. A Wizard scaffold without casting is a major gameplay limit.
+20. Treat feats and magic-item actions as bespoke rule work, not merely adding
+    more catalogue text or buttons.
+
+
+27. EVIDENCE LOCATIONS AND INVESTIGATION LIMITS
+----------------------------------------------
+
+Key source files, relative to the workspace path at the top of this file:
+  src/App.jsx
+  src/main.jsx
+  src/application/browserRuntime.js
+  src/application/commands.js
+  src/application/state.js
+  src/application/artwork.js
+  src/storage/constants.js
+  src/storage/envelope.js
+  src/storage/stateRepository.js
+  src/storage/entityRepositories.js
+  src/storage/sessionRepository.js
+  src/storage/artworkRepository.js
+  src/storage/memoryAdapters.js
+  src/domain/records.js
+  src/domain/heroes.js
+  src/domain/table.js
+  src/domain/combat.js
+  src/domain/attacks.js
+  src/domain/encounter.js
+  src/domain/checks.js
+  src/domain/death.js
+  src/domain/vitality.js
+  src/domain/rest.js
+  src/domain/items.js
+  src/domain/monsters.js
+  src/domain/monsters.generated.js
+  src/domain/catalog.generated.js
+  src/screens/useTableController.js
+  src/screens/TableScreen.jsx
+  src/screens/HeroesScreen.jsx
+  src/ui/useDialogA11y.js
+  src/ui/ApplicationErrorBoundary.jsx
+  scripts/generate-monsters.mjs
+  scripts/generate-phase5-catalogs.mjs
+  scripts/phase5-catalog-manifest.json
+  scripts/verify-phase11.mjs
+  scripts/verify-phase12.mjs
+  tests/phase11.spec.js
+  tests/expansion.spec.js
+  package.json
+  tsconfig.json
+  eslint.config.js
+  vite.config.js
+  playwright.config.js
+  .github/workflows/deploy-pages.yml
+
+Investigation log files were written under the Windows temporary directory:
+  %TEMP%\nightforge-analysis-tests.log
+  %TEMP%\nightforge-analysis-lint.log
+  %TEMP%\nightforge-analysis-build.log
+  %TEMP%\nightforge-analysis-browser.log
+  %TEMP%\nightforge-analysis-audit.json
+  %TEMP%\nightforge-analysis-contracts.log
+
+These temporary logs may be cleaned by the operating system. The important
+results are consolidated in this report so it does not depend on their survival.
+
+The isolated reproduction snippets were executed through Node with in-memory
+repositories/adapters. They were not added as permanent regression tests or
+stored as source files. Their inputs, mechanisms, and observed outputs are
+recorded above.
+
+Evidence confidence:
+* Directly observed: current code/configuration, catalogue counts, executed
+  checks, local UI observations, corruption cleanup, partial XP award, monster
+  modifier comparison, attack omissions, and rest/charge examples.
+* Derived from code plus platform behavior: shared preview/production storage,
+  browser-local portability limits, whole-envelope scaling costs, and the
+  limits of disabled JavaScript type checking.
+* Documented project decisions: clean-room intent, rollback/release record,
+  closed backlog choices, and some feature/lifecycle semantics not manually
+  exercised in every branch.
+* Recommendations: prioritization and suggested implementation/UI changes.
+
+What this investigation does not prove:
+* That every rule in the app is correct after the listed problems are fixed.
+* That every documented feature has been manually exercised.
+* That the original Roll30 and Nightforge have complete behavioral parity.
+* That hosted production currently matches the inspected commit.
+* That the app meets a complete accessibility or security standard.
+* That dependency-audit success means absence of all vulnerabilities.
+* That static-source contract checks establish their broad documentation claims.
+* That tested Chromium layouts establish mobile, Firefox, or Safari quality.
+* That the data source itself has no errors beyond the import errors found.
+* That all catalogue legal/attribution requirements have been audited.
+
+The verified passing suites and the verified defects coexist. The defensible
+conclusion is that Nightforge has a capable foundation and valuable working
+features, while its guarantees need to be narrowed and its data/recovery paths
+strengthened before users should assume every automated result and recovery
+operation is reliable.
+
+END OF CONSOLIDATED ANALYSIS

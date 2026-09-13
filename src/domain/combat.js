@@ -1,6 +1,9 @@
 import { ITEM_BY_ID } from "./catalog.js";
 import { changeCondition, CONDITIONS, expireConditionsAtRound, isImmobilized, isIncapacitated } from "./conditions.js";
 import { setMainHand, setOffHand } from "./items.js";
+import { footprintForPosition, footprintForToken, normalizeBoard } from "./geometry.js";
+import { advanceEffects } from "./effects.js";
+import { createBoundaryId } from "./time.js";
 import {
   appendEncounterLog,
   CLEARED_TURN_STATE,
@@ -65,7 +68,8 @@ export const READY_TRIGGER_OPTIONS = Object.freeze([
 export const chebyshevFeet = (from, to, viewport) => {
   const start = setupCellForPosition(from, viewport);
   const end = setupCellForPosition(to, viewport);
-  return Math.max(Math.abs(end.column - start.column), Math.abs(end.row - start.row)) * MOVEMENT_FEET_PER_CELL;
+  const feetPerCell = setupGridMetrics(viewport).feetPerCell || MOVEMENT_FEET_PER_CELL;
+  return Math.max(Math.abs(end.column - start.column), Math.abs(end.row - start.row)) * feetPerCell;
 };
 
 export const movementMaximum = (resources, token) =>
@@ -160,8 +164,12 @@ export function movementEdgeBlocked(fromCell, toCell, walls, viewport) {
 
 const occupiedCellSet = ({ tokens, chests, movingTokenId, viewport }) => {
   const occupied = new Set();
+  const metrics = setupGridMetrics(viewport);
+  const board = viewport?.board || normalizeBoard({ columns: metrics.columns, rows: metrics.rows, feetPerCell: viewport?.feetPerCell });
   for (const token of normalizeTableTokens(tokens)) {
-    if (token.id !== movingTokenId) occupied.add(cellKey(setupCellForPosition(token.position, viewport)));
+    if (token.id !== movingTokenId) {
+      for (const cell of footprintForToken(token, board).cells) occupied.add(cellKey(cell));
+    }
   }
   for (const chest of normalizeChests(chests)) occupied.add(cellKey(setupCellForPosition(chest.position, viewport)));
   return occupied;
@@ -183,10 +191,19 @@ export function findMovementRoute({
   searchLimit = PATH_SEARCH_LIMIT,
 } = {}) {
   const metrics = setupGridMetrics(viewport);
+  const board = viewport?.board || normalizeBoard({ columns: metrics.columns, rows: metrics.rows, feetPerCell: viewport?.feetPerCell });
   const startCell = setupCellForPosition(start, viewport);
   const goalCell = setupCellForPosition(destination, viewport);
   if (sameCell(startCell, goalCell)) return { ok: true, cells: [startCell], stepCosts: [], visited: 0 };
   const occupied = occupiedCellSet({ tokens, chests, movingTokenId, viewport });
+  const movingToken = normalizeTableTokens(tokens).find((token) => token.id === movingTokenId);
+  const movingSize = movingToken?.size || "medium";
+  const footprintAt = (cell) => footprintForPosition(setupPositionForCell(cell, viewport), movingSize, board);
+  const blockedForFootprint = (cell) => {
+    const footprint = footprintAt(cell);
+    return !footprint.inBounds || footprint.cells.some((entry) => occupied.has(cellKey(entry)));
+  };
+  if (blockedForFootprint(startCell)) return routeFailure("start-occupied", 0);
   const terrain = new Set(normalizeDifficultTerrain(difficultTerrain));
   const multiplier = Math.max(1, Math.floor(finite(movementCostMultiplier, 1)));
   const segments = wallSegments(walls, viewport);
@@ -228,13 +245,13 @@ export function findMovementRoute({
       if (neighbor.column < 0 || neighbor.column >= metrics.columns || neighbor.row < 0 || neighbor.row >= metrics.rows) continue;
       const neighborKey = cellKey(neighbor);
       if (closed.has(neighborKey)) continue;
-      if (occupied.has(neighborKey) && neighborKey !== goalKey) continue;
+      if (blockedForFootprint(neighbor) && neighborKey !== goalKey) continue;
       if (edgeBlockedBySegments(current.cell, neighbor, segments, viewport)) continue;
 
       if (columnDelta && rowDelta) {
         const horizontal = { column: current.cell.column + columnDelta, row: current.cell.row };
         const vertical = { column: current.cell.column, row: current.cell.row + rowDelta };
-        if (occupied.has(cellKey(horizontal)) || occupied.has(cellKey(vertical))) continue;
+        if (blockedForFootprint(horizontal) || blockedForFootprint(vertical)) continue;
         if (
           edgeBlockedBySegments(current.cell, horizontal, segments, viewport) ||
           edgeBlockedBySegments(current.cell, vertical, segments, viewport) ||
@@ -295,6 +312,7 @@ export function planActiveMovement(scene, tokenId, destination, viewport, option
   const origin = setupPositionForCell(startCell, viewport);
   if (!available.ok) return { ...available, tokenId, route: [origin], cells: [startCell], reachableIndex: 0, landingIndex: 0, costFeet: 0 };
   const grappledTarget = available.value.tokens.find((entry) => entry.grappledById === token.id && entry.conditions.includes("grappled")) || null;
+  const feetPerCell = setupGridMetrics(viewport).feetPerCell || MOVEMENT_FEET_PER_CELL;
   const draggingAtFullSpeed = grappledTarget
     && TOKEN_SIZES.indexOf(grappledTarget.size) <= TOKEN_SIZES.indexOf(token.size) - 2;
   const movementCostMultiplier = grappledTarget && !draggingAtFullSpeed ? 2 : 1;
@@ -320,7 +338,12 @@ export function planActiveMovement(scene, tokenId, destination, viewport, option
   );
   const positions = route.cells.map((cell) => setupPositionForCell(cell, viewport));
   const occupied = occupiedCellSet({ tokens: scene.tokens, chests: scene.chests, movingTokenId: token.id, viewport });
-  const remainingCells = Math.floor(movementRemaining(available.value.resources, token) / MOVEMENT_FEET_PER_CELL);
+  const board = viewport?.board || normalizeBoard({ columns: setupGridMetrics(viewport).columns, rows: setupGridMetrics(viewport).rows, feetPerCell: viewport?.feetPerCell });
+  const blockedForToken = (cell) => {
+    const footprint = footprintForPosition(setupPositionForCell(cell, viewport), token.size, board);
+    return !footprint.inBounds || footprint.cells.some((entry) => occupied.has(cellKey(entry)));
+  };
+  const remainingCells = Math.floor(movementRemaining(available.value.resources, token) / feetPerCell);
   let landingIndex = 0;
   let costCells = 0;
   for (let index = 1; index < route.cells.length; index += 1) {
@@ -329,9 +352,9 @@ export function planActiveMovement(scene, tokenId, destination, viewport, option
     costCells += nextCost;
     landingIndex = index;
   }
-  while (landingIndex > 0 && occupied.has(cellKey(route.cells[landingIndex]))) landingIndex -= 1;
+  while (landingIndex > 0 && blockedForToken(route.cells[landingIndex])) landingIndex -= 1;
   costCells = route.stepCosts.slice(0, landingIndex).reduce((total, step) => total + step, 0);
-  const costFeet = costCells * MOVEMENT_FEET_PER_CELL;
+  const costFeet = costCells * feetPerCell;
   return success({
     tokenId,
     cells: route.cells,
@@ -341,7 +364,8 @@ export function planActiveMovement(scene, tokenId, destination, viewport, option
     landing: positions[landingIndex],
     stepCosts: route.stepCosts,
     costFeet,
-    requestedFeet: route.stepCosts.reduce((total, step) => total + step, 0) * MOVEMENT_FEET_PER_CELL,
+    requestedFeet: route.stepCosts.reduce((total, step) => total + step, 0) * feetPerCell,
+    feetPerCell,
     overBudget: landingIndex < route.cells.length - 1,
     visited: route.visited,
     grappledTargetId: grappledTarget?.id || null,
@@ -363,9 +387,10 @@ export function moveActiveToken(scene, tokenId, destination, viewport, options =
     { plan: plan.value },
   );
   const landing = plan.value.route[requestedLandingIndex];
+  const feetPerCell = plan.value.feetPerCell || setupGridMetrics(viewport).feetPerCell || MOVEMENT_FEET_PER_CELL;
   const costFeet = plan.value.stepCosts
     .slice(0, requestedLandingIndex)
-    .reduce((total, step) => total + step, 0) * MOVEMENT_FEET_PER_CELL;
+    .reduce((total, step) => total + step, 0) * feetPerCell;
   const context = activeTurnContext(scene).value;
   const resources = {
     ...context.resources,
@@ -1016,6 +1041,8 @@ export function endTurn(scene) {
   );
   const nextToken = tokens.find((entry) => entry.id === order[nextIndex]);
   const wrapped = nextRound > Math.max(1, Math.floor(finite(scene.encounter.round, 1)));
+  const boundarySequence = Math.max(0, Math.floor(finite(scene.encounter.boundarySequence))) + 1;
+  const boundaryId = createBoundaryId({ sequence: boundarySequence - 1 }, "turn-start", nextToken.id);
   // Dodging, Disengaging and a spent reaction all last "until the start of your
   // next turn", and this is that moment. They are cleared on the token because
   // they have to survive everybody else's turns in between, which turn
@@ -1036,12 +1063,21 @@ export function endTurn(scene) {
     entry.helpedAgainstTokenId && entry.helpedById === nextToken.id
       ? { ...entry, helpedAgainstTokenId: null, helpedById: null }
       : entry);
+  const effectTokens = beginningTokens.map((entry) => advanceEffects(entry, {
+    round: nextRound,
+    boundaryKind: "turn-start",
+    actorId: nextToken.id,
+    boundaryId,
+    gameTimeSeconds: 0,
+  }, scene.effectDefinitions || []).value);
   return success({
-    tokens: beginningTokens,
+    tokens: effectTokens,
     encounter: {
       ...scene.encounter,
       activeIndex: nextIndex,
       round: nextRound,
+      boundarySequence,
+      lastBoundaryId: boundaryId,
       resources: { [nextToken.id]: createTurnResources(nextToken) },
       log: appendEncounterLog(scene.encounter.log, `${token.name} ends the turn. ${nextToken.name} is active.`),
     },

@@ -1,5 +1,5 @@
 import { useEffect, useReducer, useRef } from "react";
-import { Compass, ScrollText } from "lucide-react";
+import { Compass, ScrollText, ShieldCheck } from "lucide-react";
 
 import { createBrowserRuntime } from "./application/browserRuntime.js";
 import { tableModeForScene } from "./application/library.js";
@@ -10,10 +10,12 @@ import LibraryScreen from "./screens/LibraryScreen.jsx";
 import HeroesScreen from "./screens/HeroesScreen.jsx";
 import SceneScreen from "./screens/SceneScreen.jsx";
 import TableScreen from "./screens/TableScreen.jsx";
+import BackupsScreen from "./screens/BackupsScreen.jsx";
 
 const TABS = [
   { id: "home", label: "Library", icon: Compass },
   { id: "characters", label: "Heroes", icon: ScrollText },
+  { id: "backups", label: "Backups", icon: ShieldCheck },
 ];
 
 export function CommandDeck({ route, go }) {
@@ -67,6 +69,8 @@ export default function App({ browser = window, runtimeFactory = createBrowserRu
     runtime.commands.updateScene(id, patch, revisionRef.current));
   const updateHero = (id, patch) => trackRevision(() =>
     runtime.commands.updateHero(id, patch, revisionRef.current));
+  const rollCheck = (sceneId, specification, options = {}) => trackRevision(() =>
+    runtime.commands.rollCheck(sceneId, specification, { ...options, expectedRevision: revisionRef.current }));
 
   useEffect(() => {
     runtime.commands.initialize();
@@ -75,11 +79,13 @@ export default function App({ browser = window, runtimeFactory = createBrowserRu
   useEffect(() => {
     if (typeof browser.addEventListener !== "function") return undefined;
     const synchronize = (event) => {
-      if (event?.key === STORAGE_KEYS.state) recordRevision(runtime.commands.synchronize());
+      if (event?.key === (runtime.identity?.keys.state || STORAGE_KEYS.state)) trackRevision(() => runtime.commands.synchronize());
     };
     browser.addEventListener("storage", synchronize);
     return () => browser.removeEventListener?.("storage", synchronize);
   }, [browser, runtime]);
+
+  useEffect(() => runtime.subscribe?.(() => trackRevision(() => runtime.commands.synchronize())), [runtime]);
 
   useEffect(() => {
     if (typeof browser.addEventListener !== "function") return undefined;
@@ -92,13 +98,13 @@ export default function App({ browser = window, runtimeFactory = createBrowserRu
   }, [browser, state.route.page]);
 
   const activeScene = state.scenes.find((scene) => scene.id === state.activeSceneId) || null;
-  const go = (route) => {
+  const go = async (route) => {
     if (state.route.page === "settings" && route.page !== "settings") {
-      const flushed = workbenchFlushRef.current?.();
+      const flushed = await workbenchFlushRef.current?.();
       if (flushed && !flushed.ok) return flushed;
     }
     if (state.route.page === "characters" && route.page !== "characters") {
-      const flushed = heroFlushRef.current?.();
+      const flushed = await heroFlushRef.current?.();
       if (flushed && !flushed.ok) return flushed;
     }
     return runtime.commands.navigate(route, state.activeSceneId);
@@ -123,7 +129,9 @@ export default function App({ browser = window, runtimeFactory = createBrowserRu
         go={go}
         setMode={(mode) => go({ page: "board", mode })}
         onUpdate={updateScene}
-        onAwardExperience={(id, award) => trackRevision(() => runtime.commands.awardExperience(id, award))}
+        onAwardExperience={(id, award) => trackRevision(() => runtime.commands.awardExperience(id, award, revisionRef.current))}
+        onRollCheck={rollCheck}
+        rollLog={state.rollLog}
         artworkRepository={runtime.artworkRepository}
         persistence={state.persistence}
       />
@@ -131,7 +139,10 @@ export default function App({ browser = window, runtimeFactory = createBrowserRu
   }
 
   let screen;
-  if (state.route.page === "characters") {
+  if (state.route.page === "backups") {
+    screen = <BackupsScreen service={runtime.backups} browser={browser} />;
+  }
+  else if (state.route.page === "characters") {
     screen = (
       <HeroesScreen
         heroes={state.heroes}
@@ -140,6 +151,8 @@ export default function App({ browser = window, runtimeFactory = createBrowserRu
         go={go}
         onCreate={(input) => trackRevision(() => runtime.commands.createHero(input))}
         onUpdate={updateHero}
+        onRollCheck={rollCheck}
+        rollLog={state.rollLog}
         onRest={(id, kind, options) => trackRevision(() => runtime.commands.restHero(id, kind, options))}
         onRetire={(id) => trackRevision(() => runtime.commands.removeHero(id))}
         portraitRepository={runtime.portraitRepository}

@@ -613,6 +613,34 @@
 
 .nf-state-hero-xp-ready { color: var(--brass); }
 
+.nf-state-monster-source-review {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.nf-state-monster-source-fields {
+  display: grid;
+  gap: 6px;
+  max-height: 260px;
+  overflow: auto;
+}
+
+.nf-state-monster-source-fields > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: rgba(7, 16, 18, .42);
+  font-size: 11px;
+}
+
+.nf-state-monster-source-fields strong { color: var(--ink); }
+.nf-state-monster-source-fields span { color: var(--ink-2); text-align: right; }
+.nf-state-monster-source-actions { justify-content: flex-end; margin-top: 2px; }
+
 /* --------------------------------------------------------- command bar */
 .nf-state-command-bar {
   position: absolute;

@@ -345,66 +345,66 @@ test("Hero normalization rejects invalid class, race, alignment, proficiency, an
   assert.deepEqual(hero.skillProficiencies, ["arcana"]);
 });
 
-test("Hero CRUD creates, refreshes, edits, and retires exact stable IDs", () => {
+test("Hero CRUD creates, refreshes, edits, and retires exact stable IDs", async () => {
   const app = harness();
-  app.commands.initialize();
-  const first = app.commands.createHero({ name: "Aster" });
-  const second = app.commands.createHero({ name: "Bran" });
+  (await app.commands.initialize());
+  const first = (await app.commands.createHero({ name: "Aster" }));
+  const second = (await app.commands.createHero({ name: "Bran" }));
   assert.equal(first.value.id, "hero-1");
   assert.equal(second.value.id, "hero-2");
   assert.deepEqual(app.state.heroes.map((hero) => hero.name), ["Aster", "Bran"]);
-  assert.equal(app.commands.updateHero(first.value.id, { name: "Aster Vale" }).value.name, "Aster Vale");
-  app.commands.removeHero(second.value.id);
+  assert.equal((await app.commands.updateHero(first.value.id, { name: "Aster Vale" })).value.name, "Aster Vale");
+  (await app.commands.removeHero(second.value.id));
   assert.deepEqual(app.state.heroes.map((hero) => hero.id), ["hero-1"]);
 });
 
-test("class changes reset saves and skills at the application boundary", () => {
+test("class changes reset saves and skills at the application boundary", async () => {
   const app = harness();
-  const hero = app.commands.createHero({
+  const hero = (await app.commands.createHero({
     classId: "fighter",
     saveProficiencies: ["dex"],
     skillProficiencies: ["athletics", "arcana"],
-  }).value;
-  const changed = app.commands.updateHero(hero.id, { classId: "wizard" });
+  })).value;
+  const changed = (await app.commands.updateHero(hero.id, { classId: "wizard" }));
   assert.equal(changed.value.classId, "wizard");
   assert.deepEqual(changed.value.saveProficiencies, ["int", "wis"]);
   assert.deepEqual(changed.value.skillProficiencies, []);
 });
 
-test("race changes replace grants while retaining user-selected languages", () => {
+test("race changes replace grants while retaining user-selected languages", async () => {
   const app = harness();
-  const hero = app.commands.createHero({
+  const hero = (await app.commands.createHero({
     raceId: "dwarf",
     subraceId: "hill-dwarf",
     languages: ["Common", "Dwarvish", "Giant"],
-  }).value;
-  const changed = app.commands.updateHero(hero.id, { raceId: "elf", subraceId: "high-elf" });
+  })).value;
+  const changed = (await app.commands.updateHero(hero.id, { raceId: "elf", subraceId: "high-elf" }));
   assert.deepEqual(changed.value.languages, ["Common", "Elvish", "Giant"]);
   assert.equal(changed.value.subraceId, "high-elf");
 });
 
-test("retiring a Hero does not modify pre-existing Hero-token snapshots", () => {
+test("retiring a Hero does not modify pre-existing Hero-token snapshots", async () => {
   const app = harness();
-  const hero = app.commands.createHero({ name: "Snapshot Source" }).value;
-  const scene = app.sceneRepository.create({
+  const hero = (await app.commands.createHero({ name: "Snapshot Source" })).value;
+  const scene = (await app.sceneRepository.create({
     name: "Battle",
     tokens: [{ id: "token-1", heroId: hero.id, name: hero.name, hp: 10 }],
-  }).value;
-  app.commands.removeHero(hero.id);
-  assert.equal(app.heroRepository.list().value.length, 0);
-  assert.deepEqual(app.sceneRepository.get(scene.id).value.tokens, scene.tokens);
+  })).value;
+  (await app.commands.removeHero(hero.id));
+  assert.equal((await app.heroRepository.list()).value.length, 0);
+  assert.deepEqual((await app.sceneRepository.get(scene.id)).value.tokens, scene.tokens);
 });
 
-test("failed Hero creation and retirement preserve the last visible valid roster", () => {
+test("failed Hero creation and retirement preserve the last visible valid roster", async () => {
   const app = harness();
-  app.commands.initialize();
+  (await app.commands.initialize());
   app.local.setFailureMode("write");
-  assert.equal(app.commands.createHero({ name: "Unsaved" }).ok, false);
+  assert.equal((await app.commands.createHero({ name: "Unsaved" })).ok, false);
   assert.deepEqual(app.state.heroes, []);
   app.local.setFailureMode(null);
-  const hero = app.commands.createHero({ name: "Kept" }).value;
+  const hero = (await app.commands.createHero({ name: "Kept" })).value;
   app.local.setFailureMode("write");
-  assert.equal(app.commands.removeHero(hero.id).ok, false);
+  assert.equal((await app.commands.removeHero(hero.id)).ok, false);
   assert.equal(app.state.heroes[0].name, "Kept");
   assert.equal(app.state.persistence.status, "error");
 });

@@ -82,13 +82,13 @@ test("Library presentation helpers are stable and respect Scene kind and encount
   assert.equal(accentForScene({ id: "stable", name: "Scene" }), accentForScene({ id: "stable", name: "Scene" }));
 });
 
-test("Forge persists, selects, remembers, and opens one real Scene", () => {
+test("Forge persists, selects, remembers, and opens one real Scene", async () => {
   const app = harness();
-  app.commands.initialize();
-  const forged = app.commands.forgeScene(
+  (await app.commands.initialize());
+  const forged = (await app.commands.forgeScene(
     { name: "  The Sunken Crypt  ", kind: "battle" },
     { page: "board", mode: "setup" },
-  );
+  ));
   assert.equal(forged.ok, true);
   assert.equal(forged.value.name, "The Sunken Crypt");
   assert.equal(forged.value.kind, "battle");
@@ -100,52 +100,52 @@ test("Forge persists, selects, remembers, and opens one real Scene", () => {
   assert.ok(forged.value.lastOpenedAt);
 });
 
-test("Forge normalizes a blank name and supports a Play destination", () => {
+test("Forge normalizes a blank name and supports a Play destination", async () => {
   const app = harness();
-  const forged = app.commands.forgeScene(
+  const forged = (await app.commands.forgeScene(
     { name: "   ", kind: "play" },
     { page: "board", mode: "play" },
-  );
+  ));
   assert.equal(forged.value.name, "Untitled scene");
   assert.equal(forged.value.kind, "play");
   assert.equal(forged.value.encounter, null);
   assert.deepEqual(app.state.route, { page: "board", mode: "play" });
 });
 
-test("Open targets the exact stable Scene ID and refreshes its recency", () => {
+test("Open targets the exact stable Scene ID and refreshes its recency", async () => {
   const app = harness();
-  const first = app.sceneRepository.create({ name: "First" }).value;
-  const second = app.sceneRepository.create({ name: "Second" }).value;
-  app.commands.initialize();
-  const opened = app.commands.openScene(second.id, { page: "settings" });
+  const first = (await app.sceneRepository.create({ name: "First" })).value;
+  const second = (await app.sceneRepository.create({ name: "Second" })).value;
+  (await app.commands.initialize());
+  const opened = (await app.commands.openScene(second.id, { page: "settings" }));
   assert.equal(opened.ok, true);
   assert.equal(opened.value.id, second.id);
   assert.equal(app.state.activeSceneId, second.id);
   assert.deepEqual(app.state.route, { page: "settings" });
-  assert.ok(app.sceneRepository.get(second.id).value.lastOpenedAt);
-  assert.equal(app.sceneRepository.get(first.id).value.lastOpenedAt, null);
+  assert.ok((await app.sceneRepository.get(second.id)).value.lastOpenedAt);
+  assert.equal((await app.sceneRepository.get(first.id)).value.lastOpenedAt, null);
 });
 
-test("Reload restores active context but always starts at Library", () => {
+test("Reload restores active context but always starts at Library", async () => {
   const local = createMemoryStorage();
   const session = createMemoryStorage();
   const firstRun = harness({ local, session });
-  const forged = firstRun.commands.forgeScene({ name: "Remembered" });
+  const forged = (await firstRun.commands.forgeScene({ name: "Remembered" }));
   assert.equal(firstRun.state.route.page, "board");
 
   const reloaded = harness({ local, session });
-  const initialized = reloaded.commands.initialize();
+  const initialized = (await reloaded.commands.initialize());
   assert.equal(initialized.ok, true);
   assert.equal(reloaded.state.activeSceneId, forged.value.id);
   assert.deepEqual(reloaded.state.route, { page: "home" });
 });
 
-test("Deleting the active Scene selects the safest recent fallback", () => {
+test("Deleting the active Scene selects the safest recent fallback", async () => {
   const app = harness();
-  const first = app.commands.forgeScene({ name: "First" }).value;
-  const second = app.commands.forgeScene({ name: "Second" }).value;
+  const first = (await app.commands.forgeScene({ name: "First" })).value;
+  const second = (await app.commands.forgeScene({ name: "Second" })).value;
   assert.equal(app.state.activeSceneId, second.id);
-  const removed = app.commands.removeScene(second.id);
+  const removed = (await app.commands.removeScene(second.id));
   assert.equal(removed.ok, true);
   assert.equal(app.state.scenes.some((scene) => scene.id === second.id), false);
   assert.equal(app.state.activeSceneId, first.id);
@@ -153,10 +153,10 @@ test("Deleting the active Scene selects the safest recent fallback", () => {
   assert.equal(app.stateRepository.load().value.lastActiveSceneId, first.id);
 });
 
-test("Deleting the final Scene clears durable and session context", () => {
+test("Deleting the final Scene clears durable and session context", async () => {
   const app = harness();
-  const scene = app.commands.forgeScene({ name: "Only" }).value;
-  const removed = app.commands.removeScene(scene.id);
+  const scene = (await app.commands.forgeScene({ name: "Only" })).value;
+  const removed = (await app.commands.removeScene(scene.id));
   assert.equal(removed.ok, true);
   assert.deepEqual(app.state.scenes, []);
   assert.equal(app.state.activeSceneId, null);
@@ -164,29 +164,29 @@ test("Deleting the final Scene clears durable and session context", () => {
   assert.equal(app.stateRepository.load().value.lastActiveSceneId, null);
 });
 
-test("Scene deletion schedules artwork cleanup without touching other artwork", () => {
+test("Scene deletion schedules artwork cleanup without touching other artwork", async () => {
   const app = harness();
-  const scene = app.commands.forgeScene({ name: "Painted", artworkKey: "art-painted" }).value;
-  app.commands.removeScene(scene.id);
+  const scene = (await app.commands.forgeScene({ name: "Painted", artworkKey: "art-painted" })).value;
+  (await app.commands.removeScene(scene.id));
   assert.deepEqual(app.stateRepository.load().value.pendingArtworkDeletes, ["art-painted"]);
 });
 
-test("A failed Forge remains on Library and does not invent visible state", () => {
+test("A failed Forge remains on Library and does not invent visible state", async () => {
   const app = harness();
-  app.commands.initialize();
+  (await app.commands.initialize());
   app.local.setFailureMode("write");
-  const failed = app.commands.forgeScene({ name: "Unsaved" });
+  const failed = (await app.commands.forgeScene({ name: "Unsaved" }));
   assert.equal(failed.ok, false);
   assert.deepEqual(app.state.scenes, []);
   assert.deepEqual(app.state.route, { page: "home" });
   assert.equal(app.state.persistence.status, "error");
 });
 
-test("A failed deletion leaves the Scene visible and selected", () => {
+test("A failed deletion leaves the Scene visible and selected", async () => {
   const app = harness();
-  const scene = app.commands.forgeScene({ name: "Keep Me" }).value;
+  const scene = (await app.commands.forgeScene({ name: "Keep Me" })).value;
   app.local.setFailureMode("write");
-  const failed = app.commands.removeScene(scene.id);
+  const failed = (await app.commands.removeScene(scene.id));
   assert.equal(failed.ok, false);
   assert.equal(app.state.scenes.some((item) => item.id === scene.id), true);
   assert.equal(app.state.activeSceneId, scene.id);

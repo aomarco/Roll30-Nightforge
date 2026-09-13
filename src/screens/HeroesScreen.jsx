@@ -1,3 +1,4 @@
+import { flushDirtyDraft } from "../ui/flushDraft.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Footprints,
@@ -36,10 +37,12 @@ import {
   xpToNextLevel,
 } from "../domain/heroes.js";
 import { DRAGON_ANCESTRIES } from "../domain/racialTraits.js";
-import { hitDiceAvailable, hitDiceTotal } from "../domain/rest.js";
+import { hitDiceAvailable, hitDiceTotal, previewRest } from "../domain/rest.js";
 import { useDialogA11y } from "../ui/useDialogA11y.js";
 import GearChapter from "./GearChapter.jsx";
 import CoinEditor from "./CoinEditor.jsx";
+import CheckPanel from "./CheckPanel.jsx";
+import RollLogPanel from "./RollLogPanel.jsx";
 
 const okay = () => ({ ok: true });
 const CLASS_ICONS = { fighter: Sword, wizard: Wand2 };
@@ -99,6 +102,8 @@ export default function HeroesScreen({
   go = okay,
   onCreate = okay,
   onUpdate = okay,
+  onRollCheck = async () => ({ ok: false, message: "Roster checks are unavailable." }),
+  rollLog = [],
   onRetire = okay,
   onRest = okay,
   portraitRepository = null,
@@ -119,9 +124,13 @@ export default function HeroesScreen({
   const [localError, setLocalError] = useState(null);
   const [restDice, setRestDice] = useState(0);
   const [restMessage, setRestMessage] = useState("");
+  const [restPreview, setRestPreview] = useState(null);
+  const [restEventId, setRestEventId] = useState(null);
+  const [dawnDay, setDawnDay] = useState(1);
   const draftRef = useRef(drafts);
   const dirtyRef = useRef(new Set());
   const timerRef = useRef(null);
+  const pendingFlushRef = useRef(null);
   const busy = persistence.status === "saving";
   const activeHero = heroes.find((hero) => hero.id === activeId) || heroes[0] || null;
   const derived = useMemo(() => activeHero ? deriveHero(activeHero) : null, [activeHero]);
@@ -142,6 +151,8 @@ export default function HeroesScreen({
     setLocalError(null);
     setRestDice(0);
     setRestMessage("");
+    setRestPreview(null);
+    setRestEventId(null);
   }, [activeHero?.id]);
 
   useEffect(() => {
@@ -163,28 +174,14 @@ export default function HeroesScreen({
   );
 
   const flushDraft = () => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-    if (!activeHero || dirtyRef.current.size === 0) return okay();
-    const fields = [...dirtyRef.current];
-    const patch = Object.fromEntries(fields.map((field) => [field, draftRef.current[field]]));
-    dirtyRef.current.clear();
-    const result = onUpdate(activeHero.id, patch) || okay();
-    if (!result.ok) {
-      fields.forEach((field) => dirtyRef.current.add(field));
-      setLocalError(result);
-    } else {
-      const next = {
-        name: result.value.name,
-        background: result.value.background || "",
-      };
-      setDrafts(next);
-      draftRef.current = next;
-      setLocalError(null);
-    }
-    return result;
+    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
+    if (!activeHero?.id) return Promise.resolve(okay());
+    return flushDirtyDraft({
+      pendingRef: pendingFlushRef, dirtyRef, draftRef,
+      save: (patch) => onUpdate(activeHero.id, patch),
+      onSaved: (next) => { setDrafts(next); setLocalError(null); },
+      onError: setLocalError,
+    });
   };
 
   if (flushRef) flushRef.current = flushDraft;
@@ -198,21 +195,21 @@ export default function HeroesScreen({
     timerRef.current = setTimeout(flushDraft, 450);
   };
 
-  const apply = (patch) => {
-    if (!activeHero || !flushDraft().ok) return null;
-    const result = onUpdate(activeHero.id, patch) || okay();
+  const apply = async (patch) => {
+    if (!activeHero || !(await flushDraft()).ok) return null;
+    const result = (await onUpdate(activeHero.id, patch)) || okay();
     setLocalError(result.ok ? null : result);
     return result;
   };
 
-  const selectHero = (heroId) => {
-    if (!flushDraft().ok) return;
+  const selectHero = async (heroId) => {
+    if (!(await flushDraft()).ok) return;
     setActiveId(heroId);
   };
 
-  const createHero = () => {
-    if (!flushDraft().ok) return;
-    const result = onCreate({}) || okay();
+  const createHero = async () => {
+    if (!(await flushDraft()).ok) return;
+    const result = (await onCreate({})) || okay();
     if (!result.ok) {
       setLocalError(result);
       return;
@@ -221,9 +218,44 @@ export default function HeroesScreen({
     setLocalError(null);
   };
 
-  const takeRest = (kind) => {
-    if (!activeHero || !flushDraft().ok) return null;
-    const result = onRest(activeHero.id, kind, { diceToSpend: kind === "short" ? restDice : 0 }) || okay();
+  const takeRest = async (kind) => {
+    if (!activeHero || !(await flushDraft()).ok) return null;
+    // Daily dawn is already idempotent by day, so it applies at once.
+    if (kind === "daily") {
+      const result = (await onRest(activeHero.id, kind, { day: dawnDay })) || okay();
+      if (!result.ok) {
+        setLocalError(result);
+        return result;
+      }
+      setLocalError(null);
+      const outcome = result.outcome;
+      setRestMessage(result.replayed ? `Dawn ${dawnDay} was already applied. No charges changed.`
+        : `Dawn ${dawnDay}: daily charges recovered${outcome?.rolls?.length ? ` (${outcome.rolls.map((roll) => `${roll.formula}: ${roll.rolls.join(" + ")}`).join("; ")})` : ""}.`);
+      return result;
+    }
+    // Short and long rests preview first so a misclick never spends dice.
+    // The preview runs locally with no persistence; confirming reuses one
+    // stable event id so a double-click cannot apply the rest twice.
+    const previewed = previewRest(activeHero, { kind, diceToSpend: kind === "short" ? restDice : 0 });
+    if (!previewed.ok) {
+      setLocalError(previewed);
+      return previewed;
+    }
+    const eventId = globalThis.crypto?.randomUUID?.() || `rest-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+    setRestPreview(previewed.value);
+    setRestEventId(eventId);
+    setLocalError(null);
+    setRestMessage("");
+    return previewed;
+  };
+
+  const confirmRest = async () => {
+    if (!activeHero || !restPreview) return null;
+    const kind = restPreview.kind;
+    const result = (await onRest(activeHero.id, kind, {
+      diceToSpend: kind === "short" ? restDice : 0,
+      eventId: restEventId,
+    })) || okay();
     if (!result.ok) {
       setLocalError(result);
       return result;
@@ -233,12 +265,20 @@ export default function HeroesScreen({
     setRestMessage(kind === "short"
       ? `Short rest: ${outcome?.healing || 0} HP restored from ${outcome?.dice || 0} hit dice.`
       : `Long rest: HP restored and ${outcome?.hitDiceRecovered || 0} hit dice recovered.`);
+    setRestPreview(null);
+    setRestEventId(null);
     return result;
   };
 
-  const confirmRetire = () => {
+  const cancelRest = () => {
+    setRestPreview(null);
+    setRestEventId(null);
+    setRestMessage("");
+  };
+
+  const confirmRetire = async () => {
     const retiredId = retiring.id;
-    const result = onRetire(retiredId) || okay();
+    const result = (await onRetire(retiredId)) || okay();
     if (!result.ok) {
       setLocalError(result);
       return;
@@ -249,35 +289,35 @@ export default function HeroesScreen({
     setLocalError(null);
   };
 
-  const changeClass = (classId) => {
+  const changeClass = async (classId) => {
     const selectedClass = CLASSES.find((entry) => entry.id === classId) || CLASSES[0];
     const backgroundSkills = BACKGROUND_DETAILS.find((entry) => entry.id === activeHero.backgroundBenefitId)?.skills || [];
-    apply({
+    (await apply({
       classId: selectedClass.id,
       saveProficiencies: [...selectedClass.saveProficiencies],
       skillProficiencies: [...backgroundSkills],
-    });
+    }));
   };
 
-  const changeRace = (raceId) => {
+  const changeRace = async (raceId) => {
     const nextRace = raceById(raceId);
     const nextSubrace = nextRace.subraces[0] || null;
     const oldGranted = grantedLanguages(activeHero.raceId, activeHero.subraceId);
     const chosenLanguages = activeHero.languages.filter((language) => !oldGranted.includes(language));
-    apply({
+    (await apply({
       raceId: nextRace.id,
       subraceId: nextSubrace?.id || null,
       languages: [...new Set([...grantedLanguages(nextRace.id, nextSubrace?.id), ...chosenLanguages])],
-    });
+    }));
   };
 
-  const changeBackground = (backgroundId) => {
+  const changeBackground = async (backgroundId) => {
     const changed = applyBackgroundBenefits(activeHero, backgroundId);
     if (!changed.ok) {
       setLocalError(changed);
       return changed;
     }
-    const result = apply(changed.value);
+    const result = (await apply(changed.value));
     if (result?.ok) {
       const nextDraft = { ...draftRef.current, background: changed.background.name };
       draftRef.current = nextDraft;
@@ -286,23 +326,23 @@ export default function HeroesScreen({
     return result;
   };
 
-  const changeSubrace = (subraceId) => {
+  const changeSubrace = async (subraceId) => {
     const nextSubrace = subraceById(activeHero.raceId, subraceId);
     const oldGranted = grantedLanguages(activeHero.raceId, activeHero.subraceId);
     const chosenLanguages = activeHero.languages.filter((language) => !oldGranted.includes(language));
-    apply({
+    (await apply({
       subraceId: nextSubrace?.id || null,
       languages: [...new Set([
         ...grantedLanguages(activeHero.raceId, nextSubrace?.id),
         ...chosenLanguages,
       ])],
-    });
+    }));
   };
 
-  const changeAbility = (ability, delta) => {
+  const changeAbility = async (ability, delta) => {
     const score = activeHero.baseAbilities[ability] + delta;
     if (!canSetBaseAbility(activeHero.baseAbilities, ability, score)) return;
-    apply({ baseAbilities: { ...activeHero.baseAbilities, [ability]: score } });
+    (await apply({ baseAbilities: { ...activeHero.baseAbilities, [ability]: score } }));
   };
 
   const { portraits, portraitError } = useHeroPortraits(heroes, portraitRepository);
@@ -311,7 +351,7 @@ export default function HeroesScreen({
   const uploadPortrait = async (event) => {
     const file = event.target.files?.[0];
     event.target.value = "";
-    if (!file || !activeHero || !flushDraft().ok) return;
+    if (!file || !activeHero || !(await flushDraft()).ok) return;
     setPortraitBusy(true);
     try {
       const result = await onReplacePortrait(activeHero.id, file);
@@ -322,7 +362,7 @@ export default function HeroesScreen({
   };
 
   const clearPortrait = async () => {
-    if (!activeHero || !flushDraft().ok) return;
+    if (!activeHero || !(await flushDraft()).ok) return;
     setPortraitBusy(true);
     try {
       const result = await onRemovePortrait(activeHero.id);
@@ -343,6 +383,14 @@ export default function HeroesScreen({
   const selectedSkills = activeHero?.skillProficiencies.filter((skillId) => !backgroundSkills.has(skillId)).length || 0;
   const overRecommended =
     selectedClass.id === "fighter" && selectedSkills > selectedClass.recommendedSkillCount;
+  const creationChecklist = activeHero ? [
+    { id: "name", label: "Name", done: Boolean(activeHero.name && activeHero.name !== "Unnamed hero"), anchor: "hero-identity" },
+    { id: "class", label: "Class", done: Boolean(activeHero.classId), anchor: "hero-identity" },
+    { id: "race", label: "Race", done: Boolean(activeHero.raceId), anchor: "hero-identity" },
+    { id: "abilities", label: "Abilities", done: derived.pointBuyRemaining === 0, anchor: "hero-abilities" },
+    { id: "skills", label: "Skills", done: selectedSkills >= selectedClass.recommendedSkillCount, anchor: "hero-abilities" },
+    { id: "equipment", label: "Equipment", done: activeHero.inventory.length > 0, anchor: "hero-equipment" },
+  ] : [];
   const saveMessage = visibleError
     ? `Not saved. ${errorText(visibleError)}`
     : busy
@@ -387,7 +435,7 @@ export default function HeroesScreen({
               <button
                 key={hero.id}
                 className={"portrait" + (hero.id === activeHero?.id ? " on" : "")}
-                onClick={() => selectHero(hero.id)}
+                onClick={async () => (await selectHero(hero.id))}
               >
                 <span className="portrait-face">
                   {portrait
@@ -406,6 +454,24 @@ export default function HeroesScreen({
             <span className="portrait-meta"><strong>New hero</strong><small>Roll a character</small></span>
           </button>
         </div>
+
+        {activeHero && (
+          <>
+            <nav className="nf-state-hero-nav" aria-label="Character sheet sections">
+              {[
+                ["hero-identity", "Identity"],
+                ["hero-abilities", "Abilities"],
+                ["hero-equipment", "Equipment"],
+              ].map(([id, label]) => <a href={`#${id}`} key={id}>{label}</a>)}
+            </nav>
+            <section className="unit nf-state-hero-checklist" aria-labelledby="hero-checklist-title">
+              <div className="unit-top"><div><span className="unit-label" id="hero-checklist-title">Creation checklist</span><p className="note">A clear setup path for this Hero. You can still play with an incomplete sheet.</p></div><span className="tag numeral">{creationChecklist.filter((entry) => entry.done).length}/{creationChecklist.length}</span></div>
+              <div className="nf-state-hero-checklist-items">
+                {creationChecklist.map((entry) => <a className={`nf-state-hero-check${entry.done ? " done" : ""}`} href={`#${entry.anchor}`} key={entry.id} aria-label={`${entry.label}: ${entry.done ? "complete" : "incomplete"}`}><span aria-hidden="true">{entry.done ? "✓" : "○"}</span>{entry.label}</a>)}
+              </div>
+            </section>
+          </>
+        )}
 
         {!activeHero ? (
           <section className="codex nf-state-heroes-empty">
@@ -494,19 +560,38 @@ export default function HeroesScreen({
                 <label className="field"><span className="label">Dice for short rest</span><input className="inp" type="number" min="0" max={hitDiceAvailable(activeHero)} value={restDice} onChange={(event) => setRestDice(Math.max(0, Math.min(hitDiceAvailable(activeHero), Math.floor(Number(event.target.value) || 0))))} disabled={busy} /></label>
               </div>
               <div className="nf-state-hero-rest-actions">
-                <button className="btn btn-line" type="button" onClick={() => takeRest("short")} disabled={busy || restDice > hitDiceAvailable(activeHero)}><HeartPulse size={15} /> Short rest</button>
-                <button className="btn btn-key" type="button" onClick={() => takeRest("long")} disabled={busy}><Zap size={15} /> Long rest</button>
+                <button className="btn btn-line" type="button" onClick={async () => (await takeRest("short"))} disabled={busy || restDice > hitDiceAvailable(activeHero) || Boolean(restPreview)}><HeartPulse size={15} /> Short rest</button>
+                <button className="btn btn-key" type="button" onClick={async () => (await takeRest("long"))} disabled={busy || Boolean(restPreview)}><Zap size={15} /> Long rest</button>
               </div>
-              <p className="note">Short rests spend the selected hit dice and refresh short-rest racial abilities. Long rests restore HP, recover half your spent hit dice, refresh long-rest abilities, and restore catalogued daily charges.</p>
+              {restPreview && (
+                <div className="nf-state-hero-panel" role="status">
+                  <div className="unit-top"><span className="unit-label">Rest preview</span><span className="tag tag-brass">{restPreview.kind} rest</span></div>
+                  <p className="note">
+                    {restPreview.kind === "short"
+                      ? `Spend ${restPreview.outcome.dice} hit dice to heal ${restPreview.outcome.healing} HP (${restPreview.outcome.previousHp} → ${restPreview.outcome.nextHp}). ${restPreview.outcome.hitDiceAvailable} dice will remain. Short-rest racial uses and charges recover.`
+                      : `Restore to full HP (${restPreview.outcome.previousHp} → ${restPreview.outcome.nextHp}) and recover ${restPreview.outcome.hitDiceRecovered} hit dice. Long-rest racial uses and charges recover.`}
+                  </p>
+                  <div className="nf-state-hero-rest-actions">
+                    <button className="btn btn-key" type="button" onClick={confirmRest} disabled={busy}>Confirm rest</button>
+                    <button className="btn btn-line" type="button" onClick={cancelRest} disabled={busy}>Cancel</button>
+                  </div>
+                </div>
+              )}
+              <p className="note">Long rests restore HP and recover up to half your total Hit Dice, rounded down (minimum one). Daily item charges recover separately when the GM advances dawn.</p>
+              <div className="nf-state-hero-rest-actions">
+                <label className="field"><span className="label">Campaign day</span><input className="inp" type="number" min="1" step="1" value={dawnDay} onChange={(event) => setDawnDay(Number(event.target.value))} disabled={busy} /></label>
+                <button className="btn btn-line" type="button" onClick={async () => (await takeRest("daily"))} disabled={busy || !Number.isSafeInteger(dawnDay) || dawnDay < 1}>Apply dawn</button>
+              </div>
+              <p className="note">Last applied: {activeHero.dailyResetDay ? `day ${activeHero.dailyResetDay}` : "none"}. Applying the same day again never rerolls charges.</p>
               {restMessage && <p className="prose-sm" role="status">{restMessage}</p>}
             </section>
 
             {/* One page. Identity, abilities and gear used to hide behind three
                 toggles; they are all one scroll now. */}
-            <section className="sheet enter" key="identity">
+            <section className="sheet enter" id="hero-identity" key="identity">
                 <header className="sheet-head">
                   <div><span className="kicker">Identity</span><h3>Name &amp; origin</h3></div>
-                  <p className="note">Who they are before the dice hit the table.</p>
+                  <p className="note">Who they are before the dice hit the table. Class feature automation is still being expanded; each incomplete rule is labelled where it matters.</p>
                 </header>
 
                 <div className="identity">
@@ -516,17 +601,17 @@ export default function HeroesScreen({
                   </label>
                   <label className="field">
                     <span className="label">Class</span>
-                    <select className="sel" value={activeHero.classId} onChange={(event) => changeClass(event.target.value)}>
+                    <select className="sel" value={activeHero.classId} onChange={async (event) => (await changeClass(event.target.value))}>
                       {CLASSES.map((entry) => <option value={entry.id} key={entry.id}>{entry.name}</option>)}
                     </select>
                   </label>
                   <label className="field">
                     <span className="label">Level</span>
-                    <input className="inp" type="number" min="1" max="20" value={activeHero.level} onChange={(event) => apply({ level: Number(event.target.value) })} />
+                    <input className="inp" type="number" min="1" max="20" value={activeHero.level} onChange={async (event) => (await apply({ level: Number(event.target.value) }))} />
                   </label>
                   <label className="field nf-state-hero-xp">
                     <span className="label">Experience</span>
-                    <input className="inp" type="number" min="0" value={activeHero.xp} onChange={(event) => apply({ xp: Math.max(0, Math.floor(Number(event.target.value) || 0)) })} />
+                    <input className="inp" type="number" min="0" value={activeHero.xp} onChange={async (event) => (await apply({ xp: Math.max(0, Math.floor(Number(event.target.value) || 0)) }))} />
                     <small className={`note${earnedLevel > activeHero.level ? " nf-state-hero-xp-ready" : ""}`}>
                       {earnedLevel > activeHero.level
                         ? `Enough for level ${earnedLevel}. Levelling up is your call — raise the Level field when you are ready.`
@@ -537,14 +622,14 @@ export default function HeroesScreen({
                   </label>
                   <label className="field">
                     <span className="label">Race</span>
-                    <select className="sel" value={activeHero.raceId} onChange={(event) => changeRace(event.target.value)}>
+                    <select className="sel" value={activeHero.raceId} onChange={async (event) => (await changeRace(event.target.value))}>
                       {RACES.map((race) => <option value={race.id} key={race.id}>{race.name}</option>)}
                     </select>
                   </label>
                   {derived.race.subraces.length > 0 && (
                     <label className="field">
                       <span className="label">Subrace</span>
-                      <select className="sel" value={activeHero.subraceId || ""} onChange={(event) => changeSubrace(event.target.value)}>
+                      <select className="sel" value={activeHero.subraceId || ""} onChange={async (event) => (await changeSubrace(event.target.value))}>
                         {derived.race.subraces.map((entry) => <option value={entry.id} key={entry.id}>{entry.name}</option>)}
                       </select>
                     </label>
@@ -555,13 +640,13 @@ export default function HeroesScreen({
                   </label>
                   <label className="field">
                     <span className="label">Alignment</span>
-                    <select className="sel" value={activeHero.alignment} onChange={(event) => apply({ alignment: event.target.value })}>
+                    <select className="sel" value={activeHero.alignment} onChange={async (event) => (await apply({ alignment: event.target.value }))}>
                       {ALIGNMENTS.map((alignment) => <option key={alignment}>{alignment}</option>)}
                     </select>
                   </label>
                   <label className="field span-all">
                     <span className="label">Background</span>
-                    <select className="sel" value={activeHero.backgroundBenefitId || ""} onChange={(event) => changeBackground(event.target.value)}>
+                    <select className="sel" value={activeHero.backgroundBenefitId || ""} onChange={async (event) => (await changeBackground(event.target.value))}>
                       <option value="">Choose a background</option>
                       {BACKGROUND_DETAILS.map((entry) => <option value={entry.id} key={entry.id}>{entry.name}</option>)}
                     </select>
@@ -583,7 +668,7 @@ export default function HeroesScreen({
                             className={`toggle-chip${selected ? " on" : ""}`}
                             disabled={isGranted}
                             title={isGranted ? `Granted by ${derived.race.name}` : undefined}
-                            onClick={() => apply({ languages: toggleValue(activeHero.languages, language) })}
+                            onClick={async () => (await apply({ languages: toggleValue(activeHero.languages, language) }))}
                           >
                             {language}{isGranted ? " · granted" : ""}
                           </button>
@@ -610,7 +695,7 @@ export default function HeroesScreen({
               {derived.traitIds.includes("draconic-ancestry") && (
                 <label className="field span-all">
                   <span className="label">Dragon ancestry</span>
-                  <select className="sel" value={activeHero.racialChoices.dragonAncestry} onChange={(event) => apply({ racialChoices: { ...activeHero.racialChoices, dragonAncestry: event.target.value } })}>
+                  <select className="sel" value={activeHero.racialChoices.dragonAncestry} onChange={async (event) => (await apply({ racialChoices: { ...activeHero.racialChoices, dragonAncestry: event.target.value } }))}>
                     {DRAGON_ANCESTRIES.map((entry) => <option value={entry.id} key={entry.id}>{entry.label} · {entry.damageType}</option>)}
                   </select>
                 </label>
@@ -618,7 +703,7 @@ export default function HeroesScreen({
               {derived.traitIds.includes("tool-proficiency") && (
                 <label className="field span-all">
                   <span className="label">Dwarven tool proficiency</span>
-                  <select className="sel" value={activeHero.racialChoices.dwarfTool} onChange={(event) => apply({ racialChoices: { ...activeHero.racialChoices, dwarfTool: event.target.value } })}>
+                  <select className="sel" value={activeHero.racialChoices.dwarfTool} onChange={async (event) => (await apply({ racialChoices: { ...activeHero.racialChoices, dwarfTool: event.target.value } }))}>
                     <option value="smiths-tools">Smith's tools</option>
                     <option value="brewers-supplies">Brewer's supplies</option>
                     <option value="masons-tools">Mason's tools</option>
@@ -631,7 +716,7 @@ export default function HeroesScreen({
                   <div className="afflict">
                     {SKILLS.map((skill) => {
                       const selected = activeHero.racialChoices.halfElfSkills.includes(skill.id);
-                      return <button type="button" className={`toggle-chip${selected ? " on" : ""}`} key={skill.id} aria-pressed={selected} disabled={!selected && activeHero.racialChoices.halfElfSkills.length >= 2} onClick={() => apply({ racialChoices: { ...activeHero.racialChoices, halfElfSkills: toggleValue(activeHero.racialChoices.halfElfSkills, skill.id) } })}>{skill.name}</button>;
+                      return <button type="button" className={`toggle-chip${selected ? " on" : ""}`} key={skill.id} aria-pressed={selected} disabled={!selected && activeHero.racialChoices.halfElfSkills.length >= 2} onClick={async () => (await apply({ racialChoices: { ...activeHero.racialChoices, halfElfSkills: toggleValue(activeHero.racialChoices.halfElfSkills, skill.id) } }))}>{skill.name}</button>;
                     })}
                   </div>
                 </div>
@@ -639,7 +724,7 @@ export default function HeroesScreen({
               {derived.traitIds.includes("extra-language") && (
                 <label className="field span-all">
                   <span className="label">High elf extra language</span>
-                  <select className="sel" value={activeHero.racialChoices.extraLanguage || ""} onChange={(event) => apply({ racialChoices: { ...activeHero.racialChoices, extraLanguage: event.target.value || null } })}>
+                  <select className="sel" value={activeHero.racialChoices.extraLanguage || ""} onChange={async (event) => (await apply({ racialChoices: { ...activeHero.racialChoices, extraLanguage: event.target.value || null } }))}>
                     <option value="">Choose a language</option>
                     {LANGUAGES.filter((language) => !grantedLanguages(activeHero.raceId, activeHero.subraceId).includes(language)).map((language) => <option value={language} key={language}>{language}</option>)}
                   </select>
@@ -648,18 +733,18 @@ export default function HeroesScreen({
               {derived.traitIds.includes("high-elf-cantrip") && (
                 <label className="field span-all">
                   <span className="label">High elf cantrip</span>
-                  <input className="inp" value={activeHero.racialChoices.highElfCantrip || ""} placeholder="Wizard cantrip name" onChange={(event) => apply({ racialChoices: { ...activeHero.racialChoices, highElfCantrip: event.target.value } })} />
+                  <input className="inp" value={activeHero.racialChoices.highElfCantrip || ""} placeholder="Wizard cantrip name" onChange={async (event) => (await apply({ racialChoices: { ...activeHero.racialChoices, highElfCantrip: event.target.value } }))} />
                 </label>
               )}
               {derived.traitIds.includes("tinker") && (
                 <label className="field span-all">
                   <span className="label">Tinker device note</span>
-                  <input className="inp" value={activeHero.racialChoices.tinkerDevice || ""} placeholder="Optional tiny device" onChange={(event) => apply({ racialChoices: { ...activeHero.racialChoices, tinkerDevice: event.target.value } })} />
+                  <input className="inp" value={activeHero.racialChoices.tinkerDevice || ""} placeholder="Optional tiny device" onChange={async (event) => (await apply({ racialChoices: { ...activeHero.racialChoices, tinkerDevice: event.target.value } }))} />
                 </label>
               )}
             </section>
 
-            <section className="sheet enter" key="abilities">
+            <section className="sheet enter" id="hero-abilities" key="abilities">
                 <header className="sheet-head">
                   <div>
                     <span className="kicker">Ability scores</span>
@@ -682,8 +767,8 @@ export default function HeroesScreen({
                         </div>
                         <span className="dial-name">{ability.name}</span>
                         <div className="dial-step">
-                          <button onClick={() => changeAbility(ability.id, -1)} disabled={base <= 8} aria-label={`Lower ${ability.short}`}><Minus size={13} /></button>
-                          <button onClick={() => changeAbility(ability.id, 1)} disabled={!canSetBaseAbility(activeHero.baseAbilities, ability.id, base + 1)} aria-label={`Raise ${ability.short}`}><Plus size={13} /></button>
+                          <button onClick={async () => (await changeAbility(ability.id, -1))} disabled={base <= 8} aria-label={`Lower ${ability.short}`}><Minus size={13} /></button>
+                          <button onClick={async () => (await changeAbility(ability.id, 1))} disabled={!canSetBaseAbility(activeHero.baseAbilities, ability.id, base + 1)} aria-label={`Raise ${ability.short}`}><Plus size={13} /></button>
                         </div>
                       </article>
                     );
@@ -710,7 +795,7 @@ export default function HeroesScreen({
                             title={proficient
                               ? `${save.name}: proficient. Tap to remove proficiency and lose +${derived.proficiency}.`
                               : `${save.name}: not proficient. Tap to add proficiency and gain +${derived.proficiency}.`}
-                            onClick={() => apply({ saveProficiencies: toggleValue(activeHero.saveProficiencies, save.id) })}
+                            onClick={async () => (await apply({ saveProficiencies: toggleValue(activeHero.saveProficiencies, save.id) }))}
                           >
                             {save.short} <strong className="numeral">{formatModifier(saveModifier(activeHero, derived, save.id))}</strong>
                           </button>
@@ -749,7 +834,7 @@ export default function HeroesScreen({
                                : proficient
                               ? `${skill.name}: proficient. Tap to remove proficiency and lose +${derived.proficiency}.`
                               : `${skill.name}: not proficient. Tap to add proficiency and gain +${derived.proficiency}.`}
-                            onClick={() => apply({ skillProficiencies: toggleValue(activeHero.skillProficiencies, skill.id) })}
+                            onClick={async () => (await apply({ skillProficiencies: toggleValue(activeHero.skillProficiencies, skill.id) }))}
                           >
                             <span>{skill.name} <small>{backgroundGranted ? `${skill.ability.toUpperCase()} · background` : skill.ability.toUpperCase()}</small></span>
                             <strong className="numeral">{formatModifier(skillModifier(activeHero, derived, skill))}</strong>
@@ -774,8 +859,16 @@ export default function HeroesScreen({
                 </div>
             </section>
 
-            <CoinEditor coins={activeHero.coins} onChange={(coins) => apply({ coins })} busy={busy} title="Coin purse" />
-            <GearChapter key={activeHero.id} hero={activeHero} apply={apply} busy={busy} />
+            <div id="hero-equipment">
+              <CoinEditor coins={activeHero.coins} onChange={async (coins) => (await apply({ coins }))} busy={busy} title="Coin purse" />
+              <GearChapter key={activeHero.id} hero={activeHero} apply={apply} busy={busy} />
+            </div>
+            <CheckPanel
+              actorName={activeHero.name}
+              disabled={busy}
+              onRoll={(specification) => onRollCheck(null, { ...specification, heroId: activeHero.id })}
+            />
+            <RollLogPanel entries={rollLog} heroId={activeHero.id} />
           </>
         )}
       </div>

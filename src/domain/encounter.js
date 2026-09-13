@@ -428,13 +428,15 @@ export function encounterExperienceAward(tokens, encounter) {
   // token counted no matter whose side it was on.
   const defeated = normalizedTokens.filter((token) =>
     token.hp <= 0 && !token.heroId && token.faction === "foe");
-  const survivors = normalizedTokens.filter((token) => token.hp > 0 && token.heroId);
+  const survivors = [...new Map(normalizedTokens.filter((token) => token.hp > 0 && token.heroId)
+    .map((token) => [token.heroId, token])).values()];
   const total = defeated.reduce((sum, token) => sum + Math.max(0, Math.floor(Number(token.xp) || 0)), 0);
   const perHero = survivors.length ? Math.floor(total / survivors.length) : 0;
   return {
     total,
     perHero,
     alreadyAwarded: Boolean(encounter?.xpAwarded),
+    encounterInstanceId: encounter?.instanceId || null,
     defeatedCount: defeated.length,
     recipients: survivors.map((token) => ({
       tokenId: token.id,
@@ -945,6 +947,10 @@ export function restartCompletedBattle(scene, { random = Math.random } = {}) {
       ammoSpentByToken: {},
       ammunitionRecovered: false,
       winnerTokenId: null,
+      boundarySequence: 0,
+      lastBoundaryId: "round-1-start",
+      resolutionSequence: 0,
+      pendingResolutions: [],
       log: [`Battle restarted with ${tokens.length} tokens.`],
     },
   }, { activeTokenId: firstToken.id });

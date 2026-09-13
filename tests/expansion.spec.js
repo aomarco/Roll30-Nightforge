@@ -3,8 +3,9 @@ import { expect, test } from "@playwright/test";
 import { createSceneRecord } from "../src/domain/records.js";
 import { createManualToken, createTurnResources, sceneViewport, setupPositionForCell } from "../src/domain/table.js";
 import { createEmptyEnvelope, sealEnvelope, serializeEnvelope } from "../src/storage/envelope.js";
-import { STORAGE_KEYS } from "../src/storage/constants.js";
+import { storageIdentity } from "../src/storage/constants.js";
 
+const STORAGE_KEYS = storageIdentity("development").keys;
 const NOW = "2026-08-24T12:00:00.000Z";
 const viewport = sceneViewport(44);
 const at = (column, row) => setupPositionForCell({ column, row }, viewport);

@@ -14,8 +14,13 @@ import {
 } from "./heroes.js";
 import { normalizeRacialChoices, normalizeRacialUses, racialStateFor } from "./racialTraits.js";
 import { normalizeCoins } from "./money.js";
+import { normalizeRollLog } from "./rollLog.js";
 import { ITEM_BY_ID } from "./catalog.js";
 import { normalizeEquipment, normalizeInventoryEntries } from "./items.js";
+import { normalizeBoard } from "./geometry.js";
+import { normalizeItemInstances } from "./itemInstances.js";
+import { normalizeRecoveryLedger, normalizeResourceLedger } from "./resources.js";
+import { normalizeEffectDefinitions } from "./effects.js";
 import {
   normalizeChests,
   normalizeDifficultTerrain,
@@ -68,6 +73,7 @@ export function createSceneRecord(
   const sceneId = nullableId(input.id) || nullableId(id);
   if (!sceneId) throw new TypeError("A Scene requires a stable id.");
   const kind = input.kind === "play" ? "play" : "battle";
+  const board = normalizeBoard(input.board);
   const tokens = normalizeTableTokens(input.tokens);
 
   return {
@@ -84,7 +90,10 @@ export function createSceneRecord(
     wallsVisible: input.wallsVisible !== false,
     walls: normalizeWalls(input.walls),
     chests: normalizeChests(input.chests),
-    difficultTerrain: normalizeDifficultTerrain(input.difficultTerrain),
+    board,
+    effectDefinitions: normalizeEffectDefinitions(input.effectDefinitions),
+    difficultTerrain: normalizeDifficultTerrain(input.difficultTerrain, board),
+    rollLog: normalizeRollLog(input.rollLog, { now }),
     tokens,
     encounter: kind === "play" ? null : normalizeEncounter(input.encounter, tokens),
     createdAt: timestamp(input.createdAt, now),
@@ -131,6 +140,7 @@ export function createHeroRecord(
     // to zero lets every Hero saved before this field existed load unchanged,
     // which is why the schema version does not move.
     xp: Math.max(0, Math.floor(finiteNumber(input.xp, 0))),
+    dailyResetDay: Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, Math.floor(finiteNumber(input.dailyResetDay, 0)))),
     raceId: selectedRace.id,
     subraceId: selectedSubrace?.id || null,
     alignment: ALIGNMENTS.includes(input.alignment) ? input.alignment : "Neutral",
@@ -153,6 +163,11 @@ export function createHeroRecord(
     enchantments: cleanEnchantments(input.enchantments),
     attunedItemIds: cleanIdList(Object.hasOwn(input, "attunedItemIds") ? input.attunedItemIds : input.wornItemIds),
     wornItemIds: cleanIdList(input.wornItemIds),
+    attunedInstanceIds: cleanIdList(input.attunedInstanceIds),
+    wornInstanceIds: cleanIdList(input.wornInstanceIds),
+    itemInstances: normalizeItemInstances(input.itemInstances),
+    resourceLedger: normalizeResourceLedger(input.resourceLedger),
+    recoveryLedger: normalizeRecoveryLedger(input.recoveryLedger),
     itemCharges: input.itemCharges && typeof input.itemCharges === "object" && !Array.isArray(input.itemCharges)
       ? input.itemCharges
       : {},

@@ -428,26 +428,26 @@ test("incapacitating conditions disable Action and Bonus attacks", () => {
   assert.equal(bonusAttackAvailability(scene).code, "BONUS_ATTACK_INCAPACITATED");
 });
 
-test("resolved attacks and unlocked Bonus state survive repository reload", () => {
+test("resolved attacks and unlocked Bonus state survive repository reload", async () => {
   const storage = createMemoryStorage();
   const repository = createSceneRepository(createStateRepository(storage, { clock: () => NOW }), { idFactory: () => "phase9-persisted", clock: () => NOW });
   const active = token("active", 1, 1, { inventory: [item("dagger", 2)], loadout: { mainHand: "dagger", offHand: "dagger" } });
-  const created = repository.create(battleScene({ tokens: [active, token("target", 2, 1, { ac: 1, hp: 30, maxHp: 30 })] })).value;
+  const created = (await repository.create(battleScene({ tokens: [active, token("target", 2, 1, { ac: 1, hp: 30, maxHp: 30 })] }))).value;
   const attack = performWeaponAttack(created, { weaponId: "dagger", hand: "mainHand", targetId: "target", viewport: VIEWPORT }, { random: sequence(0.5, 0.5) });
-  assert.equal(repository.update(created.id, attack.value).ok, true);
-  const reloaded = repository.get(created.id).value;
+  assert.equal((await repository.update(created.id, attack.value)).ok, true);
+  const reloaded = (await repository.get(created.id)).value;
   assert.ok(reloaded.tokens.find(({ id }) => id === "target").hp < 30);
   assert.equal(activeTurnContext(reloaded).value.resources.actionSpent, true);
   assert.equal(activeTurnContext(reloaded).value.resources.offHandAttackAvailable, true);
 });
 
-test("a failed attack write preserves the entire last valid Battle", () => {
+test("a failed attack write preserves the entire last valid Battle", async () => {
   const storage = createMemoryStorage();
   const repository = createSceneRepository(createStateRepository(storage, { clock: () => NOW }), { idFactory: () => "phase9-failure", clock: () => NOW });
-  const created = repository.create(battleScene()).value;
+  const created = (await repository.create(battleScene())).value;
   const attack = performWeaponAttack(created, { weaponId: "longsword", hand: "mainHand", targetId: "target", viewport: VIEWPORT }, { random: sequence(0.5, 0.5) });
   storage.setFailureMode("write");
-  assert.equal(repository.update(created.id, attack.value).ok, false);
+  assert.equal((await repository.update(created.id, attack.value)).ok, false);
   storage.setFailureMode(null);
-  assert.deepEqual(repository.get(created.id).value, created);
+  assert.deepEqual((await repository.get(created.id)).value, created);
 });

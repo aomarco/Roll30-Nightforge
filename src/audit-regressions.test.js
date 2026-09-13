@@ -95,23 +95,23 @@ test("encounter history retains bounded recent strings", () => {
   assert.equal(appendEncounterLog(normalized.log, "newest").at(-1), "newest");
 });
 
-test("repository creation rejects a stable-id collision without mutation", () => {
+test("repository creation rejects a stable-id collision without mutation", async () => {
   const state = createStateRepository(createMemoryStorage(), { clock: () => NOW });
   const scenes = createSceneRepository(state, { clock: () => NOW, idFactory: () => "same-id" });
-  assert.equal(scenes.create({ name: "First" }).ok, true);
-  const conflict = scenes.create({ name: "Second" });
+  assert.equal((await scenes.create({ name: "First" })).ok, true);
+  const conflict = (await scenes.create({ name: "Second" }));
   assert.equal(conflict.ok, false);
   assert.equal(conflict.code, "scenes-id-conflict");
-  assert.deepEqual(scenes.list().value.map((scene) => scene.name), ["First"]);
+  assert.deepEqual((await scenes.list()).value.map((scene) => scene.name), ["First"]);
 
-  const activeConflict = scenes.createActive({ name: "Active duplicate" });
+  const activeConflict = await scenes.createActive({ name: "Active duplicate" });
   assert.equal(activeConflict.ok, false);
   assert.equal(activeConflict.code, "scenes-id-conflict");
 
   const heroState = createStateRepository(createMemoryStorage(), { clock: () => NOW });
   const heroes = createHeroRepository(heroState, { clock: () => NOW, idFactory: () => "same-hero" });
-  assert.equal(heroes.create({ name: "First Hero" }).ok, true);
-  assert.equal(heroes.create({ name: "Duplicate Hero" }).code, "heroes-id-conflict");
+  assert.equal((await heroes.create({ name: "First Hero" })).ok, true);
+  assert.equal((await heroes.create({ name: "Duplicate Hero" })).code, "heroes-id-conflict");
 });
 
 test("every Table creation path shares recoverable stable-id validation", () => {
@@ -153,14 +153,14 @@ test("an exhausted storage revision fails explicitly instead of overflowing", ()
   assert.equal(state.load().value.revision, Number.MAX_SAFE_INTEGER);
 });
 
-test("entity updates reject UI state produced from an older revision", () => {
+test("entity updates reject UI state produced from an older revision", async () => {
   const state = createStateRepository(createMemoryStorage(), { clock: () => NOW });
   const scenes = createSceneRepository(state, { clock: () => NOW, idFactory: () => "scene-1" });
-  const created = scenes.create({ name: "Current" });
-  const conflict = scenes.update(created.value.id, { name: "Stale" }, { expectedRevision: 0 });
+  const created = (await scenes.create({ name: "Current" }));
+  const conflict = (await scenes.update(created.value.id, { name: "Stale" }, { expectedRevision: 0 }));
   assert.equal(conflict.ok, false);
   assert.equal(conflict.code, "storage-revision-conflict");
-  assert.equal(scenes.get(created.value.id).value.name, "Current");
+  assert.equal((await scenes.get(created.value.id)).value.name, "Current");
 });
 
 test("artwork rejects oversized bytes before invoking the decoder", async () => {

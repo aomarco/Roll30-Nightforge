@@ -1,10 +1,11 @@
-export const ROUTES = Object.freeze(["home", "characters", "settings", "board"]);
+export const ROUTES = Object.freeze(["home", "characters", "settings", "board", "backups"]);
 
 export function createInitialApplicationState() {
   return {
     route: { page: "home" },
     scenes: [],
     heroes: [],
+    rollLog: [],
     activeSceneId: null,
     lifecycle: "booting",
     persistence: {
@@ -25,6 +26,7 @@ export function applicationReducer(state, action) {
         route: { page: "home" },
         scenes: action.scenes,
         heroes: action.heroes,
+        rollLog: action.rollLog || [],
         activeSceneId: action.activeSceneId,
         lifecycle: "ready",
         persistence: {
@@ -33,6 +35,8 @@ export function applicationReducer(state, action) {
           error: null,
           recovered: Boolean(action.recovered),
           recoverySource: action.recoverySource || null,
+          classification: action.classification || null,
+          readOnly: Boolean(action.readOnly),
         },
       };
     case "hydrate-failure":
@@ -57,6 +61,7 @@ export function applicationReducer(state, action) {
         route,
         scenes: action.scenes,
         heroes: action.heroes,
+        rollLog: action.rollLog || state.rollLog,
         activeSceneId,
         lifecycle: "ready",
         persistence: {
@@ -66,6 +71,8 @@ export function applicationReducer(state, action) {
           error: null,
           recovered: false,
           recoverySource: null,
+          readOnly: Boolean(action.readOnly),
+          classification: action.classification || null,
         },
       };
     }
@@ -79,6 +86,8 @@ export function applicationReducer(state, action) {
       return { ...state, scenes: action.scenes };
     case "replace-heroes":
       return { ...state, heroes: action.heroes };
+    case "replace-roll-log":
+      return { ...state, rollLog: action.rollLog || [] };
     case "persistence-saving":
       return {
         ...state,

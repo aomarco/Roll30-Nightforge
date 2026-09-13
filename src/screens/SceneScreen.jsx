@@ -1,3 +1,4 @@
+import { flushDirtyDraft } from "../ui/flushDraft.js";
 import { useEffect, useRef, useState } from "react";
 import {
   ChevronLeft,
@@ -9,6 +10,7 @@ import {
   Square,
   Swords,
 } from "lucide-react";
+import { DEFAULT_BOARD, normalizeBoard, resizeBoard } from "../domain/geometry.js";
 
 const okay = () => ({ ok: true });
 const asyncOkay = async () => okay();
@@ -70,12 +72,14 @@ export default function SceneScreen({
   const [name, setName] = useState(() => scene?.name || "Untitled scene");
   const [mode, setMode] = useState(() => scene?.kind || "battle");
   const [gridSize, setGridSize] = useState(() => scene?.gridSize || 44);
+  const [board, setBoard] = useState(() => normalizeBoard(scene?.board || DEFAULT_BOARD));
   const [artworkBusy, setArtworkBusy] = useState(false);
   const [localError, setLocalError] = useState(null);
   const [cleanupIssue, setCleanupIssue] = useState(null);
-  const draftRef = useRef({ name, gridSize });
+  const draftRef = useRef({ name, gridSize, board });
   const dirtyRef = useRef(new Set());
   const timerRef = useRef(null);
+  const pendingFlushRef = useRef(null);
   const { url: map, error: artworkError } = useArtworkUrl(scene, artworkRepository);
   const noMap = Boolean(scene?.blankCanvas);
 
@@ -85,11 +89,13 @@ export default function SceneScreen({
     setName(nextName);
     setMode(scene?.kind || "battle");
     setGridSize(nextGridSize);
-    draftRef.current = { name: nextName, gridSize: nextGridSize };
+    const nextBoard = normalizeBoard(scene?.board || DEFAULT_BOARD);
+    setBoard(nextBoard);
+    draftRef.current = { name: nextName, gridSize: nextGridSize, board: nextBoard };
     dirtyRef.current.clear();
     setLocalError(null);
     setCleanupIssue(null);
-  }, [scene?.id]);
+  }, [scene?.id, scene?.name, scene?.kind, scene?.gridSize, scene?.board]);
 
   useEffect(() => {
     if (!scene?.id) return;
@@ -101,30 +107,23 @@ export default function SceneScreen({
       setGridSize(scene.gridSize || 44);
       draftRef.current.gridSize = scene.gridSize || 44;
     }
+    if (!dirtyRef.current.has("board")) {
+      const nextBoard = normalizeBoard(scene.board || DEFAULT_BOARD);
+      setBoard(nextBoard);
+      draftRef.current.board = nextBoard;
+    }
     setMode(scene.kind || "battle");
-  }, [scene?.id, scene?.name, scene?.kind, scene?.gridSize]);
+  }, [scene?.id, scene?.name, scene?.kind, scene?.gridSize, scene?.board]);
 
   const flushDraft = () => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-    if (!scene?.id || dirtyRef.current.size === 0) return okay();
-    const fields = [...dirtyRef.current];
-    const patch = Object.fromEntries(fields.map((field) => [field, draftRef.current[field]]));
-    dirtyRef.current.clear();
-    const result = onUpdate(scene.id, patch) || okay();
-    if (!result.ok) {
-      for (const field of fields) dirtyRef.current.add(field);
-      setLocalError(result);
-    } else {
-      if (fields.includes("name")) {
-        setName(result.value.name);
-        draftRef.current.name = result.value.name;
-      }
-      setLocalError(null);
-    }
-    return result;
+    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
+    if (!scene?.id) return Promise.resolve(okay());
+    return flushDirtyDraft({
+      pendingRef: pendingFlushRef, dirtyRef, draftRef,
+      save: (patch) => onUpdate(scene.id, patch),
+      onSaved: (next) => { setName(next.name); setGridSize(next.gridSize); if (next.board) setBoard(next.board); setLocalError(null); },
+      onError: setLocalError,
+    });
   };
 
   if (flushRef) flushRef.current = flushDraft;
@@ -143,9 +142,26 @@ export default function SceneScreen({
     timerRef.current = setTimeout(flushDraft, 450);
   };
 
-  const changeMode = (nextMode) => {
+  const queueBoardSave = (nextBoard) => {
+    if (!scene?.id) return;
+    const normalized = normalizeBoard(nextBoard);
+    const preview = resizeBoard(scene.board || DEFAULT_BOARD, normalized, {
+      tokens: scene.tokens,
+      chests: scene.chests,
+      walls: scene.walls,
+      difficultTerrain: scene.difficultTerrain,
+    });
+    if (!preview.ok) {
+      setLocalError(preview);
+      return;
+    }
+    setBoard(normalized);
+    queueSave("board", normalized);
+  };
+
+  const changeMode = async (nextMode) => {
     if (nextMode === mode) return;
-    const flushed = flushDraft();
+    const flushed = (await flushDraft());
     if (!flushed.ok) return;
     if (
       mode === "battle" &&
@@ -157,7 +173,7 @@ export default function SceneScreen({
     ) {
       return;
     }
-    const result = onUpdate(scene.id, { kind: nextMode }) || okay();
+    const result = (await onUpdate(scene.id, { kind: nextMode })) || okay();
     if (!result.ok) {
       setLocalError(result);
       return;
@@ -179,7 +195,7 @@ export default function SceneScreen({
   const onUpload = async (event) => {
     const file = event.target.files?.[0];
     event.target.value = "";
-    if (!file || !scene?.id || !flushDraft().ok) return;
+    if (!file || !scene?.id || !(await flushDraft()).ok) return;
     setArtworkBusy(true);
     try {
       recordArtworkResult(await onReplaceArtwork(scene.id, file));
@@ -189,7 +205,7 @@ export default function SceneScreen({
   };
 
   const onNoMap = async () => {
-    if (!scene?.id || !flushDraft().ok) return;
+    if (!scene?.id || !(await flushDraft()).ok) return;
     setArtworkBusy(true);
     try {
       recordArtworkResult(await onUseWhiteCanvas(scene.id));
@@ -249,7 +265,7 @@ export default function SceneScreen({
               <h2>{name || "Untitled map"}</h2>
               {mode === "battle" && (
                 <span className="rig-scale numeral">
-                  5 ft squares · {gridSize}px
+                  {board.feetPerCell} ft squares · {board.columns}×{board.rows} · {gridSize}px
                 </span>
               )}
             </div>
@@ -306,7 +322,7 @@ export default function SceneScreen({
               <div className="picks">
                 <button
                   className={"pick" + (mode === "play" ? " on" : "")}
-                  onClick={() => changeMode("play")}
+                  onClick={async () => (await changeMode("play"))}
                 >
                   <span className="pick-ico"><Sparkles size={18} /></span>
                   <span>
@@ -316,7 +332,7 @@ export default function SceneScreen({
                 </button>
                 <button
                   className={"pick" + (mode === "battle" ? " on" : "")}
-                  onClick={() => changeMode("battle")}
+                  onClick={async () => (await changeMode("battle"))}
                 >
                   <span className="pick-ico"><Swords size={18} /></span>
                   <span>
@@ -352,7 +368,7 @@ export default function SceneScreen({
                 <span className="numeral">03</span>
                 <h3>Battle scale</h3>
                 <span className="push tag tag-brass">
-                  <Grid3x3 size={12} /> 5 ft squares
+                  <Grid3x3 size={12} /> {board.feetPerCell} ft squares · {board.columns}×{board.rows}
                 </span>
               </div>
 
@@ -383,6 +399,42 @@ export default function SceneScreen({
                   <span>80</span>
                 </div>
               </div>
+              <div className="chit-row" style={{ marginTop: 12 }}>
+                <label className="field compact-field">
+                  <span>Columns</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="200"
+                    value={board.columns}
+                    onChange={(event) => queueBoardSave({ ...board, columns: event.target.value })}
+                    aria-label="Board columns"
+                  />
+                </label>
+                <label className="field compact-field">
+                  <span>Rows</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="200"
+                    value={board.rows}
+                    onChange={(event) => queueBoardSave({ ...board, rows: event.target.value })}
+                    aria-label="Board rows"
+                  />
+                </label>
+                <label className="field compact-field">
+                  <span>Feet / cell</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="100"
+                    value={board.feetPerCell}
+                    onChange={(event) => queueBoardSave({ ...board, feetPerCell: event.target.value })}
+                    aria-label="Feet per board cell"
+                  />
+                </label>
+              </div>
+              <p className="note">Board edits preserve stored coordinates. A shrink that would move tokens, walls, terrain, or pending targets out of bounds is held for review.</p>
             </section>
           )}
         </div>

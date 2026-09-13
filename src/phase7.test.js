@@ -269,7 +269,7 @@ test("encounter normalization removes stale token references", () => {
   assert.equal(encounter.winnerTokenId, null);
 });
 
-test("complete Battle Setup and transition persist through a repository reload", () => {
+test("complete Battle Setup and transition persist through a repository reload", async () => {
   const storage = createMemoryStorage();
   const makeRepository = () => createSceneRepository(createStateRepository(storage, { clock: () => NOW }), {
     idFactory: () => "scene-phase7",
@@ -279,11 +279,11 @@ test("complete Battle Setup and transition persist through a repository reload",
   const heroToken = createHeroTokenSnapshot(createTestHero(), { id: "hero-token", position: { xPercent: 20, yPercent: 20 } });
   const manual = createManualToken({ id: "manual-token", position: { xPercent: 70, yPercent: 70 } });
   const chest = createChest({ id: "chest", position: { xPercent: 45, yPercent: 45 }, inventory: [inventory("dagger", 2)] });
-  const created = repository.create({ kind: "battle", tokens: [heroToken, manual], chests: [chest] });
+  const created = (await repository.create({ kind: "battle", tokens: [heroToken, manual], chests: [chest] }));
   const transition = prepareBattleStart(created.value, { viewport: VIEWPORT, random: () => 0.25 });
-  assert.equal(repository.update(created.value.id, transition.value).ok, true);
+  assert.equal((await repository.update(created.value.id, transition.value)).ok, true);
 
-  const reloaded = makeRepository().get(created.value.id).value;
+  const reloaded = (await makeRepository().get(created.value.id)).value;
   assert.equal(reloaded.tokens.length, 2);
   assert.equal(reloaded.tokens[0].heroId, "hero-mira");
   assert.deepEqual(reloaded.chests[0].inventory, [inventory("dagger", 2)]);
@@ -291,7 +291,7 @@ test("complete Battle Setup and transition persist through a repository reload",
   assert.equal(reloaded.encounter.initiativeOrder.length, 2);
 });
 
-test("an editable pre-Battle Setup persists every configured entity before transition", () => {
+test("an editable pre-Battle Setup persists every configured entity before transition", async () => {
   const storage = createMemoryStorage();
   const makeRepository = () => createSceneRepository(createStateRepository(storage, { clock: () => NOW }), {
     idFactory: () => "editable-setup",
@@ -300,10 +300,10 @@ test("an editable pre-Battle Setup persists every configured entity before trans
   const heroToken = createHeroTokenSnapshot(createTestHero(), { id: "hero-token", position: setupPositionForCell({ column: 3, row: 4 }, VIEWPORT) });
   const manual = createManualToken({ id: "manual", name: "Configured guard", position: setupPositionForCell({ column: 8, row: 4 }, VIEWPORT) });
   const chest = createChest({ id: "chest", position: setupPositionForCell({ column: 6, row: 8 }, VIEWPORT), inventory: [inventory("arrow", 40)] });
-  const created = makeRepository().create({ kind: "battle", tokens: [heroToken, manual], chests: [chest] });
+  const created = (await makeRepository().create({ kind: "battle", tokens: [heroToken, manual], chests: [chest] }));
   assert.equal(created.ok, true);
 
-  const reloaded = makeRepository().get(created.value.id).value;
+  const reloaded = (await makeRepository().get(created.value.id)).value;
   assert.equal(reloaded.encounter, null);
   assert.equal(reloaded.tokens[0].heroId, "hero-mira");
   assert.equal(reloaded.tokens[1].name, "Configured guard");
@@ -334,16 +334,16 @@ test("abandoning Battle clears encounter state while preserving current Setup as
   assert.deepEqual(abandoned.chests, started.chests);
 });
 
-test("a failed Phase 7 repository update preserves the last valid Setup", () => {
+test("a failed Phase 7 repository update preserves the last valid Setup", async () => {
   const storage = createMemoryStorage();
   const repository = createSceneRepository(createStateRepository(storage, { clock: () => NOW }), {
     idFactory: () => "failure-scene",
     clock: () => NOW,
   });
-  const created = repository.create({ kind: "battle", tokens: [createManualToken({ id: "safe-token" })] }).value;
+  const created = (await repository.create({ kind: "battle", tokens: [createManualToken({ id: "safe-token" })] })).value;
   storage.setFailureMode("write");
-  const failed = repository.update(created.id, { chests: [createChest({ id: "unsaved" })] });
+  const failed = (await repository.update(created.id, { chests: [createChest({ id: "unsaved" })] }));
   assert.equal(failed.ok, false);
   storage.setFailureMode(null);
-  assert.deepEqual(repository.get(created.id).value, created);
+  assert.deepEqual((await repository.get(created.id)).value, created);
 });

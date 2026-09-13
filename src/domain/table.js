@@ -22,6 +22,11 @@ import {
 } from "./items.js";
 import { normalizeCoins } from "./money.js";
 import { normalizeRacialChoices, normalizeRacialUses, resetRacialUses } from "./racialTraits.js";
+import { DEFAULT_BOARD, footprintForPosition, footprintForToken, normalizeBoard } from "./geometry.js";
+import { normalizeConditionSources, normalizeEffects } from "./effects.js";
+import { normalizePendingResolutions } from "./resolutionScheduler.js";
+import { normalizeItemInstances } from "./itemInstances.js";
+import { normalizeResourceLedger } from "./resources.js";
 
 const SKILL_BY_ID = Object.freeze(Object.fromEntries(SKILLS.map((skill) => [skill.id, skill])));
 
@@ -277,6 +282,18 @@ const uniqueNormalizedRecords = (records, normalize) => {
   return normalized;
 };
 
+const normalizeNumericMap = (value) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value)
+    .filter(([key, number]) => typeof key === "string" && key.trim() && Number.isFinite(Number(number)))
+    .map(([key, number]) => [key, Math.floor(Number(number))]));
+};
+
+const normalizeTokenOverrides = (value) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value).filter(([key]) => typeof key === "string" && key.trim()));
+};
+
 export const TOKEN_SIZES = Object.freeze(["tiny", "small", "medium", "large", "huge", "gargantuan"]);
 export const MOVEMENT_MODES = Object.freeze(["walk", "fly", "swim", "climb"]);
 
@@ -296,13 +313,14 @@ export function normalizeSpeeds(input, fallback = 30) {
   ]));
 }
 
-export function normalizeDifficultTerrain(input) {
+export function normalizeDifficultTerrain(input, board = DEFAULT_BOARD) {
+  const normalizedBoard = normalizeBoard(board);
   const seen = new Set();
   for (const candidate of Array.isArray(input) ? input : []) {
     const match = typeof candidate === "string" ? /^(\d+):(\d+)$/.exec(candidate) : null;
     const column = match ? Number(match[1]) : Math.floor(finite(candidate?.column, -1));
     const row = match ? Number(match[2]) : Math.floor(finite(candidate?.row, -1));
-    if (column >= 0 && column < SCENE_COLUMNS && row >= 0 && row < SCENE_ROWS) seen.add(`${column}:${row}`);
+    if (column >= 0 && column < normalizedBoard.columns && row >= 0 && row < normalizedBoard.rows) seen.add(`${column}:${row}`);
   }
   return [...seen].sort((left, right) => {
     const [lc, lr] = left.split(":").map(Number);
@@ -387,6 +405,36 @@ export function normalizeTokenAttack(input = {}, ordinal = 0) {
   // A melee attack keeps distance bands only when it can be thrown; that is
   // what turns "swing it" into "swing it or throw it".
   const banded = rangeKind === "ranged" || throwable;
+  const rangeModes = Array.isArray(input.rangeModes) && input.rangeModes.length
+    ? input.rangeModes.slice(0, 4).flatMap((mode) => {
+      if (!mode || typeof mode !== "object") return [];
+      const kind = mode.kind === "ranged" ? "ranged" : "melee";
+      const normal = Math.max(0, Math.floor(finite(mode.normalFeet)));
+      const long = Math.max(normal, Math.floor(finite(mode.longFeet)));
+      return [{
+        kind,
+        reachFeet: Math.max(5, Math.floor(finite(mode.reachFeet, 5))),
+        normalFeet: kind === "ranged" ? Math.max(5, normal || 20) : 0,
+        longFeet: kind === "ranged" ? Math.max(5, long || normal || 20) : 0,
+      }];
+    })
+    : [{
+      kind: rangeKind,
+      reachFeet: rangeKind === "melee" ? Math.max(5, Math.floor(finite(input.reachFeet, 5))) : 5,
+      normalFeet: banded ? Math.max(5, normalFeet || 20) : 0,
+      longFeet: banded ? Math.max(5, longFeet || normalFeet || 20) : 0,
+    }];
+  const damageVariants = Array.isArray(input.damageVariants)
+    ? input.damageVariants.slice(0, 8).flatMap((variant, index) => {
+      if (!variant || typeof variant !== "object" || typeof variant.damageDice !== "string" || !variant.damageDice.trim()) return [];
+      return [{
+        id: typeof variant.id === "string" && variant.id.trim() ? variant.id.trim() : `${attackSlug(name, `attack-${ordinal + 1}`)}-${index + 1}`,
+        damageDice: variant.damageDice.trim().slice(0, 20),
+        damageType: typeof variant.damageType === "string" && variant.damageType.trim() ? variant.damageType.trim().slice(0, 30) : null,
+        note: typeof variant.note === "string" ? variant.note.slice(0, 120) : null,
+      }];
+    })
+    : [];
   return {
     id: typeof input.id === "string" && input.id.trim()
       ? input.id.trim()
@@ -422,6 +470,8 @@ export function normalizeTokenAttack(input = {}, ordinal = 0) {
         })
       : [],
     note: typeof input.note === "string" ? input.note.slice(0, 600) : "",
+    rangeModes,
+    damageVariants,
   };
 }
 
@@ -506,6 +556,20 @@ export function normalizeTableToken(input = {}, { id, ordinal = 0 } = {}) {
     skillProficiencies: Array.isArray(input.skillProficiencies)
       ? [...new Set(input.skillProficiencies.filter((skill) => SKILL_BY_ID[skill]))]
       : [],
+    // Monsters carry finished authored totals. Heroes and manual tokens leave
+    // these maps empty and continue through the ordinary derived pipeline.
+    saveTotals: normalizeNumericMap(input.saveTotals),
+    skillTotals: normalizeNumericMap(input.skillTotals),
+    skillExpertise: Array.isArray(input.skillExpertise)
+      ? [...new Set(input.skillExpertise.filter((skill) => SKILL_BY_ID[skill]))]
+      : [],
+    saveOverrides: normalizeNumericMap(input.saveOverrides),
+    skillOverrides: normalizeNumericMap(input.skillOverrides),
+    passivePerception: Math.max(0, Math.floor(finite(input.passivePerception, 0))),
+    sourceSnapshotVersion: typeof input.sourceSnapshotVersion === "string" && input.sourceSnapshotVersion.trim()
+      ? input.sourceSnapshotVersion.trim().slice(0, 300)
+      : null,
+    overrides: normalizeTokenOverrides(input.overrides),
     toolProficiencies: Array.isArray(input.toolProficiencies)
       ? [...new Set(input.toolProficiencies.filter((tool) => typeof tool === "string" && tool.trim()))]
       : [],
@@ -523,7 +587,24 @@ export function normalizeTableToken(input = {}, { id, ordinal = 0 } = {}) {
       ? null
       : Number(input.challengeRating),
     statBlockNotes: normalizeStatBlockNotes(input.statBlockNotes),
+    actionCapabilities: Array.isArray(input.actionCapabilities)
+      ? input.actionCapabilities.slice(0, 64).flatMap((entry) => entry && typeof entry === "object" && typeof entry.id === "string"
+        ? [{
+          id: entry.id.slice(0, 200),
+          sourceRecordId: typeof entry.sourceRecordId === "string" ? entry.sourceRecordId.slice(0, 200) : null,
+          sourceActionName: typeof entry.sourceActionName === "string" ? entry.sourceActionName.slice(0, 80) : "",
+          status: ["implemented", "assisted", "reference-only"].includes(entry.status) ? entry.status : "reference-only",
+          operation: typeof entry.operation === "string" ? entry.operation.slice(0, 80) : null,
+          reason: typeof entry.reason === "string" ? entry.reason.slice(0, 400) : null,
+        }] : [])
+      : [],
+    capabilityStatus: ["implemented", "assisted", "reference-only", "partially-supported"].includes(input.capabilityStatus)
+      ? input.capabilityStatus
+      : null,
+    sourceDatasetHash: typeof input.sourceDatasetHash === "string" ? input.sourceDatasetHash.slice(0, 128) : null,
     inventory: inventoryResult.inventory,
+    itemInstances: normalizeItemInstances(input.itemInstances),
+    resourceLedger: normalizeResourceLedger(input.resourceLedger),
     coins: normalizeCoins(input.coins),
     loadout: input.loadout || { mainHand: null, offHand: null },
     armorId: typeof input.armorId === "string" ? input.armorId : null,
@@ -547,6 +628,8 @@ export function normalizeTableToken(input = {}, { id, ordinal = 0 } = {}) {
     conditions: normalizeConditions(input.conditions),
     conditionImmunities: normalizeConditionImmunities(input.conditionImmunities),
     conditionExpiries: normalizeConditionExpiries(input.conditionExpiries, input.conditions),
+    conditionSources: normalizeConditionSources(input.conditionSources, input.conditions),
+    effects: normalizeEffects(input.effects),
     // Which damage types this creature shrugs off, ignores, or suffers double
     // from. Monsters bring these from their stat block; everything else starts
     // empty, which is exactly how every save written before today behaved.
@@ -713,10 +796,19 @@ export function createMonsterToken(monster, { id, ordinal = 0, position, name } 
     wisdom: monster.wisdom,
     charisma: monster.charisma,
     saveProficiencies: monster.saveProficiencies,
+    skillProficiencies: monster.skillProficiencies,
+    saveTotals: monster.saveTotals,
+    skillTotals: monster.skillTotals,
+    skillExpertise: monster.skillExpertise,
+    passivePerception: monster.passivePerception,
+    sourceSnapshotVersion: `${monster.sourceDatasetHash || "unknown"}:${monster.definitionVersion || 1}`,
     size: monster.size,
     initiativeBonus: abilityModifier(monster.dexterity),
     attacks: monster.attacks,
     attacksPerAction: monster.attacksPerAction,
+    actionCapabilities: monster.actionCapabilities,
+    capabilityStatus: monster.capabilityStatus,
+    sourceDatasetHash: monster.sourceDatasetHash,
     // Generated stat blocks do not publish treasure. Only weapons explicitly
     // named by an authored attack become loot; natural attacks and inferred
     // armour never invent inventory the source did not actually name.
@@ -814,6 +906,10 @@ export const tokenAbilityScore = (token, ability) =>
  */
 export function tokenSaveModifier(token, ability) {
   if (!ABILITY_KEYS.includes(ability)) return 0;
+  const override = token?.saveOverrides?.[ability];
+  if (Number.isFinite(Number(override))) return Math.floor(Number(override));
+  const authored = token?.saveTotals?.[ability];
+  if (Number.isFinite(Number(authored))) return Math.floor(Number(authored));
   const base = abilityModifier(tokenAbilityScore(token, ability));
   const proficient = (token?.saveProficiencies || []).includes(ability);
   return base
@@ -825,6 +921,9 @@ export const tokenSaveProfile = (token) => ABILITY_KEYS.map((ability) => ({
   ability,
   modifier: tokenSaveModifier(token, ability),
   proficient: (token?.saveProficiencies || []).includes(ability),
+  source: Number.isFinite(Number(token?.saveOverrides?.[ability]))
+    ? "override"
+    : Number.isFinite(Number(token?.saveTotals?.[ability])) ? "authored" : "derived",
 }));
 
 export const skillById = (skillId) => SKILL_BY_ID[skillId] || null;
@@ -838,6 +937,10 @@ export const skillById = (skillId) => SKILL_BY_ID[skillId] || null;
 export function tokenSkillModifier(token, skillId, context = null) {
   const skill = SKILL_BY_ID[skillId];
   if (!skill) return 0;
+  const override = token?.skillOverrides?.[skill.id];
+  if (Number.isFinite(Number(override))) return Math.floor(Number(override));
+  const authored = token?.skillTotals?.[skill.id];
+  if (Number.isFinite(Number(authored))) return Math.floor(Number(authored));
   const base = abilityModifier(tokenAbilityScore(token, skill.ability));
   const proficient = (token?.skillProficiencies || []).includes(skill.id);
   const expertise = proficient && context && (token?.racialExpertise || []).some((entry) =>
@@ -852,6 +955,10 @@ export const tokenSkillProfile = (token) => SKILLS.map((skill) => ({
   ability: skill.ability,
   modifier: tokenSkillModifier(token, skill.id),
   proficient: (token?.skillProficiencies || []).includes(skill.id),
+  expertise: (token?.skillExpertise || []).includes(skill.id),
+  source: Number.isFinite(Number(token?.skillOverrides?.[skill.id]))
+    ? "override"
+    : Number.isFinite(Number(token?.skillTotals?.[skill.id])) ? "authored" : "derived",
 }));
 
 export function derivedTokenArmorClass(token) {
@@ -955,12 +1062,17 @@ export const sceneCellSize = (gridSize) =>
   clamp(Math.floor(finite(gridSize, 44)), MIN_GRID_SIZE, MAX_GRID_SIZE);
 
 /** Pixel size of the whole board for a scene's chosen cell size. */
-export function sceneWorldSize(gridSize) {
+export function sceneWorldSize(gridSize, board = DEFAULT_BOARD) {
+  const normalizedBoard = normalizeBoard(board);
   const cellSize = sceneCellSize(gridSize);
   return {
     cellSize,
-    width: cellSize * SCENE_COLUMNS,
-    height: cellSize * SCENE_ROWS,
+    width: cellSize * normalizedBoard.columns,
+    height: cellSize * normalizedBoard.rows,
+    columns: normalizedBoard.columns,
+    rows: normalizedBoard.rows,
+    feetPerCell: normalizedBoard.feetPerCell,
+    board: normalizedBoard,
   };
 }
 
@@ -968,22 +1080,30 @@ export function sceneWorldSize(gridSize) {
  * The viewport object every grid helper expects, built from the scene rather
  * than from the DOM so cell identity is stable across window sizes.
  */
-export function sceneViewport(gridSize) {
-  const { cellSize, width, height } = sceneWorldSize(gridSize);
-  return { width, height, gridSize: cellSize };
+export function sceneViewport(gridSize, board = DEFAULT_BOARD) {
+  const { cellSize, width, height, columns, rows, feetPerCell, board: normalizedBoard } = sceneWorldSize(gridSize, board);
+  return { width, height, gridSize: cellSize, columns, rows, feetPerCell, board: normalizedBoard };
 }
 
-export function setupGridMetrics({ width, height, gridSize } = {}) {
+export function setupGridMetrics(viewport = {}) {
+  const { width, height, gridSize } = viewport;
   const cellSize = Math.max(1, finite(gridSize, 44));
-  const worldWidth = Math.max(cellSize, finite(width, cellSize * 20));
-  const worldHeight = Math.max(cellSize, finite(height, cellSize * 12));
-  return {
+  const columns = Math.max(1, Math.floor(finite(viewport.columns, finite(width, cellSize * 20) / cellSize)));
+  const rows = Math.max(1, Math.floor(finite(viewport.rows, finite(height, cellSize * 12) / cellSize)));
+  const worldWidth = Math.max(cellSize, finite(width, cellSize * columns));
+  const worldHeight = Math.max(cellSize, finite(height, cellSize * rows));
+  const metrics = {
     cellSize,
     width: worldWidth,
     height: worldHeight,
-    columns: Math.max(1, Math.floor(worldWidth / cellSize)),
-    rows: Math.max(1, Math.floor(worldHeight / cellSize)),
+    columns,
+    rows,
   };
+  if (viewport.board || viewport.feetPerCell !== undefined) {
+    const board = normalizeBoard(viewport.board || { columns, rows, feetPerCell: viewport.feetPerCell });
+    return { ...metrics, feetPerCell: board.feetPerCell, board };
+  }
+  return metrics;
 }
 
 export function setupCellForPosition(position, viewport) {
@@ -1012,9 +1132,13 @@ const setupCellKey = (cell) => `${cell.column}:${cell.row}`;
 
 export function occupiedSetupCells({ tokens = [], chests = [], exclude = null, viewport } = {}) {
   const occupied = new Set();
+  const metrics = setupGridMetrics(viewport);
+  const board = viewport?.board || { columns: metrics.columns, rows: metrics.rows, feetPerCell: viewport?.feetPerCell };
   for (const token of normalizeTableTokens(tokens)) {
     if (exclude?.kind === "token" && token.id === exclude.id) continue;
-    occupied.add(setupCellKey(setupCellForPosition(token.position, viewport)));
+    for (const cell of footprintForToken(token, board).cells) {
+      occupied.add(setupCellKey(cell));
+    }
   }
   for (const chest of normalizeChests(chests)) {
     if (exclude?.kind === "chest" && chest.id === exclude.id) continue;
@@ -1025,13 +1149,18 @@ export function occupiedSetupCells({ tokens = [], chests = [], exclude = null, v
 
 export function canOccupySetupPosition(position, options = {}) {
   const occupied = occupiedSetupCells(options);
-  return !occupied.has(setupCellKey(setupCellForPosition(position, options.viewport)));
+  const metrics = setupGridMetrics(options.viewport);
+  const board = options.viewport?.board || { columns: metrics.columns, rows: metrics.rows, feetPerCell: options.viewport?.feetPerCell };
+  const footprint = footprintForPosition(position, options.size || "medium", board);
+  return footprint.inBounds && footprint.cells.every((cell) => !occupied.has(setupCellKey(cell)));
 }
 
 export function findOpenSetupPosition(position, options = {}) {
   const metrics = setupGridMetrics(options.viewport);
   const desired = setupCellForPosition(position, options.viewport);
   const occupied = occupiedSetupCells(options);
+  const board = options.viewport?.board || { columns: metrics.columns, rows: metrics.rows, feetPerCell: options.viewport?.feetPerCell };
+  const size = options.size || "medium";
   const candidates = [];
   for (let row = 0; row < metrics.rows; row += 1) {
     for (let column = 0; column < metrics.columns; column += 1) {
@@ -1043,7 +1172,10 @@ export function findOpenSetupPosition(position, options = {}) {
     }
   }
   candidates.sort((left, right) => left.distance - right.distance || left.row - right.row || left.column - right.column);
-  const cell = candidates.find((candidate) => !occupied.has(setupCellKey(candidate)));
+  const cell = candidates.find((candidate) => {
+    const footprint = footprintForPosition(setupPositionForCell(candidate, options.viewport), size, board);
+    return footprint.inBounds && footprint.cells.every((entry) => !occupied.has(setupCellKey(entry)));
+  });
   return cell ? setupPositionForCell(cell, options.viewport) : null;
 }
 
@@ -1222,12 +1354,20 @@ export function normalizeEncounter(encounter, tokens = []) {
     // Experience is handed out once, by hand, from the completion card. The
     // flag is what stops a second press from paying the party twice.
     xpAwarded: Boolean(encounter.xpAwarded),
+    instanceId: typeof encounter.instanceId === "string" ? encounter.instanceId : null,
+    xpAwardOutcome: Array.isArray(encounter.xpAwardOutcome) ? encounter.xpAwardOutcome
+      .filter((entry) => typeof entry?.heroId === "string" && Number.isSafeInteger(entry.xp) && entry.xp >= 0)
+      .map((entry) => ({ heroId: entry.heroId, name: String(entry.name || "Hero"), xp: entry.xp })) : [],
     winnerTokenId: tokenIds.has(encounter.winnerTokenId) ? encounter.winnerTokenId : null,
     // The winning side. Set even when several creatures are left standing,
     // which is the case winnerTokenId alone cannot describe.
     winnerFaction: TOKEN_FACTIONS.includes(encounter.winnerFaction) ? encounter.winnerFaction : null,
     log: normalizeEncounterLog(encounter.log),
     setupTokens: normalizeSetupSnapshot(encounter.setupTokens, tokenIds),
+    boundarySequence: Math.max(0, Math.floor(finite(encounter.boundarySequence))),
+    lastBoundaryId: typeof encounter.lastBoundaryId === "string" ? encounter.lastBoundaryId.slice(0, 160) : null,
+    resolutionSequence: Math.max(0, Math.floor(finite(encounter.resolutionSequence))),
+    pendingResolutions: normalizePendingResolutions(encounter.pendingResolutions),
   };
 }
 
@@ -1315,7 +1455,7 @@ export function prepareBattleStart(scene, { viewport, random = Math.random } = {
 
   const snappedTokens = [];
   for (const token of sourceTokens) {
-    const position = findOpenSetupPosition(token.position, { tokens: snappedTokens, chests: snappedChests, viewport });
+    const position = findOpenSetupPosition(token.position, { tokens: snappedTokens, chests: snappedChests, size: token.size, viewport });
     if (!position) return {
       ok: false,
       code: "BATTLE_GRID_FULL",
@@ -1368,6 +1508,10 @@ export function prepareBattleStart(scene, { viewport, random = Math.random } = {
     ammoSpentByToken: {},
     ammunitionRecovered: false,
     winnerTokenId: null,
+    boundarySequence: 0,
+    lastBoundaryId: "round-1-start",
+    resolutionSequence: 0,
+    pendingResolutions: [],
     log: [
       `Battle began with ${snappedTokens.length} tokens.`,
       ...(surprisedTokenIds.length ? [`${surprisedTokenIds.length} surprised creature${surprisedTokenIds.length === 1 ? " loses" : "s lose"} a turn in round one.`] : []),
@@ -1481,7 +1625,7 @@ export function sceneObjectsWithin(rectangle, { tokens = [], chests = [], walls 
   };
 }
 
-export function rulerDistanceFeet(start, end, { width, height, gridSize } = {}) {
+export function rulerDistanceFeet(start, end, { width, height, gridSize, feetPerCell = 5 } = {}) {
   const cellSize = Math.max(1, finite(gridSize, 44));
   const cellsX = Math.max(1, finite(width, cellSize)) / cellSize;
   const cellsY = Math.max(1, finite(height, cellSize)) / cellSize;
@@ -1495,7 +1639,7 @@ export function rulerDistanceFeet(start, end, { width, height, gridSize } = {}) 
   // ruler read 30 ft where an attack that measured 15 ft is legal, and the
   // only thing worse than an unruled map is a ruler that contradicts the rules.
   const crossedSquares = Math.max(Math.abs(endColumn - startColumn), Math.abs(endRow - startRow));
-  return crossedSquares * 5;
+  return crossedSquares * Math.max(1, Math.floor(finite(feetPerCell, 5)));
 }
 
 export const midpointPercent = (start, end) => ({

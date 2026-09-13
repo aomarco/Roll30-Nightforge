@@ -395,7 +395,7 @@ test("End Turn reports an encounter with no living receiver", () => {
   assert.equal(endTurn(scene).code, "NO_LIVING_TOKEN");
 });
 
-test("mid-turn movement, Dash, Swap, and active initiative survive repository reload", () => {
+test("mid-turn movement, Dash, Swap, and active initiative survive repository reload", async () => {
   const storage = createMemoryStorage();
   const makeRepository = () => createSceneRepository(createStateRepository(storage, { clock: () => NOW }), {
     idFactory: () => "phase8-persisted",
@@ -403,12 +403,12 @@ test("mid-turn movement, Dash, Swap, and active initiative survive repository re
   });
   const active = token("active", 1, 1, { inventory: [item("club"), item("dagger")], loadout: { mainHand: "club", offHand: null } });
   const initial = battleScene({ tokens: [active, token("next", 8, 8)] });
-  const created = makeRepository().create(initial).value;
+  const created = (await makeRepository().create(initial)).value;
   const moved = applyPatch(created, moveActiveToken(created, active.id, at(3, 1), VIEWPORT).value);
   const swapped = applyPatch(moved, performWeaponSwap(moved, { mainHand: "dagger", offHand: null }).value);
-  assert.equal(makeRepository().update(created.id, { tokens: swapped.tokens, encounter: swapped.encounter }).ok, true);
+  assert.equal((await makeRepository().update(created.id, { tokens: swapped.tokens, encounter: swapped.encounter })).ok, true);
 
-  const reloaded = makeRepository().get(created.id).value;
+  const reloaded = (await makeRepository().get(created.id)).value;
   assert.deepEqual(reloaded.tokens[0].position, at(3, 1));
   assert.equal(reloaded.tokens[0].loadout.mainHand, "dagger");
   assert.equal(activeTurnContext(reloaded).value.resources.movementSpent, 10);
@@ -416,18 +416,18 @@ test("mid-turn movement, Dash, Swap, and active initiative survive repository re
   assert.equal(reloaded.encounter.activeIndex, 0);
 });
 
-test("a failed Phase 8 command write preserves the last valid turn state", () => {
+test("a failed Phase 8 command write preserves the last valid turn state", async () => {
   const storage = createMemoryStorage();
   const repository = createSceneRepository(createStateRepository(storage, { clock: () => NOW }), {
     idFactory: () => "phase8-failure",
     clock: () => NOW,
   });
-  const created = repository.create(battleScene()).value;
+  const created = (await repository.create(battleScene())).value;
   const movement = moveActiveToken(created, "active", at(3, 1), VIEWPORT);
   assert.equal(movement.ok, true);
   storage.setFailureMode("write");
-  const failed = repository.update(created.id, movement.value);
+  const failed = (await repository.update(created.id, movement.value));
   assert.equal(failed.ok, false);
   storage.setFailureMode(null);
-  assert.deepEqual(repository.get(created.id).value, created);
+  assert.deepEqual((await repository.get(created.id)).value, created);
 });

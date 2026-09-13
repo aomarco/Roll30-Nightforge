@@ -12,6 +12,7 @@ import {
   tokenAbilityScore,
   tokenSaveModifier,
   tokenSkillModifier,
+  createHeroTokenSnapshot,
 } from "./table.js";
 import { attackLineOfSight } from "./attacks.js";
 
@@ -55,20 +56,34 @@ function normalizeDc(dc) {
   return Math.max(MIN_CHECK_DC, Math.min(MAX_CHECK_DC, Math.floor(number)));
 }
 
-function rollableToken(scene, tokenId) {
-  if (!scene?.encounter || scene.encounter.status !== "active") return failure(
+function rollableToken(scene, specification = {}) {
+  const tokenId = specification.tokenId;
+  const sceneKind = scene?.kind === "play" ? "scene-token" : scene?.encounter?.status === "active" ? "encounter-token" : null;
+  if (scene?.kind === "battle" && !sceneKind) return failure(
     "ACTIVE_BATTLE_REQUIRED",
-    "Checks and saving throws can be rolled only during an active Battle.",
-    "Start Battle before rolling.",
+    "Checks and saving throws need an active Battle, a Play Scene, or a roster Hero.",
+    "Start Battle or choose a Hero from the roster.",
   );
-  const tokens = normalizeTableTokens(scene.tokens);
-  const token = tokens.find((entry) => entry.id === tokenId);
-  if (!token) return failure(
-    "CHECK_TOKEN_MISSING",
-    "That token is no longer on this Table.",
-    "Select another token.",
+  if (sceneKind) {
+    const tokens = normalizeTableTokens(scene.tokens);
+    const token = tokens.find((entry) => entry.id === tokenId);
+    if (!token) return failure(
+      "CHECK_TOKEN_MISSING",
+      "That token is no longer on this Table.",
+      "Select another token.",
+    );
+    return success({ tokens, token, contextKind: sceneKind, scene });
+  }
+  const hero = specification.hero || specification.rosterHero;
+  if (hero?.id && (!tokenId || tokenId === hero.id)) {
+    const token = createHeroTokenSnapshot(hero, { id: `roster-${hero.id}` });
+    return success({ tokens: [token], token, contextKind: "roster-hero", scene: null, hero });
+  }
+  return failure(
+    "CHECK_CONTEXT_REQUIRED",
+    "Checks need an encounter token, a Play token, or a roster Hero.",
+    "Choose a creature in a Scene or open a Hero from the roster.",
   );
-  return success({ tokens, token });
 }
 
 /**
@@ -79,26 +94,37 @@ function rollableToken(scene, tokenId) {
  * No turn resource is spent. Saving throws happen on other creatures' turns and
  * a check is not an Action, so neither may consume the active token's economy.
  */
-function resolveD20({ token, kind, ability, skill, dc, modifier, sources, autoFail, random }) {
+function resolveD20({ token, kind, ability, skill, dc, modifier, modifierSources = [], sources, autoFail, random, transcript = null }) {
   const mode = combineAttackModes(sources);
   let rolls = autoFail
     ? []
-    : Array.from({ length: mode === CHECK_MODE_NORMAL ? 1 : 2 }, () => rollDie(20, random));
+    : Array.from({ length: mode === CHECK_MODE_NORMAL ? 1 : 2 }, () => transcript?.roll ? transcript.roll(20, "d20") : rollDie(20, random));
   let selectedIndex = autoFail
     ? -1
     : mode === CHECK_MODE_DISADVANTAGE
       ? (rolls[1] < rolls[0] ? 1 : 0)
       : (rolls[1] > rolls[0] ? 1 : 0);
   let naturalRoll = autoFail ? null : rolls[selectedIndex];
+  if (transcript?.record && !autoFail) {
+    transcript.record({
+      type: "selection",
+      selectedIndex,
+      selected: naturalRoll,
+      discarded: rolls.filter((_, index) => index !== selectedIndex),
+    });
+  }
   let luckyReroll = null;
   if (naturalRoll === 1 && token.racialTraitIds?.includes("lucky")) {
-    luckyReroll = rollDie(20, random);
+    const replaced = naturalRoll;
+    luckyReroll = transcript?.roll ? transcript.roll(20, "d20-lucky") : rollDie(20, random);
     rolls = [...rolls, luckyReroll];
     selectedIndex = rolls.length - 1;
     naturalRoll = luckyReroll;
+    transcript?.record?.({ type: "reroll", source: "Lucky", replaced, selected: naturalRoll });
   }
   const total = autoFail ? null : naturalRoll + modifier;
   const succeeded = autoFail ? false : dc === null ? null : total >= dc;
+  transcript?.record?.({ type: autoFail ? "automatic-result" : "committed-result", total, modifier, dc, succeeded });
   return {
     kind,
     tokenId: token.id,
@@ -113,6 +139,7 @@ function resolveD20({ token, kind, ability, skill, dc, modifier, sources, autoFa
         ? (token.saveProficiencies || []).includes(ability)
         : false,
     modifier,
+    modifierSources,
     sources,
     mode,
     rolls,
@@ -133,10 +160,10 @@ const verdictText = (outcome) => {
   return outcome.succeeded ? `succeeds with ${outcome.total}` : `fails with ${outcome.total}`;
 };
 
-export function performSavingThrow(scene, specification = {}, { random = Math.random } = {}) {
-  const context = rollableToken(scene, specification.tokenId);
+export function performSavingThrow(scene, specification = {}, { random = Math.random, transcript = null } = {}) {
+  const context = rollableToken(scene, specification);
   if (!context.ok) return context;
-  const { token, tokens } = context.value;
+  const { token, tokens, contextKind } = context.value;
   const ability = specification.ability;
   if (!ABILITY_KEYS.includes(ability)) return failure(
     "UNKNOWN_SAVE_ABILITY",
@@ -176,29 +203,30 @@ export function performSavingThrow(scene, specification = {}, { random = Math.ra
     skill: null,
     dc,
     modifier: tokenSaveModifier(token, ability) + (cover.coverBonus || 0),
+    modifierSources: [
+      { type: "save", ability, value: tokenSaveModifier(token, ability), source: token.saveOverrides?.[ability] !== undefined ? "override" : token.saveTotals?.[ability] !== undefined ? "authored" : "derived" },
+      ...(cover.coverBonus ? [{ type: "cover", value: cover.coverBonus, source: cover.coverLevel }] : []),
+    ],
     sources,
     autoFail: autoFailConditions,
     random,
+    transcript,
   });
   outcome.baseModifier = tokenSaveModifier(token, ability);
   outcome.coverBonus = cover.coverBonus || 0;
   outcome.coverLevel = cover.coverLevel;
   const dcText = dc === null ? "" : ` against DC ${dc}`;
+  const logLine = `${token.name} rolls a ${outcome.abilityName} saving throw${dcText} and ${verdictText(outcome)}.`;
   return success({
-    encounter: {
-      ...scene.encounter,
-      log: appendEncounterLog(
-        scene.encounter.log,
-        `${token.name} rolls a ${outcome.abilityName} saving throw${dcText} and ${verdictText(outcome)}.`,
-      ),
-    },
+    ...(scene?.encounter?.status === "active" ? { encounter: { ...scene.encounter, log: appendEncounterLog(scene.encounter.log, logLine) } } : {}),
+    rollLogEntry: { contextKind, tokenId: token.id, tokenName: token.name, kind: outcome.kind, line: logLine, outcome },
   }, { outcome });
 }
 
-export function performAbilityCheck(scene, specification = {}, { random = Math.random } = {}) {
-  const context = rollableToken(scene, specification.tokenId);
+export function performAbilityCheck(scene, specification = {}, { random = Math.random, transcript = null } = {}) {
+  const context = rollableToken(scene, specification);
   if (!context.ok) return context;
-  const { token } = context.value;
+  const { token, contextKind } = context.value;
   const skill = specification.skillId ? skillById(specification.skillId) : null;
   if (specification.skillId && !skill) return failure(
     "UNKNOWN_SKILL",
@@ -213,6 +241,12 @@ export function performAbilityCheck(scene, specification = {}, { random = Math.r
   );
   const dc = normalizeDc(specification.dc);
   const modifier = skill ? tokenSkillModifier(token, skill.id, specification.context) : abilityCheckModifier(token, ability);
+  const modifierSources = [
+    { type: "ability", ability, value: abilityCheckModifier(token, ability), source: "derived" },
+    ...(skill && tokenSkillModifier(token, skill.id, specification.context) !== abilityCheckModifier(token, ability)
+      ? [{ type: "proficiency", skillId: skill.id, value: tokenSkillModifier(token, skill.id, specification.context) - abilityCheckModifier(token, ability), source: token.skillTotals?.[skill.id] !== undefined ? "authored" : "derived" }]
+      : []),
+  ];
   const outcome = resolveD20({
     token,
     kind: skill ? CHECK_KIND_SKILL : CHECK_KIND_ABILITY,
@@ -220,20 +254,18 @@ export function performAbilityCheck(scene, specification = {}, { random = Math.r
     skill,
     dc,
     modifier,
+    modifierSources,
     sources: requestedModeSource(specification.mode),
     autoFail: null,
     random,
+    transcript,
   });
   const label = skill ? `${skill.name} check` : `${outcome.abilityName} check`;
   const dcText = dc === null ? "" : ` against DC ${dc}`;
+  const logLine = `${token.name} rolls a ${label}${dcText} and ${verdictText(outcome)}.`;
   return success({
-    encounter: {
-      ...scene.encounter,
-      log: appendEncounterLog(
-        scene.encounter.log,
-        `${token.name} rolls a ${label}${dcText} and ${verdictText(outcome)}.`,
-      ),
-    },
+    ...(scene?.encounter?.status === "active" ? { encounter: { ...scene.encounter, log: appendEncounterLog(scene.encounter.log, logLine) } } : {}),
+    rollLogEntry: { contextKind, tokenId: token.id, tokenName: token.name, kind: outcome.kind, line: logLine, outcome },
   }, { outcome });
 }
 

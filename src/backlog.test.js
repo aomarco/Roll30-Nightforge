@@ -140,7 +140,8 @@ test("attunement caps active items at three and charged pools normalize and rest
   assert.equal(spent.value.itemCharges["cubic-gate"].current, 0);
   const spentHero = { ...charged, ...spent.value };
   assert.equal(restoreItemCharges(spentHero, "short")["cubic-gate"].current, 0);
-  assert.equal(restoreItemCharges(spentHero, "long")["cubic-gate"].current, 3);
+  assert.equal(restoreItemCharges(spentHero, "long")["cubic-gate"].current, 0);
+  assert.equal(restoreItemCharges(spentHero, "daily", undefined, { random: () => 0 })["cubic-gate"].current, 1);
 });
 
 test("short and long rests spend and recover hit dice, HP, racial uses, and item charges", () => {
@@ -170,7 +171,7 @@ test("short and long rests spend and recover hit dice, HP, racial uses, and item
   assert.equal(long.ok, true);
   assert.equal(long.value.currentHp, deriveHero(starting).hp);
   assert.equal(long.value.hitDiceSpent, 1);
-  assert.equal(long.value.itemCharges["cubic-gate"].current, 3);
+  assert.equal(long.value.itemCharges["cubic-gate"].current, 0);
   assert.equal(long.value.racialUses.relentlessEndurance, true);
   assert.equal(long.outcome.restHours, 8);
   assert.equal(shortRest(starting, { diceToSpend: 3 }).code, "REST_HIT_DICE_UNAVAILABLE");

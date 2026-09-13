@@ -47,6 +47,21 @@ const isLightMelee = (item) =>
   isWeapon(item) && item.weaponRange === "melee" && item.propertyIds?.includes("light");
 const isTwoHanded = (item) => isWeapon(item) && item.propertyIds?.includes("two-handed");
 
+// Special is lance-only in the SRD import. A lance needs two hands when the
+// wielder is not mounted. There is no mounted state anywhere in the scene
+// record, so Nightforge always enforces the on-foot rule.
+export const isSpecialWeapon = (item) =>
+  isWeapon(item) && item.propertyIds?.includes("special");
+export const requiresTwoHands = (item) =>
+  isTwoHanded(item) || (isSpecialWeapon(item) && item?.id === "lance");
+
+// Monk tags which weapons count as monk weapons once the Monk class lands.
+// No Monk class exists yet, so this is reference-only: it never changes
+// legality, damage, or ability choice. Kept as a helper so the tag has one
+// owner instead of scattered string checks.
+export const isMonkWeapon = (item) =>
+  isWeapon(item) && item.propertyIds?.includes("monk");
+
 export const MAX_ATTUNED_ITEMS = 3;
 
 const uniqueIds = (value) => Array.isArray(value)
@@ -108,9 +123,9 @@ export function normalizeEquipment(hero, inventory = hero?.inventory || [], cata
   const off = getItem(offHand, catalogById);
   if (mainHand && offHand && mainHand === offHand && !ownsItem(normalizedHero, mainHand, 2)) offHand = null;
   if (offHand && (!isLightMelee(main) || !isLightMelee(off))) offHand = null;
-  if (mainHand && isTwoHanded(main)) offHand = null;
+  if (mainHand && requiresTwoHands(main)) offHand = null;
   if (shieldId) offHand = null;
-  if (shieldId && isTwoHanded(main)) shieldId = null;
+  if (shieldId && main && requiresTwoHands(main)) shieldId = null;
 
   const retainedIds = new Set([mainHand, offHand, armorId, shieldId].filter(Boolean));
   const enchantments = Object.fromEntries(
@@ -168,8 +183,8 @@ export function setMainHand(hero, itemId, catalogById = ITEM_BY_ID) {
   if (itemId === null) return success({ loadout: { ...hero.loadout, mainHand: null } });
   const item = getItem(itemId, catalogById);
   if (!isWeapon(item) || !ownsItem(hero, itemId)) return equipmentFailure("Only an owned weapon can be placed in the main hand.");
-  if (isTwoHanded(item) && hero.loadout?.offHand) return equipmentFailure("A Two-Handed weapon requires an empty off hand.");
-  if (isTwoHanded(item) && hero.shieldId) return equipmentFailure("A Two-Handed weapon cannot be used with a shield.");
+  if (requiresTwoHands(item) && hero.loadout?.offHand) return equipmentFailure("That weapon requires an empty off hand.");
+  if (requiresTwoHands(item) && hero.shieldId) return equipmentFailure("That weapon cannot be used with a shield.");
   if (hero.loadout?.offHand) {
     const off = getItem(hero.loadout.offHand, catalogById);
     if (!isLightMelee(item) || !isLightMelee(off)) return equipmentFailure("Dual wielding requires two Light melee weapons.");
@@ -185,7 +200,7 @@ export function setOffHand(hero, itemId, catalogById = ITEM_BY_ID) {
   if (!isWeapon(item) || !ownsItem(hero, itemId)) return equipmentFailure("Only an owned weapon can be placed in the off hand.");
   if (!main || !ownsItem(hero, main.id)) return equipmentFailure("Choose an owned main-hand weapon before equipping an off-hand weapon.");
   if (hero.shieldId) return equipmentFailure("Remove the shield before equipping an off-hand weapon.");
-  if (isTwoHanded(main)) return equipmentFailure("A Two-Handed weapon requires an empty off hand.");
+  if (main && requiresTwoHands(main)) return equipmentFailure("That main-hand weapon requires an empty off hand.");
   if (!isLightMelee(main) || !isLightMelee(item)) return equipmentFailure("Both weapons must be Light melee weapons to dual wield.");
   if (main.id === itemId && !ownsItem(hero, itemId, 2)) return equipmentFailure("Equipping the same weapon twice requires quantity 2.");
   return success({ loadout: { ...hero.loadout, offHand: itemId } });
@@ -204,7 +219,7 @@ export function setShield(hero, itemId, catalogById = ITEM_BY_ID) {
   const main = getItem(hero.loadout?.mainHand, catalogById);
   if (!isShield(item) || !ownsItem(hero, itemId)) return equipmentFailure("Only an owned shield can be equipped.");
   if (hero.loadout?.offHand) return equipmentFailure("A shield requires a free off hand.");
-  if (isTwoHanded(main)) return equipmentFailure("A shield cannot be used with a Two-Handed weapon.");
+  if (main && requiresTwoHands(main)) return equipmentFailure("A shield cannot be used with that main-hand weapon.");
   return success({ shieldId: itemId });
 }
 
@@ -241,8 +256,8 @@ export function setOffHandSlot(hero, itemId, catalogById = ITEM_BY_ID) {
 export function mainHandRefusal(hero, itemId, catalogById = ITEM_BY_ID) {
   const item = getItem(itemId, catalogById);
   if (!isWeapon(item) || !ownsItem(hero, itemId)) return "Not an owned weapon";
-  if (isTwoHanded(item) && hero?.loadout?.offHand) return "Off hand is not free";
-  if (isTwoHanded(item) && hero?.shieldId) return "Shield is raised";
+  if (requiresTwoHands(item) && hero?.loadout?.offHand) return "Off hand is not free";
+  if (requiresTwoHands(item) && hero?.shieldId) return "Shield is raised";
   if (hero?.loadout?.offHand) {
     const off = getItem(hero.loadout.offHand, catalogById);
     if (!isLightMelee(item) || !isLightMelee(off)) return "Dual wield needs two Light weapons";
@@ -255,10 +270,10 @@ export function offHandRefusal(hero, itemId, catalogById = ITEM_BY_ID) {
   const item = getItem(itemId, catalogById);
   if (!item || !ownsItem(hero, itemId)) return "Not owned";
   const main = getItem(hero?.loadout?.mainHand, catalogById);
-  if (isShield(item)) return isTwoHanded(main) ? "Two-Handed weapon in use" : null;
+  if (isShield(item)) return main && requiresTwoHands(main) ? "Two-handed weapon in use" : null;
   if (!isWeapon(item)) return "Not a weapon";
   if (!main || !ownsItem(hero, main.id)) return "Equip a main hand first";
-  if (isTwoHanded(main)) return "Two-Handed weapon in use";
+  if (requiresTwoHands(main)) return "Two-handed weapon in use";
   if (!isLightMelee(main)) return "Main hand is not Light";
   if (!isLightMelee(item)) return "Not a Light melee weapon";
   if (main.id === itemId && !ownsItem(hero, itemId, 2)) return "Needs quantity 2";
@@ -353,14 +368,23 @@ export function setItemCharges(hero, itemId, current, catalogById = ITEM_BY_ID) 
 }
 
 /** Restore charges that recharge on a short/long rest or at the daily dawn reset. */
-export function restoreItemCharges(hero, restKind = "long", catalogById = ITEM_BY_ID) {
+export function restoreItemCharges(hero, restKind = "long", catalogById = ITEM_BY_ID, { random = () => 0.5, onRoll = () => {} } = {}) {
   const itemCharges = normalizeItemCharges(hero?.itemCharges, hero?.inventory, catalogById);
   for (const [itemId, state] of Object.entries(itemCharges)) {
     const item = getItem(itemId, catalogById);
-    const matches = restKind === "short"
-      ? item?.chargeRechargeKind === "short-rest"
-      : ["long-rest", "daily", "short-rest"].includes(item?.chargeRechargeKind);
-    if (matches) itemCharges[itemId] = { ...state, current: state.max };
+    const matches = restKind === "daily" ? item?.chargeRechargeKind === "daily"
+      : restKind === "short" ? item?.chargeRechargeKind === "short-rest"
+        : restKind === "long" && ["long-rest", "short-rest"].includes(item?.chargeRechargeKind);
+    if (!matches || state.current >= state.max) continue;
+    const amount = item.chargeRechargeAmount;
+    let recovered = amount === "all" ? state.max : /^\d+$/.test(amount || "") ? Number(amount) : 0;
+    const dice = /^(\d+)d(\d+)(?:\+(\d+))?$/.exec(amount || "");
+    if (dice && Number(dice[1]) <= 100 && Number(dice[2]) > 0 && Number(dice[2]) <= 1000) {
+      const rolls = Array.from({ length: Number(dice[1]) }, () => 1 + Math.floor(Math.max(0, Math.min(0.999999999999, Number(random()) || 0)) * Number(dice[2])));
+      recovered = rolls.reduce((sum, roll) => sum + roll, Number(dice[3] || 0));
+      onRoll({ itemId, formula: amount, rolls, recovered });
+    }
+    itemCharges[itemId] = { ...state, current: Math.min(state.max, state.current + recovered) };
   }
   return itemCharges;
 }

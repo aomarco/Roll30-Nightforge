@@ -483,7 +483,7 @@ test("restart restores HP, rerolls stable initiative, and clears conditions, res
   assert.deepEqual(completed.chests, [chest]);
 });
 
-test("active and completed encounters restore physical state, ammo ledgers, loot depletion, and completion", () => {
+test("active and completed encounters restore physical state, ammo ledgers, loot depletion, and completion", async () => {
   const storage = createMemoryStorage();
   const repository = createSceneRepository(createStateRepository(storage, { clock: () => NOW }), { idFactory: () => "phase10-persisted", clock: () => NOW });
   const active = token("active", 1, 1);
@@ -495,20 +495,20 @@ test("active and completed encounters restore physical state, ammo ledgers, loot
     battleItems: [physical("ground", "dagger", { position: at(1, 2) })],
     ammoSpentByToken: { active: { arrow: 3 } },
   });
-  scene = repository.create(scene).value;
-  let reloaded = repository.get(scene.id).value;
+  scene = (await repository.create(scene)).value;
+  let reloaded = (await repository.get(scene.id)).value;
   assert.equal(reloaded.encounter.resources.active.openedChestId, "chest");
   assert.equal(reloaded.encounter.battleItems[0].id, "ground");
   assert.deepEqual(reloaded.encounter.ammoSpentByToken, { active: { arrow: 3 } });
   const looted = takeOneFromOpenChest(reloaded, "chest", "arrow", VIEWPORT);
-  assert.equal(repository.update(scene.id, looted.value).ok, true);
-  reloaded = repository.get(scene.id).value;
+  assert.equal((await repository.update(scene.id, looted.value)).ok, true);
+  reloaded = (await repository.get(scene.id)).value;
   assert.equal(reloaded.chests[0].inventory.length, 0);
 
   const defeatedTokens = reloaded.tokens.map((entry, index) => index ? { ...entry, hp: 0 } : entry);
   const completed = completeEncounterIfNeeded(defeatedTokens, reloaded.encounter);
-  assert.equal(repository.update(scene.id, completed.value).ok, true);
-  reloaded = repository.get(scene.id).value;
+  assert.equal((await repository.update(scene.id, completed.value)).ok, true);
+  reloaded = (await repository.get(scene.id)).value;
   assert.equal(reloaded.encounter.status, "complete");
   assert.equal(reloaded.encounter.ammunitionRecovered, true);
   assert.equal(reloaded.chests[0].inventory.length, 0);
@@ -534,7 +534,7 @@ test("a full Setup-to-completion-to-restart walkthrough preserves depleted chest
   assert.equal(scene.tokens.find(({ id }) => id === "foe").hp, 9);
 });
 
-test("the Phase 10 gate passes from real Setup through active reload, completion reload, and restart reload", () => {
+test("the Phase 10 gate passes from real Setup through active reload, completion reload, and restart reload", async () => {
   const storage = createMemoryStorage();
   const repository = createSceneRepository(createStateRepository(storage, { clock: () => NOW }), { idFactory: () => "phase10-gate", clock: () => NOW });
   const archer = token("archer", 1, 1, {
@@ -558,29 +558,29 @@ test("the Phase 10 gate passes from real Setup through active reload, completion
   scene = applyPatch(scene, started.value);
   assert.equal(scene.encounter.status, "active");
   assert.equal(scene.encounter.initiativeOrder[0], "archer");
-  scene = repository.create(scene).value;
-  scene = repository.get(scene.id).value;
+  scene = (await repository.create(scene)).value;
+  scene = (await repository.get(scene.id)).value;
   assert.equal(activeTurnContext(scene).value.token.id, "archer");
 
   scene = applyPatch(scene, openAdjacentChest(scene, "gate-chest", VIEWPORT).value);
   scene = applyPatch(scene, takeOneFromOpenChest(scene, "gate-chest", "arrow", VIEWPORT).value);
   assert.equal(scene.chests[0].inventory.length, 0);
-  assert.equal(repository.update(scene.id, { tokens: scene.tokens, chests: scene.chests, encounter: scene.encounter }).ok, true);
-  scene = repository.get(scene.id).value;
+  assert.equal((await repository.update(scene.id, { tokens: scene.tokens, chests: scene.chests, encounter: scene.encounter })).ok, true);
+  scene = (await repository.get(scene.id)).value;
   assert.equal(scene.chests[0].inventory.length, 0);
   const attacked = performWeaponAttack(scene, { weaponId: "shortbow", hand: "mainHand", targetId: "foe", viewport: VIEWPORT }, { random: sequence(0.5, 0) });
   assert.equal(attacked.ok, true);
   assert.equal(attacked.value.encounter.status, "complete");
-  assert.equal(repository.update(scene.id, attacked.value).ok, true);
-  scene = repository.get(scene.id).value;
+  assert.equal((await repository.update(scene.id, attacked.value)).ok, true);
+  scene = (await repository.get(scene.id)).value;
   assert.equal(scene.encounter.status, "complete");
   assert.equal(scene.encounter.winnerTokenId, "archer");
   assert.equal(scene.encounter.ammunitionRecovered, true);
   assert.equal(scene.chests[0].inventory.length, 0);
 
   const restarted = restartCompletedBattle(scene, { random: sequence(0.2, 0.8) });
-  assert.equal(repository.update(scene.id, restarted.value).ok, true);
-  scene = repository.get(scene.id).value;
+  assert.equal((await repository.update(scene.id, restarted.value)).ok, true);
+  scene = (await repository.get(scene.id)).value;
   assert.equal(scene.encounter.status, "active");
   assert.equal(scene.encounter.round, 1);
   assert.equal(scene.chests[0].inventory.length, 0);
@@ -589,17 +589,17 @@ test("the Phase 10 gate passes from real Setup through active reload, completion
   assert.deepEqual(scene.encounter.ammoSpentByToken, {});
 });
 
-test("a failed Phase 10 write preserves the complete last valid encounter state", () => {
+test("a failed Phase 10 write preserves the complete last valid encounter state", async () => {
   const storage = createMemoryStorage();
   const repository = createSceneRepository(createStateRepository(storage, { clock: () => NOW }), { idFactory: () => "phase10-failure", clock: () => NOW });
   const active = token("active", 1, 1);
   const chest = createChest({ id: "chest", position: at(2, 1), inventory: [item("dagger")] });
-  const created = repository.create(battleScene({ chests: [chest] })).value;
+  const created = (await repository.create(battleScene({ chests: [chest] }))).value;
   const opened = openAdjacentChest(created, "chest", VIEWPORT);
   storage.setFailureMode("write");
-  assert.equal(repository.update(created.id, opened.value).ok, false);
+  assert.equal((await repository.update(created.id, opened.value)).ok, false);
   storage.setFailureMode(null);
-  assert.deepEqual(repository.get(created.id).value, created);
+  assert.deepEqual((await repository.get(created.id)).value, created);
 });
 
 test("battle-item normalization never retains duplicate ids or non-weapons", () => {

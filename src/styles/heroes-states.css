@@ -31,6 +31,153 @@
   margin-top: 20px;
 }
 
+.nf-state-hero-nav {
+  position: sticky;
+  top: 12px;
+  z-index: 4;
+  display: flex;
+  gap: 6px;
+  width: fit-content;
+  max-width: 100%;
+  margin: 14px 0 10px;
+  padding: 5px;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(7, 16, 18, .88);
+  backdrop-filter: blur(12px);
+}
+
+.nf-state-hero-nav a,
+.nf-state-hero-check {
+  color: var(--ink-2);
+  text-decoration: none;
+}
+
+.nf-state-hero-nav a {
+  padding: 6px 11px;
+  border-radius: 999px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.nf-state-hero-nav a:hover,
+.nf-state-hero-nav a:focus-visible {
+  color: var(--ink);
+  background: rgba(47, 211, 180, .12);
+}
+
+.nf-state-hero-checklist {
+  margin-bottom: 16px;
+}
+
+.nf-state-hero-checklist-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.nf-state-hero-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 11px;
+}
+
+.nf-state-hero-check:hover,
+.nf-state-hero-check:focus-visible {
+  color: var(--ink);
+  border-color: var(--jade-edge);
+}
+
+.nf-state-hero-check.done {
+  color: var(--jade-hi);
+  border-color: var(--jade-edge);
+  background: rgba(47, 211, 180, .08);
+}
+
+.nf-state-hero-check span {
+  font-family: var(--mono);
+  font-weight: 700;
+}
+
+.nf-state-check-panel {
+  margin-top: 18px;
+}
+
+.nf-state-check-result {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 11px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--jade-edge);
+  border-radius: var(--r-sm);
+  background: rgba(47, 211, 180, .08);
+}
+
+.nf-state-check-sources {
+  flex-basis: 100%;
+  color: var(--ink-3);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.nf-state-check-result span {
+  color: var(--ink-2);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.nf-state-roll-log {
+  margin-top: 18px;
+}
+
+.nf-state-roll-log-list {
+  display: grid;
+  gap: 6px;
+}
+
+.nf-state-roll-log-list article {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: rgba(7, 16, 18, .42);
+}
+
+.nf-state-roll-log-list article > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.nf-state-roll-log-list strong {
+  overflow: hidden;
+  color: var(--ink-2);
+  font-size: 11px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nf-state-roll-log-list small {
+  color: var(--ink-3);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.nf-state-roll-log-list b { color: var(--brass-hi); }
+
 .nf-state-hero-rest-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -140,6 +287,8 @@
   .nf-state-hero-skills,
   .nf-state-hero-trait-list,
   .nf-state-hero-rest-grid { grid-template-columns: 1fr; }
+  .nf-state-hero-nav { width: calc(100% - 2px); }
+  .nf-state-check-result { align-items: flex-start; flex-direction: column; }
 }
 
 .nf-state-loot-button {

@@ -195,55 +195,55 @@ test("StateRepository reports write failures and leaves the last valid state rea
   assert.equal(repository.load().value.revision, 1);
 });
 
-test("SceneRepository creates, reads, updates, lists, and removes stable records", () => {
+test("SceneRepository creates, reads, updates, lists, and removes stable records", async () => {
   const repository = stateRepository();
   const scenes = createSceneRepository(repository, {
     idFactory: () => "scene-fixed",
     clock: CLOCK,
   });
-  assert.equal(scenes.create({ name: "  The Forge  " }).value.id, "scene-fixed");
-  assert.equal(scenes.get("scene-fixed").value.name, "The Forge");
-  assert.equal(scenes.update("scene-fixed", { kind: "play" }).value.kind, "play");
-  assert.equal(scenes.list().value.length, 1);
-  assert.equal(scenes.remove("scene-fixed").value.id, "scene-fixed");
-  assert.equal(scenes.list().value.length, 0);
+  assert.equal((await scenes.create({ name: "  The Forge  " })).value.id, "scene-fixed");
+  assert.equal((await scenes.get("scene-fixed")).value.name, "The Forge");
+  assert.equal((await scenes.update("scene-fixed", { kind: "play" })).value.kind, "play");
+  assert.equal((await scenes.list()).value.length, 1);
+  assert.equal((await scenes.remove("scene-fixed")).value.id, "scene-fixed");
+  assert.equal((await scenes.list()).value.length, 0);
 });
 
-test("HeroRepository changes only the requested Hero", () => {
+test("HeroRepository changes only the requested Hero", async () => {
   const repository = stateRepository();
   let id = 0;
   const heroes = createHeroRepository(repository, {
     idFactory: () => `hero-${++id}`,
     clock: CLOCK,
   });
-  const first = heroes.create({ name: "A" }).value;
-  const second = heroes.create({ name: "B" }).value;
-  heroes.update(second.id, { name: "Updated" });
-  assert.equal(heroes.get(first.id).value.name, "A");
-  assert.equal(heroes.get(second.id).value.name, "Updated");
+  const first = (await heroes.create({ name: "A" })).value;
+  const second = (await heroes.create({ name: "B" })).value;
+  (await heroes.update(second.id, { name: "Updated" }));
+  assert.equal((await heroes.get(first.id)).value.name, "A");
+  assert.equal((await heroes.get(second.id)).value.name, "Updated");
 });
 
-test("removing the active Scene clears only its active reference", () => {
+test("removing the active Scene clears only its active reference", async () => {
   const repository = stateRepository();
   const scenes = createSceneRepository(repository, {
     idFactory: () => "scene-active",
     clock: CLOCK,
   });
-  scenes.create({ name: "Active" });
+  (await scenes.create({ name: "Active" }));
   const loaded = repository.load();
   repository.save({ ...loaded.value, lastActiveSceneId: "scene-active" });
-  scenes.remove("scene-active");
+  (await scenes.remove("scene-active"));
   assert.equal(repository.load().value.lastActiveSceneId, null);
 });
 
-test("selecting a Scene persists its durable active reference", () => {
+test("selecting a Scene persists its durable active reference", async () => {
   const repository = stateRepository();
   const scenes = createSceneRepository(repository, {
     idFactory: () => "scene-active",
     clock: CLOCK,
   });
-  scenes.create({ name: "Active" });
-  const selected = scenes.setActive("scene-active");
+  (await scenes.create({ name: "Active" }));
+  const selected = (await scenes.setActive("scene-active"));
   assert.equal(selected.ok, true);
   assert.equal(repository.load().value.lastActiveSceneId, "scene-active");
 });
@@ -304,12 +304,12 @@ test("application hydration always opens Library while restoring valid Scene con
   assert.equal(hydrated.persistence.revision, 3);
 });
 
-test("ApplicationCommands initialize repositories without bypassing Library", () => {
+test("ApplicationCommands initialize repositories without bypassing Library", async () => {
   const storage = createMemoryStorage();
   const repository = stateRepository(storage);
   const scenes = createSceneRepository(repository, { idFactory: () => "scene-1", clock: CLOCK });
   const heroes = createHeroRepository(repository, { idFactory: () => "hero-1", clock: CLOCK });
-  scenes.create({ name: "Scene" });
+  (await scenes.create({ name: "Scene" }));
   const session = createSessionRepository(storage);
   session.save({ activeSceneId: "scene-1" });
   const actions = [];
@@ -319,17 +319,17 @@ test("ApplicationCommands initialize repositories without bypassing Library", ()
     sessionRepository: session,
     dispatch: (action) => actions.push(action),
   });
-  const initialized = commands.initialize();
+  const initialized = (await commands.initialize());
   assert.equal(initialized.ok, true);
   assert.equal(initialized.value.activeSceneId, "scene-1");
   assert.equal(actions.at(-1).type, "hydrate-success");
 });
 
-test("ApplicationCommands select Scene durably even when session context cannot save", () => {
+test("ApplicationCommands select Scene durably even when session context cannot save", async () => {
   const repository = stateRepository();
   const scenes = createSceneRepository(repository, { idFactory: () => "scene-1", clock: CLOCK });
   const heroes = createHeroRepository(repository, { idFactory: () => "hero-1", clock: CLOCK });
-  scenes.create({ name: "Scene" });
+  (await scenes.create({ name: "Scene" }));
   const actions = [];
   const commands = createApplicationCommands({
     sceneRepository: scenes,
@@ -341,20 +341,20 @@ test("ApplicationCommands select Scene durably even when session context cannot 
     },
     dispatch: (action) => actions.push(action),
   });
-  const selected = commands.selectScene("scene-1");
+  const selected = (await commands.selectScene("scene-1"));
   assert.equal(selected.ok, true);
   assert.equal(selected.issues.length, 1);
   assert.equal(repository.load().value.lastActiveSceneId, "scene-1");
   assert.equal(actions.at(-1).sceneId, "scene-1");
 });
 
-test("ApplicationCommands clear stale session context when the active Scene is removed", () => {
+test("ApplicationCommands clear stale session context when the active Scene is removed", async () => {
   const storage = createMemoryStorage();
   const repository = stateRepository(storage);
   const scenes = createSceneRepository(repository, { idFactory: () => "scene-1", clock: CLOCK });
   const heroes = createHeroRepository(repository, { idFactory: () => "hero-1", clock: CLOCK });
-  scenes.create({ name: "Scene" });
-  scenes.setActive("scene-1");
+  (await scenes.create({ name: "Scene" }));
+  (await scenes.setActive("scene-1"));
   const session = createSessionRepository(storage);
   session.save({ activeSceneId: "scene-1" });
   const actions = [];
@@ -364,13 +364,13 @@ test("ApplicationCommands clear stale session context when the active Scene is r
     sessionRepository: session,
     dispatch: (action) => actions.push(action),
   });
-  const removed = commands.removeScene("scene-1");
+  const removed = (await commands.removeScene("scene-1"));
   assert.equal(removed.ok, true);
   assert.equal(session.load().value.activeSceneId, null);
   assert.equal(actions.some((action) => action.type === "set-active-scene" && action.sceneId === null), true);
 });
 
-test("ApplicationCommands require a selected Scene for Scene and Table routes", () => {
+test("ApplicationCommands require a selected Scene for Scene and Table routes", async () => {
   const stub = {
     list: () => success([], { envelope: createEmptyEnvelope(CLOCK()) }),
     get: () => failure("not-found", "Not found"),
@@ -384,12 +384,12 @@ test("ApplicationCommands require a selected Scene for Scene and Table routes", 
     sessionRepository: { load: () => success({ activeSceneId: null }), save: success },
     dispatch: () => {},
   });
-  assert.equal(commands.navigate({ page: "settings" }).code, "route-scene-required");
-  assert.equal(commands.navigate({ page: "board" }).code, "route-scene-required");
-  assert.equal(commands.navigate({ page: "characters" }).ok, true);
+  assert.equal((await commands.navigate({ page: "settings" })).code, "route-scene-required");
+  assert.equal((await commands.navigate({ page: "board" })).code, "route-scene-required");
+  assert.equal((await commands.navigate({ page: "characters" })).ok, true);
 });
 
-test("application persistence failures are dispatched without hiding the error", () => {
+test("application persistence failures are dispatched without hiding the error", async () => {
   const actions = [];
   const failed = failure("storage-write-failed", "Cannot save.");
   const sceneRepository = {
@@ -405,7 +405,7 @@ test("application persistence failures are dispatched without hiding the error",
     sessionRepository: { load: () => success({ activeSceneId: null }), save: success },
     dispatch: (action) => actions.push(action),
   });
-  assert.equal(commands.createScene({ name: "Will fail" }).ok, false);
+  assert.equal((await commands.createScene({ name: "Will fail" })).ok, false);
   assert.deepEqual(actions.map((action) => action.type), [
     "persistence-saving",
     "persistence-failed",

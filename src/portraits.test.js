@@ -37,16 +37,16 @@ function harness({ portraitSeed = {}, portraitAdapter: supplied, decoder, keys =
   return { commands, heroRepository, portraitAdapter, state: () => state };
 }
 
-test("a hero record carries no portrait until one is uploaded", () => {
+test("a hero record carries no portrait until one is uploaded", async () => {
   const { commands } = harness();
-  const created = commands.createHero({ name: "Mara" });
+  const created = (await commands.createHero({ name: "Mara" }));
   assert.equal(created.ok, true);
   assert.equal(created.value.portraitKey, null);
 });
 
 test("uploading a portrait stores the blob and points the hero at it", async () => {
   const { commands, portraitAdapter } = harness();
-  commands.createHero({ name: "Mara" });
+  (await commands.createHero({ name: "Mara" }));
 
   const saved = await commands.replaceHeroPortrait("hero-1", portrait());
   assert.equal(saved.ok, true);
@@ -54,45 +54,45 @@ test("uploading a portrait stores the blob and points the hero at it", async () 
   assert.deepEqual(await portraitAdapter.keys(), ["portrait-1"]);
 });
 
-test("replacing a portrait removes the blob it superseded", async () => {
+test("replacing a portrait retains the blob required by the backup", async () => {
   const { commands, portraitAdapter } = harness();
-  commands.createHero({ name: "Mara" });
+  (await commands.createHero({ name: "Mara" }));
 
   await commands.replaceHeroPortrait("hero-1", portrait("first"));
   const replaced = await commands.replaceHeroPortrait("hero-1", portrait("second"));
 
   assert.equal(replaced.ok, true);
   assert.equal(replaced.value.portraitKey, "portrait-2");
-  assert.deepEqual(await portraitAdapter.keys(), ["portrait-2"]);
+  assert.deepEqual(await portraitAdapter.keys(), ["portrait-1", "portrait-2"]);
 });
 
-test("removing a portrait clears the record and deletes the blob", async () => {
+test("removing a portrait clears the record but retains its backup blob", async () => {
   const { commands, portraitAdapter } = harness();
-  commands.createHero({ name: "Mara" });
+  (await commands.createHero({ name: "Mara" }));
   await commands.replaceHeroPortrait("hero-1", portrait());
 
   const cleared = await commands.removeHeroPortrait("hero-1");
   assert.equal(cleared.ok, true);
   assert.equal(cleared.value.portraitKey, null);
-  assert.deepEqual(await portraitAdapter.keys(), []);
+  assert.deepEqual(await portraitAdapter.keys(), ["portrait-1"]);
 });
 
-test("retiring a hero deletes its stored portrait", async () => {
+test("retiring a hero retains its portrait for backup recovery", async () => {
   const { commands, portraitAdapter } = harness();
-  commands.createHero({ name: "Mara" });
+  (await commands.createHero({ name: "Mara" }));
   await commands.replaceHeroPortrait("hero-1", portrait());
 
-  const retired = commands.removeHero("hero-1");
+  const retired = (await commands.removeHero("hero-1"));
   assert.equal(retired.ok, true);
   await retired.cleanup;
-  assert.deepEqual(await portraitAdapter.keys(), []);
+  assert.deepEqual(await portraitAdapter.keys(), ["portrait-1"]);
 });
 
 test("a rejected portrait leaves the previous portrait active and stores nothing new", async () => {
   const { commands, portraitAdapter } = harness({
     decoder: createBrowserArtworkDecoder({}, HERO_PORTRAIT_LIMITS),
   });
-  commands.createHero({ name: "Mara" });
+  (await commands.createHero({ name: "Mara" }));
 
   const rejected = await commands.replaceHeroPortrait("hero-1", new Blob(["nope"], { type: "text/plain" }));
   assert.equal(rejected.ok, false);
@@ -105,7 +105,7 @@ test("an oversized portrait is refused before anything is written", async () => 
   const { commands, portraitAdapter } = harness({
     decoder: createBrowserArtworkDecoder({}, HERO_PORTRAIT_LIMITS),
   });
-  commands.createHero({ name: "Mara" });
+  (await commands.createHero({ name: "Mara" }));
 
   const refused = await commands.replaceHeroPortrait("hero-1", oversized);
   assert.equal(refused.ok, false);
@@ -116,17 +116,17 @@ test("an oversized portrait is refused before anything is written", async () => 
 test("a failed portrait write never changes the hero record", async () => {
   const portraitAdapter = createMemoryArtworkAdapter();
   const { commands, heroRepository } = harness({ portraitAdapter });
-  commands.createHero({ name: "Mara" });
+  (await commands.createHero({ name: "Mara" }));
   portraitAdapter.setFailureOperation("put");
 
   const failed = await commands.replaceHeroPortrait("hero-1", portrait());
   assert.equal(failed.ok, false);
-  assert.equal(heroRepository.get("hero-1").value.portraitKey, null);
+  assert.equal((await heroRepository.get("hero-1")).value.portraitKey, null);
 });
 
 test("portrait blobs survive a Scene artwork orphan sweep", async () => {
   const { commands, portraitAdapter } = harness();
-  commands.createHero({ name: "Mara" });
+  (await commands.createHero({ name: "Mara" }));
   await commands.replaceHeroPortrait("hero-1", portrait());
 
   const cleaned = await commands.cleanupPendingArtwork();
@@ -136,10 +136,10 @@ test("portrait blobs survive a Scene artwork orphan sweep", async () => {
 
 test("a persisted portrait key round-trips through storage", async () => {
   const { commands, heroRepository } = harness();
-  commands.createHero({ name: "Mara" });
+  (await commands.createHero({ name: "Mara" }));
   await commands.replaceHeroPortrait("hero-1", portrait());
 
-  const reloaded = heroRepository.get("hero-1");
+  const reloaded = (await heroRepository.get("hero-1"));
   assert.equal(reloaded.ok, true);
   assert.equal(reloaded.value.portraitKey, "portrait-1");
 });
