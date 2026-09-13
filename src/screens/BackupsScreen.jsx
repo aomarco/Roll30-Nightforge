@@ -112,6 +112,7 @@ export default function BackupsScreen({ service, browser = window }) {
   };
 
   return (
+    <div className="scroller nf-state-screen-root nf-state-backups-root">
     <div className="nf-backups">
       <header className="nf-backups-heading">
         <div><span className="kicker">Your campaign, kept safe</span><h1>Keep every adventure.</h1><p>One portable file for your scenes, heroes, images, and saved encounters. Bring it to another browser or keep it for a rainy day.</p></div>
@@ -183,6 +184,7 @@ export default function BackupsScreen({ service, browser = window }) {
         </aside>
       </div>
       {busy && <div className="nf-backups-progress" role="status" aria-live="polite"><div><strong>{progress?.stage === "validating" ? "Inspecting your archive" : progress?.stage === "reading" ? "Reading campaign images" : progress?.stage === "packing" ? "Preparing your file" : "Working safely"}</strong><span>{progress ? `${progress.completed || 0} / ${progress.total || 0} images` : "The previous campaign remains available until commit."}</span></div><button className="btn btn-line btn-sm" onClick={() => controller.current?.abort()}>Cancel</button></div>}
+    </div>
     </div>
   );
 }

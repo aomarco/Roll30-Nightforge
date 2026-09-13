@@ -334,6 +334,7 @@ export default function CompendiumScreen() {
   if (activeEntry) crumbs.push(activeEntry.name);
 
   return (
+    <div className="scroller nf-state-screen-root nf-state-compendium-root">
     <div className="codex nf-state-compendium">
       <div className="codex-glow" aria-hidden="true" />
       <header className="codex-top">
@@ -399,6 +400,7 @@ export default function CompendiumScreen() {
           onBack={() => setSection(null)}
         />
       )}
+    </div>
     </div>
   );
 }
