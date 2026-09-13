@@ -18,7 +18,7 @@ export function createBackupService({
     try { return await operation(); }
     catch (error) { return fromThrown(error.code || "backup-operation-failed", error.message || "The backup operation failed.", error, "The active campaign was preserved. Review the message and retry."); }
   };
-  const collectAssets = async (state, { legacy = false, signal, onProgress = () => {} } = {}) => {
+  const collectAssets = async (state, { legacy = false, signal, onProgress = () => undefined } = {}) => {
     const refs = assetReferences(state), assets = [], missing = [];
     for (const [index, ref] of refs.entries()) {
       checkCancelled(signal);

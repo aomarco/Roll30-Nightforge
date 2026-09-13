@@ -73,7 +73,7 @@ export default function BackupsScreen({ service, browser = window }) {
         const handle = await browser.showSaveFilePicker({ suggestedName: download.filename, types: [{ description: "Nightforge backup", accept: { "application/zip": [".nightforge"] } }] });
         const writable = await handle.createWritable();
         try { await writable.write(download.blob); await writable.close(); }
-        catch (error) { await writable.abort().catch(() => {}); throw error; }
+        catch (error) { await writable.abort().catch(() => undefined); throw error; }
         if (!download.evidence) { service.markDownloaded(download.manifest.archiveId); setCheckpointId(download.manifest.archiveId); }
         setNotice("Backup file saved. Keep a copy outside this browser.");
       } else {

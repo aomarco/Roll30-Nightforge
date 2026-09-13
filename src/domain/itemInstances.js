@@ -175,7 +175,7 @@ export function setItemInstanceCharges(instances, instanceId, currentCharges, ca
   return success(current.map((entry) => entry.id === source.id ? next : entry), { instance: next });
 }
 
-export function recoverItemInstanceCharges(instances, restKind = "long", { random = () => 0.5, onRoll = () => {} } = {}, catalogById = ITEM_BY_ID) {
+export function recoverItemInstanceCharges(instances, restKind = "long", { random = () => 0.5, onRoll = () => undefined } = {}, catalogById = ITEM_BY_ID) {
   const current = normalizeItemInstances(instances, catalogById);
   const rolls = [];
   const next = current.map((instance) => {

@@ -368,7 +368,7 @@ export function setItemCharges(hero, itemId, current, catalogById = ITEM_BY_ID) 
 }
 
 /** Restore charges that recharge on a short/long rest or at the daily dawn reset. */
-export function restoreItemCharges(hero, restKind = "long", catalogById = ITEM_BY_ID, { random = () => 0.5, onRoll = () => {} } = {}) {
+export function restoreItemCharges(hero, restKind = "long", catalogById = ITEM_BY_ID, { random = () => 0.5, onRoll = () => undefined } = {}) {
   const itemCharges = normalizeItemCharges(hero?.itemCharges, hero?.inventory, catalogById);
   for (const [itemId, state] of Object.entries(itemCharges)) {
     const item = getItem(itemId, catalogById);

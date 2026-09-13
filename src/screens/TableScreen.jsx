@@ -383,6 +383,7 @@ function TableToolsDrawer({
           <div><span className="kicker kicker-brass">Table instruments</span><h2 id="table-tools-title">Table tools</h2></div>
           <button className="glyph" onClick={close} aria-label="Close"><X size={17} /></button>
         </div>
+        <p className="note">Table tools — 5 ft grid by default; per-scene feet per cell apply.</p>
         <div className="drawer-body">
           {error && <div className="nf-state-inline-error" role="alert"><strong>Table change not saved</strong><span>{errorText(error)}</span></div>}
           <section className="unit">

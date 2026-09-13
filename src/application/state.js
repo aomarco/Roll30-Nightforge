@@ -1,4 +1,4 @@
-export const ROUTES = Object.freeze(["home", "characters", "settings", "board", "backups"]);
+export const ROUTES = Object.freeze(["home", "characters", "settings", "board", "backups", "compendium"]);
 
 export function createInitialApplicationState() {
   return {

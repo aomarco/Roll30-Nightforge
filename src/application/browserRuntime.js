@@ -39,7 +39,7 @@ export function createBrowserRuntime(browser, dispatch, { environment =
     const execute = () => browser.navigator?.locks?.request
       ? browser.navigator.locks.request(identity.lock, operation) : operation();
     const pending = queue.then(execute, execute);
-    queue = pending.catch(() => {});
+    queue = pending.catch(() => undefined);
     return pending;
   };
   const listeners = new Set();

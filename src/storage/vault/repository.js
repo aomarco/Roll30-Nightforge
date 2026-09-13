@@ -12,7 +12,7 @@ const all = (tx, store) => request(tx.objectStore(store).getAll());
 
 export function createVaultRepository(indexedDB, {
   name, clock = () => new Date().toISOString(), idFactory = () => crypto.randomUUID(),
-  fault = () => {}, onChange = () => {}, onVersionChange = () => {},
+  fault = () => undefined, onChange = () => undefined, onVersionChange = () => undefined,
 } = {}) {
   const database = createVaultDatabase(indexedDB, name, { onVersionChange });
   const safely = async (operation) => {

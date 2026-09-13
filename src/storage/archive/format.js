@@ -153,7 +153,7 @@ function crc32(bytes) {
   return (value ^ 0xffffffff) >>> 0;
 }
 
-export async function createArchive({ state, assets = [], missing = [], recovery = null, custom = null }, { signal, onProgress = () => {}, clock = () => new Date().toISOString(), idFactory = () => crypto.randomUUID() } = {}) {
+export async function createArchive({ state, assets = [], missing = [], recovery = null, custom = null }, { signal, onProgress = () => undefined, clock = () => new Date().toISOString(), idFactory = () => crypto.randomUUID() } = {}) {
   checkCancelled(signal);
   if (!recovery) validateStateGraph(state);
   const files = Object.create(null);
@@ -200,7 +200,7 @@ export async function createArchive({ state, assets = [], missing = [], recovery
   return { blob: new Blob([packed], { type: "application/zip" }), manifest };
 }
 
-export async function inspectArchive(file, { signal, onProgress = () => {}, imageDecoder } = {}) {
+export async function inspectArchive(file, { signal, onProgress = () => undefined, imageDecoder } = {}) {
   checkCancelled(signal);
   if (!(file instanceof Blob) || file.size > ARCHIVE_LIMITS.bytes || (file.name && !file.name.toLowerCase().endsWith(".nightforge"))) refuse("archive-file-invalid", "Choose a .nightforge archive no larger than 256 MiB.");
   const bytes = new Uint8Array(await file.arrayBuffer());

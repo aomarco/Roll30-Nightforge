@@ -191,3 +191,19 @@ test("A failed deletion leaves the Scene visible and selected", async () => {
   assert.equal(app.state.scenes.some((item) => item.id === scene.id), true);
   assert.equal(app.state.activeSceneId, scene.id);
 });
+
+test("Every deck tab destination navigates, including the Compendium", () => {
+  const app = harness();
+  for (const page of ["home", "characters", "backups", "compendium"]) {
+    const result = app.commands.navigate({ page });
+    assert.equal(result.ok, true);
+    assert.deepEqual(app.state.route, { page });
+  }
+});
+
+test("Unknown destinations still refuse without moving", () => {
+  const app = harness();
+  const refused = app.commands.navigate({ page: "compendiun" });
+  assert.equal(refused.ok, false);
+  assert.deepEqual(app.state.route, { page: "home" });
+});

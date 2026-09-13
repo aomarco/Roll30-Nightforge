@@ -8,7 +8,7 @@ export const requestValue = (request) => new Promise((resolve, reject) => {
   request.onerror = () => reject(request.error || new Error("The database request failed."));
 });
 
-export function createVaultDatabase(indexedDB, name, { onVersionChange = () => {} } = {}) {
+export function createVaultDatabase(indexedDB, name, { onVersionChange = () => undefined } = {}) {
   let connection = null;
   const open = () => {
     if (!indexedDB) return Promise.reject(new Error("IndexedDB is unavailable in this browser."));
@@ -43,17 +43,17 @@ export function createVaultDatabase(indexedDB, name, { onVersionChange = () => {
     const complete = new Promise((resolve, reject) => {
       tx.oncomplete = resolve;
       tx.onabort = () => reject(tx.error || new Error("The vault transaction was aborted."));
-      tx.onerror = () => {}; // Request errors abort; completion is the commit signal.
+      tx.onerror = () => undefined; // Request errors abort; completion is the commit signal.
     });
     // Attach a rejection handler immediately, including while a request is pending.
-    complete.catch(() => {});
+    complete.catch(() => undefined);
     try {
       const value = await operation(tx);
       await complete;
       return value;
     } catch (error) {
       try { tx.abort(); } catch { /* It may already have aborted. */ }
-      await complete.catch(() => {});
+      await complete.catch(() => undefined);
       throw error;
     }
   };

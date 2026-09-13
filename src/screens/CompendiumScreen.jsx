@@ -389,6 +389,7 @@ export default function CompendiumScreen() {
           section={section}
           group={group}
           monsters={monsters}
+          manifest={manifest}
           monsterTypes={monsterTypes}
           spells={spells}
           spellLetters={spellLetters}
@@ -412,7 +413,7 @@ function findEntry(section, group, id, monsters, spells, classEntries) {
   return null;
 }
 
-function GroupView({ section, group, monsters, monsterTypes, spells, spellLetters, classEntries, onOpenGroup, onOpenEntry, onBack }) {
+function GroupView({ section, group, monsters, manifest, monsterTypes, spells, spellLetters, classEntries, onOpenGroup, onOpenEntry, onBack }) {
   if (section === "monsters" && !group) {
     if (!monsters) return <p className="note" role="status">Opening the monster shelves…</p>;
     return (
@@ -467,6 +468,7 @@ function GroupView({ section, group, monsters, monsterTypes, spells, spellLetter
     );
   }
   if (section === "classes") {
+    if (!manifest) return <p className="note" role="status">Opening the class shelves…</p>;
     return (
       <div className="nf-state-compendium-groups">
         {classEntries.map((entry) => (
