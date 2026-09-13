@@ -509,7 +509,7 @@ export function attackRollSources({ attacker, target, weapon, range, lineOfSight
   // Special is lance-only in the SRD import: disadvantage against an adjacent
   // target. Kept on the property plus id so a future Special weapon cannot
   // slip through silently.
-  if ((weapon.id === "lance" || hasProperty(weapon, "special")) && range.distanceFeet === 5 && weapon.weaponRange === "melee") sources.push({ mode: "disadvantage", code: "lance-close", label: "Lance at 5 feet" });
+  if ((weapon.id === "lance" || hasProperty(weapon, "special")) && range.distanceFeet === 5) sources.push({ mode: "disadvantage", code: "lance-close", label: "Lance at 5 feet" });
   if (kind === ATTACK_KIND_ACTION && resources.swapped) sources.push({ mode: "disadvantage", code: "attack-after-swap", label: "Attack after weapon Swap" });
   // A Dodging creature is harder to hit with everything. The exception is a
   // creature that cannot actually dodge: the Action does nothing for someone

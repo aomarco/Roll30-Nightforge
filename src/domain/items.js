@@ -183,8 +183,8 @@ export function setMainHand(hero, itemId, catalogById = ITEM_BY_ID) {
   if (itemId === null) return success({ loadout: { ...hero.loadout, mainHand: null } });
   const item = getItem(itemId, catalogById);
   if (!isWeapon(item) || !ownsItem(hero, itemId)) return equipmentFailure("Only an owned weapon can be placed in the main hand.");
-  if (requiresTwoHands(item) && hero.loadout?.offHand) return equipmentFailure("That weapon requires an empty off hand.");
-  if (requiresTwoHands(item) && hero.shieldId) return equipmentFailure("That weapon cannot be used with a shield.");
+  if (requiresTwoHands(item) && hero.loadout?.offHand) return equipmentFailure("A Two-Handed weapon requires an empty off hand.");
+  if (requiresTwoHands(item) && hero.shieldId) return equipmentFailure("A Two-Handed weapon cannot be used with a shield.");
   if (hero.loadout?.offHand) {
     const off = getItem(hero.loadout.offHand, catalogById);
     if (!isLightMelee(item) || !isLightMelee(off)) return equipmentFailure("Dual wielding requires two Light melee weapons.");
@@ -200,7 +200,7 @@ export function setOffHand(hero, itemId, catalogById = ITEM_BY_ID) {
   if (!isWeapon(item) || !ownsItem(hero, itemId)) return equipmentFailure("Only an owned weapon can be placed in the off hand.");
   if (!main || !ownsItem(hero, main.id)) return equipmentFailure("Choose an owned main-hand weapon before equipping an off-hand weapon.");
   if (hero.shieldId) return equipmentFailure("Remove the shield before equipping an off-hand weapon.");
-  if (main && requiresTwoHands(main)) return equipmentFailure("That main-hand weapon requires an empty off hand.");
+  if (main && requiresTwoHands(main)) return equipmentFailure("A Two-Handed weapon requires an empty off hand.");
   if (!isLightMelee(main) || !isLightMelee(item)) return equipmentFailure("Both weapons must be Light melee weapons to dual wield.");
   if (main.id === itemId && !ownsItem(hero, itemId, 2)) return equipmentFailure("Equipping the same weapon twice requires quantity 2.");
   return success({ loadout: { ...hero.loadout, offHand: itemId } });
@@ -219,7 +219,7 @@ export function setShield(hero, itemId, catalogById = ITEM_BY_ID) {
   const main = getItem(hero.loadout?.mainHand, catalogById);
   if (!isShield(item) || !ownsItem(hero, itemId)) return equipmentFailure("Only an owned shield can be equipped.");
   if (hero.loadout?.offHand) return equipmentFailure("A shield requires a free off hand.");
-  if (main && requiresTwoHands(main)) return equipmentFailure("A shield cannot be used with that main-hand weapon.");
+  if (main && requiresTwoHands(main)) return equipmentFailure("A shield cannot be used with a Two-Handed weapon.");
   return success({ shieldId: itemId });
 }
 
@@ -270,10 +270,10 @@ export function offHandRefusal(hero, itemId, catalogById = ITEM_BY_ID) {
   const item = getItem(itemId, catalogById);
   if (!item || !ownsItem(hero, itemId)) return "Not owned";
   const main = getItem(hero?.loadout?.mainHand, catalogById);
-  if (isShield(item)) return main && requiresTwoHands(main) ? "Two-handed weapon in use" : null;
+  if (isShield(item)) return main && requiresTwoHands(main) ? "Two-Handed weapon in use" : null;
   if (!isWeapon(item)) return "Not a weapon";
   if (!main || !ownsItem(hero, main.id)) return "Equip a main hand first";
-  if (requiresTwoHands(main)) return "Two-handed weapon in use";
+  if (requiresTwoHands(main)) return "Two-Handed weapon in use";
   if (!isLightMelee(main)) return "Main hand is not Light";
   if (!isLightMelee(item)) return "Not a Light melee weapon";
   if (main.id === itemId && !ownsItem(hero, itemId, 2)) return "Needs quantity 2";
