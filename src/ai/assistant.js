@@ -10,7 +10,8 @@ export const AI_SETTINGS_KEY = "roll30-nightforge-v1:ai-assistant";
 
 export const AI_PROVIDERS = Object.freeze([
   { id: "openrouter", label: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1" },
-  { id: "custom", label: "OpenCode Go / other OpenAI-style key", baseUrl: "" },
+  { id: "opencode-go", label: "OpenCode Go", baseUrl: "https://opencode.ai/zen/go/v1" },
+  { id: "custom", label: "Custom address", baseUrl: "" },
 ]);
 
 // The model this helper asks for. Editable in the bubble settings because
@@ -67,6 +68,13 @@ export function saveAssistantSettings(settings) {
 
 export function providerFor(settings) {
   return AI_PROVIDERS.find((entry) => entry.id === settings?.providerId) || AI_PROVIDERS[0];
+}
+
+// Picking a preset fills its address; the freeform entry keeps whatever the
+// user typed, so flipping between sources never silently keeps a stale URL.
+export function baseUrlForProviderSwitch(currentBaseUrl, nextProvider) {
+  const preset = String(nextProvider?.baseUrl || "").trim();
+  return preset || String(currentBaseUrl || "");
 }
 
 export function chatEndpoint(settings) {

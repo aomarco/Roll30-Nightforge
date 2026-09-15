@@ -5,6 +5,7 @@ import {
   AI_PROVIDERS,
   THINKING_OFF,
   THINKING_XHIGH,
+  baseUrlForProviderSwitch,
   buildSystemPrompt,
   chatEndpoint,
   loadAssistantSettings,
@@ -142,7 +143,7 @@ export default function AiAssistant({ scene = null, heroes = [], route = null, m
               value={provider.id}
               onChange={(event) => {
                 const next = AI_PROVIDERS.find((entry) => entry.id === event.target.value) || AI_PROVIDERS[0];
-                update({ providerId: next.id, baseUrl: settings.baseUrl.trim() ? settings.baseUrl : next.baseUrl });
+                update({ providerId: next.id, baseUrl: baseUrlForProviderSwitch(settings.baseUrl, next) });
               }}
             >
               {AI_PROVIDERS.map((entry) => <option value={entry.id} key={entry.id}>{entry.label}</option>)}
