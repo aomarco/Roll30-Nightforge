@@ -5,7 +5,6 @@ import {
   AI_PROVIDERS,
   THINKING_OFF,
   THINKING_XHIGH,
-  baseUrlForProviderSwitch,
   buildSystemPrompt,
   chatEndpoint,
   loadAssistantSettings,
@@ -143,14 +142,11 @@ export default function AiAssistant({ scene = null, heroes = [], route = null, m
               value={provider.id}
               onChange={(event) => {
                 const next = AI_PROVIDERS.find((entry) => entry.id === event.target.value) || AI_PROVIDERS[0];
-                update({ providerId: next.id, baseUrl: baseUrlForProviderSwitch(settings.baseUrl, next) });
+                update({ providerId: next.id, baseUrl: next.baseUrl });
               }}
             >
               {AI_PROVIDERS.map((entry) => <option value={entry.id} key={entry.id}>{entry.label}</option>)}
             </select>
-          </label>
-          <label className="field"><span className="label">Provider address</span>
-            <input className="inp" value={settings.baseUrl} placeholder="https://openrouter.ai/api/v1" onChange={(event) => update({ baseUrl: event.target.value })} />
           </label>
           <label className="field"><span className="label">API key</span>
             <span className="ai-keyrow">

@@ -53,4 +53,7 @@ test("Sage button is present and opens the chat bubble", async ({ page }) => {
   await page.getByRole("button", { name: "Ask the tabletop sage" }).click();
   await expect(page.getByLabel("Tabletop sage chat")).toBeVisible();
   await expect(page.getByLabel("Ask the sage")).toBeVisible();
+  await expect(page.getByLabel("Provider address")).toHaveCount(0);
+  await page.getByLabel("Key source").selectOption("opencode-go");
+  await expect.poll(async () => page.evaluate(() => JSON.parse(localStorage.getItem("roll30-nightforge-v1:ai-assistant") || "{}").baseUrl)).toBe("https://opencode.ai/zen/go/v1");
 });

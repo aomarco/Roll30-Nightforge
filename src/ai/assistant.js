@@ -11,13 +11,12 @@ export const AI_SETTINGS_KEY = "roll30-nightforge-v1:ai-assistant";
 export const AI_PROVIDERS = Object.freeze([
   { id: "openrouter", label: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1" },
   { id: "opencode-go", label: "OpenCode Go", baseUrl: "https://opencode.ai/zen/go/v1" },
-  { id: "custom", label: "Custom address", baseUrl: "" },
 ]);
 
 // The model this helper asks for. Editable in the bubble settings because
-// provider catalogs rename things; this default matches the Muse Spark
-// contributor build this project was raised with.
-export const DEFAULT_AI_MODEL = "opencode-go/muse-spark-1.3-contributor";
+// provider catalogs rename things; this default matches the bare Zen catalog
+// id for the Muse Spark contributor build this project was raised with.
+export const DEFAULT_AI_MODEL = "muse-spark-1.3-contributor";
 
 export const THINKING_OFF = "off";
 export const THINKING_XHIGH = "xhigh";
@@ -43,9 +42,15 @@ export function loadAssistantSettings() {
     if (!raw) return next;
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object") return next;
+    const provider = AI_PROVIDERS.find((entry) => entry.id === parsed.providerId) || AI_PROVIDERS[0];
+    // Addresses are locked to presets: a freeform box once let a stale URL
+    // send keys to the wrong place with no visible reason, so anything stored
+    // from that era is replaced by its provider's address here.
     return {
       ...next,
       ...parsed,
+      providerId: provider.id,
+      baseUrl: provider.baseUrl,
       position: parsed.position && typeof parsed.position === "object" ? parsed.position : null,
       messages: Array.isArray(parsed.messages) ? parsed.messages.slice(-40) : [],
     };
@@ -68,13 +73,6 @@ export function saveAssistantSettings(settings) {
 
 export function providerFor(settings) {
   return AI_PROVIDERS.find((entry) => entry.id === settings?.providerId) || AI_PROVIDERS[0];
-}
-
-// Picking a preset fills its address; the freeform entry keeps whatever the
-// user typed, so flipping between sources never silently keeps a stale URL.
-export function baseUrlForProviderSwitch(currentBaseUrl, nextProvider) {
-  const preset = String(nextProvider?.baseUrl || "").trim();
-  return preset || String(currentBaseUrl || "");
 }
 
 export function chatEndpoint(settings) {
@@ -183,14 +181,20 @@ export async function sendChatMessage({ endpoint, apiKey, model, thinking = THIN
       },
       body: JSON.stringify(body),
     });
-  } catch {
-    throw new Error("Could not reach the provider. Check the connection and the base URL in settings.");
+  } catch (error) {
+    // Browsers throw a bare TypeError when the provider refuses cross-origin
+    // calls at the network edge (no CORS blessing). Measured live: OpenRouter
+    // answers browsers fine, OpenCode Zen does not, so say exactly that.
+    if (error?.name === "TypeError") {
+      throw new Error("The browser blocked the request before it was sent. OpenRouter welcomes browser apps; OpenCode Go currently turns them away, so a Zen key cannot talk from inside this page.", { cause: error });
+    }
+    throw new Error("Could not reach the provider. Check the connection and retry.", { cause: error });
   }
   let payload = null;
   try {
     payload = await response.json();
   } catch {
-    throw new Error(`The provider answered with status ${response.status}. Retry, or check the base URL in settings.`);
+    throw new Error(`The provider answered with status ${response.status} and no readable reply. Retry in a moment.`);
   }
   if (!response.ok) {
     const message = payload?.error?.message || payload?.message || "";
