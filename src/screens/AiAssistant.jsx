@@ -156,6 +156,11 @@ export default function AiAssistant({ scene = null, heroes = [], route = null, m
               </button>
             </span>
           </label>
+          {provider.id === "zen-relay" && (
+            <label className="field"><span className="label">Relay address</span>
+              <input className="inp" value={settings.relayUrl} placeholder="https://your-relay.onrender.com" autoComplete="off" onChange={(event) => update({ relayUrl: event.target.value })} />
+            </label>
+          )}
           <label className="field"><span className="label">Model</span>
             <input className="inp" value={settings.model} onChange={(event) => update({ model: event.target.value })} />
           </label>

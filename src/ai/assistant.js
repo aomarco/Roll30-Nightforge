@@ -11,6 +11,7 @@ export const AI_SETTINGS_KEY = "roll30-nightforge-v1:ai-assistant";
 export const AI_PROVIDERS = Object.freeze([
   { id: "openrouter", label: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1" },
   { id: "opencode-go", label: "OpenCode Go", baseUrl: "https://opencode.ai/zen/go/v1" },
+  { id: "zen-relay", label: "OpenCode Go (relay)", baseUrl: "" },
 ]);
 
 // The model this helper asks for. Editable in the bubble settings because
@@ -24,6 +25,7 @@ export const THINKING_XHIGH = "xhigh";
 const defaultSettings = () => ({
   providerId: "openrouter",
   baseUrl: AI_PROVIDERS[0].baseUrl,
+  relayUrl: "",
   apiKey: "",
   model: DEFAULT_AI_MODEL,
   thinking: THINKING_OFF,
@@ -51,6 +53,7 @@ export function loadAssistantSettings() {
       ...parsed,
       providerId: provider.id,
       baseUrl: provider.baseUrl,
+      relayUrl: typeof parsed.relayUrl === "string" ? parsed.relayUrl : "",
       position: parsed.position && typeof parsed.position === "object" ? parsed.position : null,
       messages: Array.isArray(parsed.messages) ? parsed.messages.slice(-40) : [],
     };
@@ -77,7 +80,10 @@ export function providerFor(settings) {
 
 export function chatEndpoint(settings) {
   const provider = providerFor(settings);
-  const base = String(settings?.baseUrl || provider.baseUrl || "").trim().replace(/\/+$/, "");
+  // The relay address belongs to the user's own middleman (see relay/),
+  // everything else is a locked preset.
+  const raw = provider.id === "zen-relay" ? settings?.relayUrl : (settings?.baseUrl || provider.baseUrl);
+  const base = String(raw || "").trim().replace(/\/+$/, "");
   return base ? `${base}/chat/completions` : "";
 }
 
@@ -164,7 +170,7 @@ const friendlyError = (status, payloadMessage) => {
  * caller prepends buildSystemPrompt as the system message.
  */
 export async function sendChatMessage({ endpoint, apiKey, model, thinking = THINKING_OFF, messages = [] }) {
-  if (!endpoint) throw new Error("Set a provider base URL in the bubble settings first.");
+  if (!endpoint) throw new Error("The provider address is missing. Open settings, pick a provider, and set your relay address if you use the relay.");
   if (!apiKey) throw new Error("Add your API key in the bubble settings first — the bubble cannot talk without one.");
   if (!model) throw new Error("Set a model name in the bubble settings first.");
   const body = { model, messages };

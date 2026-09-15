@@ -867,8 +867,9 @@ split is the single most important design decision in the combat code.
   A search box answers to any name from anywhere.
 - **The tabletop sage** is a floating button on every screen, in and out of
   battle. It opens a draggable chat bubble where the user pastes an OpenRouter
-  or OpenCode Go key (kept in this browser only, with a one-click address
-  preset for each) and talks to the Muse Spark
+  or OpenCode Go key (kept in this browser only, with a locked address preset
+  for each, plus an OpenCode Go relay choice for a self-hosted Python
+  middleman in relay/ for providers that turn browsers away) and talks to the Muse Spark
   contributor model, with thinking off or on xhigh. The sage is fed the D&D
   rules this table enforces plus the open scene, the fight, and the roster, so
   it answers in context.

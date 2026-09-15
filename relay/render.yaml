@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: roll30-zen-relay
+    runtime: python
+    buildCommand: echo ok
+    startCommand: python relay/server.py
+    plan: free
